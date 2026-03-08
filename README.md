@@ -111,3 +111,5 @@ thinking-get-hook/
 └── README.md
 ```
 
+## 参考文档
+https://cursor.com/cn/docs/hooks#hook-5
