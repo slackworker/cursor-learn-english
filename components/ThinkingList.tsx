@@ -11,6 +11,7 @@ type ThinkingRecord = {
   conversation_id: string;
   generation_id: string;
   duration_ms: number;
+  user_prompt?: string;
 };
 
 const markdownComponents = {
@@ -52,12 +53,31 @@ function ThinkingItem({ record }: { record: ThinkingRecord }) {
         <span>{record.model}</span>
         <span>{record.duration_ms}ms</span>
       </div>
-      <div
-        className={`mt-1 break-words text-zinc-800 dark:text-zinc-200 ${expanded ? "" : "line-clamp-4"}`}
-      >
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {record.text}
-        </ReactMarkdown>
+
+      {record.user_prompt && (
+        <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950">
+          <span className="mb-1 block text-xs font-medium text-blue-600 dark:text-blue-400">
+            我的问题
+          </span>
+          <p className="whitespace-pre-wrap break-words text-sm text-blue-900 dark:text-blue-100">
+            {record.user_prompt}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-2">
+        {record.user_prompt && (
+          <span className="mb-1 block text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            Thinking
+          </span>
+        )}
+        <div
+          className={`break-words text-zinc-800 dark:text-zinc-200 ${expanded ? "" : "line-clamp-4"}`}
+        >
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {record.text}
+          </ReactMarkdown>
+        </div>
       </div>
       {canExpand && (
         <button
