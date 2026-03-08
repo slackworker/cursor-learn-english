@@ -9,7 +9,6 @@ export default function ThinkingPage() {
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Thinking 语料</h1>
           <nav className="flex gap-4 text-sm">
             <Link href="/" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50">首页</Link>
-            <Link href="/daily" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50">每日</Link>
             <Link href="/thinking" className="font-medium text-zinc-900 dark:text-zinc-50">Thinking</Link>
             <Link href="/sessions" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50">会话</Link>
           </nav>
