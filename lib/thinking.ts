@@ -22,7 +22,13 @@ export type ThinkingRecord = {
   conversation_id: string;
   generation_id: string;
   duration_ms: number;
+};
+
+export type ThinkingGroup = {
   user_prompt?: string;
+  prompt_timestamp?: string;
+  conversation_id: string;
+  items: ThinkingRecord[];
 };
 
 type PromptRecord = {
@@ -46,41 +52,71 @@ function readJsonlLines<T>(filePath: string): T[] {
   return out;
 }
 
-function attachUserPrompts(thinkingItems: ThinkingRecord[]): void {
+/**
+ * Groups thinking records by their matched prompt.
+ * One prompt can trigger multiple thinking records (one-to-many).
+ */
+function groupByPrompt(thinkingItems: ThinkingRecord[]): ThinkingGroup[] {
   const prompts = readJsonlLines<PromptRecord>(getPromptCorpusPath());
-  if (prompts.length === 0) return;
 
-  const byConversation = new Map<string, PromptRecord[]>();
+  const promptsByConv = new Map<string, PromptRecord[]>();
   for (const p of prompts) {
     const cid = p.conversation_id || "";
-    let list = byConversation.get(cid);
+    let list = promptsByConv.get(cid);
     if (!list) {
       list = [];
-      byConversation.set(cid, list);
+      promptsByConv.set(cid, list);
     }
     list.push(p);
   }
-  for (const list of byConversation.values()) {
+  for (const list of promptsByConv.values()) {
     list.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   }
 
+  // For each thinking item, find which prompt it belongs to
+  type MatchKey = string; // "conversationId::promptTimestamp"
+  const groupMap = new Map<MatchKey, ThinkingGroup>();
+  const groupOrder: MatchKey[] = [];
+
   for (const item of thinkingItems) {
     const cid = item.conversation_id || "";
-    const candidates = byConversation.get(cid);
-    if (!candidates || candidates.length === 0) continue;
+    const candidates = promptsByConv.get(cid);
 
     let matched: PromptRecord | undefined;
-    for (const p of candidates) {
-      if (p.timestamp <= item.timestamp) {
-        matched = p;
-      } else {
-        break;
+    if (candidates && candidates.length > 0) {
+      for (const p of candidates) {
+        if (p.timestamp <= item.timestamp) {
+          matched = p;
+        } else {
+          break;
+        }
       }
     }
-    if (matched) {
-      item.user_prompt = matched.prompt;
+
+    const key = matched
+      ? `${cid}::${matched.timestamp}`
+      : `${cid}::no-prompt::${item.generation_id}`;
+
+    let group = groupMap.get(key);
+    if (!group) {
+      group = {
+        user_prompt: matched?.prompt,
+        prompt_timestamp: matched?.timestamp,
+        conversation_id: cid,
+        items: [],
+      };
+      groupMap.set(key, group);
+      groupOrder.push(key);
     }
+    group.items.push(item);
   }
+
+  // Sort items within each group by timestamp ascending
+  for (const group of groupMap.values()) {
+    group.items.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  }
+
+  return groupOrder.map((k) => groupMap.get(k)!);
 }
 
 export function getThinking(params: {
@@ -89,22 +125,22 @@ export function getThinking(params: {
   from?: string;
   to?: string;
   model?: string;
-}): { items: ThinkingRecord[]; total: number } {
+}): { groups: ThinkingGroup[]; total: number } {
   const { page = 1, pageSize = 20, from, to, model } = params;
   const filePath = getCorpusPath();
   let items = readJsonlLines<ThinkingRecord>(filePath);
-  // newest first
-  items = items.reverse();
 
   if (from) items = items.filter((r) => r.timestamp.slice(0, 10) >= from);
   if (to) items = items.filter((r) => r.timestamp.slice(0, 10) <= to);
   if (model) items = items.filter((r) => r.model === model);
 
-  const total = items.length;
+  // newest first for grouping order
+  items.reverse();
+
+  const allGroups = groupByPrompt(items);
+  const total = allGroups.length;
   const start = (page - 1) * pageSize;
-  items = items.slice(start, start + pageSize);
+  const groups = allGroups.slice(start, start + pageSize);
 
-  attachUserPrompts(items);
-
-  return { items, total };
+  return { groups, total };
 }
