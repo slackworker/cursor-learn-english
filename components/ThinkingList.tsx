@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -19,6 +19,59 @@ type ThinkingGroup = {
   conversation_id: string;
   items: ThinkingRecord[];
 };
+
+function stripMarkdownForTTS(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, "")       // fenced code blocks
+    .replace(/^#{1,6}\s+/gm, "")          // headings
+    .replace(/\*\*([^*]+)\*\*/g, "$1")    // bold
+    .replace(/\*([^*]+)\*/g, "$1")        // italic
+    .replace(/__([^_]+)__/g, "$1")        // bold alt
+    .replace(/_([^_]+)_/g, "$1")          // italic alt
+    .replace(/`([^`]+)`/g, "$1")          // inline code
+    .replace(/~~([^~]+)~~/g, "$1")        // strikethrough
+    .replace(/^\s*[-*+]\s+/gm, "")        // unordered list markers
+    .replace(/^\s*\d+\.\s+/gm, "")        // ordered list markers
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links & images
+    .replace(/^\s*>\s?/gm, "")            // blockquote markers
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+function useTTS() {
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  const stop = useCallback(() => {
+    window.speechSynthesis.cancel();
+    setSpeakingId(null);
+    utterRef.current = null;
+  }, []);
+
+  const speak = useCallback((id: string, text: string) => {
+    if (speakingId === id) {
+      stop();
+      return;
+    }
+    window.speechSynthesis.cancel();
+
+    const plain = stripMarkdownForTTS(text);
+    const utter = new SpeechSynthesisUtterance(plain);
+    utter.lang = "en-US";
+    utter.onend = () => setSpeakingId(null);
+    utter.onerror = () => setSpeakingId(null);
+
+    utterRef.current = utter;
+    setSpeakingId(id);
+    window.speechSynthesis.speak(utter);
+  }, [speakingId, stop]);
+
+  useEffect(() => {
+    return () => { window.speechSynthesis.cancel(); };
+  }, []);
+
+  return { speakingId, speak, stop };
+}
 
 const markdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -47,38 +100,86 @@ const markdownComponents = {
   ),
 };
 
-function ThinkingItem({ record, index }: { record: ThinkingRecord; index: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const lineCount = (record.text.match(/\n/g) ?? []).length + 1;
-  const canExpand = lineCount > 4;
+function thinkingTitle(record: ThinkingRecord, index: number): string {
+  const time = record.timestamp.slice(0, 19).replace("T", " ");
+  return `#${index + 1} ${time} · ${record.model} · ${record.duration_ms}ms`;
+}
 
+function PlayButton({ playing, onClick }: { playing: boolean; onClick: () => void }) {
   return (
-    <div className="border-l-2 border-base-300 pl-4 py-2">
-      <div className="flex items-center gap-3 text-xs opacity-60">
-        <span className="badge badge-sm badge-ghost">#{index + 1}</span>
-        <span>{record.timestamp.slice(0, 19).replace("T", " ")}</span>
-        <span>{record.model}</span>
-        <span>{record.duration_ms}ms</span>
-      </div>
-      <div className={`mt-1 break-words ${expanded ? "" : "line-clamp-4"}`}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {record.text}
-        </ReactMarkdown>
-      </div>
-      {canExpand && (
-        <button
-          type="button"
-          onClick={() => setExpanded((e) => !e)}
-          className="btn btn-xs btn-ghost mt-1 opacity-70"
-        >
-          {expanded ? "收起" : "展开"}
-        </button>
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      aria-label={playing ? "停止朗读" : "朗读英语"}
+      className="btn btn-circle btn-ghost btn-sm"
+    >
+      {playing ? (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+          <path fillRule="evenodd" d="M4.5 7.5a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9Z" clipRule="evenodd" />
+        </svg>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+          <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653Z" clipRule="evenodd" />
+        </svg>
       )}
+    </button>
+  );
+}
+
+function ThinkingItem({
+  record,
+  index,
+  accordionName,
+  defaultOpen,
+  playing,
+  onTogglePlay,
+}: {
+  record: ThinkingRecord;
+  index: number;
+  accordionName: string;
+  defaultOpen: boolean;
+  playing: boolean;
+  onTogglePlay: () => void;
+}) {
+  return (
+    <div className="collapse collapse-arrow bg-base-100 border border-base-300">
+      <input
+        type="radio"
+        name={accordionName}
+        defaultChecked={defaultOpen}
+      />
+      <div className="collapse-title font-semibold min-h-0 py-2 text-sm">
+        {thinkingTitle(record, index)}
+      </div>
+      <div className="collapse-content relative text-sm pr-12">
+        <div className="pt-1 break-words">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {record.text}
+          </ReactMarkdown>
+        </div>
+        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+          <div className="tooltip tooltip-left" data-tip="点击朗读英语">
+            <PlayButton playing={playing} onClick={onTogglePlay} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function GroupCard({ group }: { group: ThinkingGroup }) {
+function GroupCard({
+  group,
+  groupIndex,
+  speakingId,
+  onSpeak,
+}: {
+  group: ThinkingGroup;
+  groupIndex: number;
+  speakingId: string | null;
+  onSpeak: (id: string, text: string) => void;
+}) {
+  const accordionName = `thinking-accordion-${groupIndex}`;
+
   return (
     <li className="p-4">
       {group.user_prompt && (
@@ -95,14 +196,21 @@ function GroupCard({ group }: { group: ThinkingGroup }) {
       <span className="mb-2 block text-xs font-medium text-success">
         Thinking ({group.items.length} 条)
       </span>
-      <div className="space-y-3">
-        {group.items.map((r, i) => (
-          <ThinkingItem
-            key={`${r.generation_id}-${i}`}
-            record={r}
-            index={i}
-          />
-        ))}
+      <div className="space-y-2">
+        {group.items.map((r, i) => {
+          const itemId = `${r.generation_id}-${i}`;
+          return (
+            <ThinkingItem
+              key={itemId}
+              record={r}
+              index={i}
+              accordionName={accordionName}
+              defaultOpen={i === 0}
+              playing={speakingId === itemId}
+              onTogglePlay={() => onSpeak(itemId, r.text)}
+            />
+          );
+        })}
       </div>
     </li>
   );
@@ -114,6 +222,7 @@ export function ThinkingList() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const pageSize = 10;
+  const { speakingId, speak } = useTTS();
 
   useEffect(() => {
     setLoading(true);
@@ -146,7 +255,13 @@ export function ThinkingList() {
       <div className="card bg-base-200">
         <ul className="divide-y divide-base-300">
           {groups.map((g, i) => (
-            <GroupCard key={`${g.conversation_id}-${g.prompt_timestamp ?? i}`} group={g} />
+            <GroupCard
+              key={`${g.conversation_id}-${g.prompt_timestamp ?? i}`}
+              group={g}
+              groupIndex={i}
+              speakingId={speakingId}
+              onSpeak={speak}
+            />
           ))}
         </ul>
       </div>

@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/", label: "首页" },
-  { href: "/thinking", label: "Thinking" },
-  { href: "/sessions", label: "会话" },
+  { href: "/thinking", label: "Thinking语料" },
+  { href: "/sessions", label: "会话记录" },
 ];
 
 const LIGHT_THEME = "corporate";
@@ -32,7 +32,7 @@ export default function Navbar() {
   return (
     <header className="navbar bg-base-200 border-b border-base-300 px-4">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between">
-        <h1 className="text-lg font-semibold">Cursor 可视化</h1>
+        <h1 className="text-lg font-semibold">Cursor 学英语</h1>
         <div className="flex items-center gap-4">
           <nav className="flex gap-3 text-sm">
             {NAV_ITEMS.map((item) => {

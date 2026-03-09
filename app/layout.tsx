@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cursor 可视化",
-  description: "Cursor 使用数据可视化仪表盘",
+  title: "Cursor 学英语",
+  description: "Cursor 学英语，使用数据可视化仪表盘",
 };
 
 export default function RootLayout({
