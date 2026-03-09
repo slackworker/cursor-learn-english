@@ -4,6 +4,15 @@
 
 ---
 
+## 示例预览
+
+以下图片位于 `public/preview/` 文件夹，展示了本工具的数据可视化页面效果：
+
+<img src="./public/preview/preview1.png" alt="仪表盘示例1" width="600" style="margin-bottom: 12px;" />
+<img src="./public/preview/preview2.png" alt="仪表盘示例2" width="600" style="margin-bottom: 12px;" />
+<img src="./public/preview/preview3.png" alt="Thinking语料列表" width="600" style="margin-bottom: 12px;" />
+
+
 ## Cursor Hooks 配置
 
 采集依赖 Cursor 的 **用户级 Hooks**，配置在 `~/.cursor/` 下。
