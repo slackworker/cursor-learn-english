@@ -4,13 +4,8 @@
 
 ---
 
-## 示例预览
+## 预览示例
 
-以下图片位于 `public/preview/` 文件夹，展示了本工具的数据可视化页面效果：
-
-<img src="./public/preview/preview1.png" alt="仪表盘示例1" width="600" style="margin-bottom: 12px;" />
-<img src="./public/preview/preview2.png" alt="仪表盘示例2" width="600" style="margin-bottom: 12px;" />
-<img src="./public/preview/preview3.png" alt="Thinking语料列表" width="600" style="margin-bottom: 12px;" />
 
 
 ## Cursor Hooks 配置
@@ -28,7 +23,6 @@
     ├── capture-event.mjs        # 统一事件写入 cursor-events.jsonl
     ├── capture-thinking.mjs     # Thinking 写入 thinking-corpus.jsonl
     ├── capture-response-to-txt.mjs
-    ├── capture-thinking.sh     # 可选，需 jq
     └── test.sh
 ```
 
@@ -59,10 +53,12 @@
 
 ### 3. 数据输出路径
 
-| 文件 | 来源 | 说明 |
-|------|------|------|
+
+| 文件                        | 来源                     | 说明                                                   |
+| ------------------------- | ---------------------- | ---------------------------------------------------- |
 | `~/thinking-corpus.jsonl` | `capture-thinking.mjs` | 每行一条 Thinking 记录（text、timestamp、model、duration_ms 等） |
-| `~/cursor-events.jsonl` | `capture-event.mjs` | 每行一条事件（event_type、timestamp、conversation_id 及事件字段） |
+| `~/cursor-events.jsonl`   | `capture-event.mjs`    | 每行一条事件（event_type、timestamp、conversation_id 及事件字段）   |
+
 
 可通过环境变量覆盖路径：
 
@@ -75,8 +71,6 @@
 - Web 端：在项目根目录执行 `npm install` 后 `npm run dev`，浏览器打开仪表盘；API 默认读取上述两个 JSONL 路径（可通过 `EVENTS_JSONL_PATH`、`CORPUS_JSONL_PATH` 覆盖）。
 
 更多事件字段说明见 [hooks.md](hooks.md)。
-
-
 
 ---
 
@@ -121,4 +115,5 @@ thinking-get-hook/
 ```
 
 ## 参考文档
-https://cursor.com/cn/docs/hooks#hook-5
+
+[https://cursor.com/cn/docs/hooks#hook-5](https://cursor.com/cn/docs/hooks#hook-5)
