@@ -1,10 +1,12 @@
-# thinking-get-hook
+# cursor-thinking-stat
 
 本项目是一个基于 Cursor Hooks 的数据采集与可视化工具，自动收集AI 的思考推理过程，并提供 Web 前端页面进行可视化展示，梳理高频单词短语等信息，提升英语阅读能力。
 
 ---
 
-## 预览示例
+## 预览视频
+[B站视频-使用录屏](https://www.bilibili.com/video/BV1hMNFz1Emx/?spm_id_from=333.1007.top_right_bar_window_history.content.click&vd_source=e136dbd0b0286f6018f6e08b5fffa4b4)
+## 预览图片
 <img src="./public/preview/preview2.png" alt="仪表盘示例2" width="600" style="margin-bottom: 12px;" />
 <img src="./public/preview/preview3.png" alt="Thinking语料列表" width="600" style="margin-bottom: 12px;" />
 <img src="./public/preview/preview4.jpg" alt="仪表表格统计" width="600" style="margin-bottom: 12px;" />
