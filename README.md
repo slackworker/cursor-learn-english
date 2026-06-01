@@ -78,6 +78,18 @@
 
 更多事件字段说明见 [hooks.md](hooks.md)。
 
+### 5. 终端任务使用指引
+
+本仓库在 `.vscode/tasks.json` 中配置了可在 Cursor 中直接运行的任务。**终端 → 运行任务...** 中可选：
+
+| 任务 | 说明 |
+|------|------|
+| **新用户一键配置** | 执行 `npm install` 并将 Hooks 脚本与 `hooks.json` 复制到 `~/.cursor/`，首次使用跑一次即可。 |
+| **本地访问：启动 dev（仅本机）** | 启动开发服务，仅本机浏览器访问 http://localhost:3000 。 |
+| **WSL/宿主机访问：启动 dev** | 启动开发服务并监听 `0.0.0.0`，宿主机浏览器也可访问 http://localhost:3000 。 |
+
+也可手动执行：`bash scripts/setup-cursor-hooks.sh`
+
 ---
 
 ## 项目结构
@@ -94,25 +106,30 @@ thinking-get-hook/
 │   │   ├── events/route.ts      # GET 事件聚合（按日/类型）
 │   │   ├── stats/route.ts       # GET 汇总统计
 │   │   ├── thinking/route.ts    # GET Thinking 语料分页
+│   │   ├── vocab/route.ts       # GET 词频统计
 │   │   └── sessions/route.ts    # GET 会话列表
-│   ├── daily/page.tsx           # 每日统计页
 │   ├── thinking/page.tsx        # Thinking 语料页
+│   ├── vocab/page.tsx           # 词频统计页
 │   └── sessions/page.tsx       # 会话列表页
 ├── components/
 │   ├── StatCards.tsx            # 统计卡片
 │   ├── DailyChart.tsx           # 按日趋势图（ECharts）
 │   ├── ThinkingList.tsx         # Thinking 列表（Markdown 渲染）
+│   ├── VocabStats.tsx           # 词频图表与表格
 │   └── SessionTable.tsx         # 会话表格
 ├── lib/
 │   ├── events.ts                # 读 cursor-events.jsonl、按日聚合
-│   └── thinking.ts              # 读 thinking-corpus.jsonl、分页
+│   ├── thinking.ts              # 读 thinking-corpus.jsonl、分页
+│   └── vocab.ts                 # 词频聚合
+├── .vscode/
+│   └── tasks.json               # Cursor/VS Code 一键任务
 ├── hooks/
 │   └── hooks.json               # 本仓库内 Hooks 配置（可复制到 ~/.cursor）
 ├── scripts/
 │   ├── capture-event.mjs        # 统一事件采集 → cursor-events.jsonl
 │   ├── capture-thinking.mjs     # Thinking 采集 → thinking-corpus.jsonl
-│   ├── capture-thinking.sh     # 可选：Shell 版（需 jq）
 │   ├── capture-response-to-txt.mjs
+│   ├── setup-cursor-hooks.sh    # 一键安装 Hooks 到 ~/.cursor
 │   └── test.sh
 ├── hooks.md                     # Hooks 事件说明文档
 ├── package.json
