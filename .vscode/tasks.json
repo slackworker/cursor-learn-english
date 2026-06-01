@@ -12,7 +12,7 @@
     {
       "label": "本地访问：启动 dev（仅本机）",
       "type": "shell",
-      "command": "npx next dev",
+      "command": "npm run dev",
       "options": { "cwd": "${workspaceFolder}" },
       "group": { "kind": "build", "isDefault": true },
       "isBackground": true,
@@ -34,7 +34,7 @@
     {
       "label": "WSL/宿主机访问：启动 dev",
       "type": "shell",
-      "command": "npx next dev --hostname 0.0.0.0",
+      "command": "npm run dev:host",
       "options": { "cwd": "${workspaceFolder}" },
       "group": "build",
       "isBackground": true,
