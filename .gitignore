@@ -1,6 +1,9 @@
 node_modules
 .next
 
+# Next.js 自动生成（dev/build 会改写，勿提交）
+next-env.d.ts
+
 # 环境变量文件
 .env
 .env.local
