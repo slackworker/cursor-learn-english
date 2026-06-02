@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getEvents } from "@/lib/events";
+import { getSessionTitles } from "@/lib/session-titles";
 import {
   DEFAULT_SESSIONS_LOOKBACK_DAYS,
   normalizeDateRange,
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   const bySessionId = new Map<
     string,
-    { session_id: string; reason?: string; duration_ms?: number; timestamp?: string; start?: string }
+    { session_id: string; title?: string; reason?: string; duration_ms?: number; timestamp?: string; start?: string }
   >();
   for (const e of sessionStarts) {
     const id = (e as { session_id?: string }).session_id ?? e.conversation_id ?? "";
@@ -45,6 +46,11 @@ export async function GET(request: NextRequest) {
   const sessions = Array.from(bySessionId.values())
     .filter((s) => s.timestamp)
     .sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""));
+  const titles = getSessionTitles(sessions.map((s) => s.session_id));
+  const sessionsWithTitle = sessions.map((session) => ({
+    ...session,
+    title: titles.get(session.session_id),
+  }));
 
-  return Response.json({ sessions, from, to, truncated });
+  return Response.json({ sessions: sessionsWithTitle, from, to, truncated });
 }
