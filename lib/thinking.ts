@@ -1,6 +1,6 @@
 import path from "path";
 import os from "os";
-import { readJsonlLinesCached } from "./jsonl-cache";
+import { readMergedJsonlLinesCached } from "./jsonl-daily";
 
 const homeDir = os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir();
 
@@ -8,10 +8,14 @@ const defaultCorpusPath = path.join(homeDir, "thinking-corpus.jsonl");
 const defaultPromptCorpusPath = path.join(homeDir, "prompt-corpus.jsonl");
 
 export function getCorpusPath(): string {
-  return process.env.CORPUS_JSONL_PATH || defaultCorpusPath;
+  return (
+    process.env.CORPUS_JSONL_PATH ||
+    process.env.THINKING_CORPUS_PATH ||
+    defaultCorpusPath
+  );
 }
 
-function getPromptCorpusPath(): string {
+export function getPromptCorpusPath(): string {
   return process.env.PROMPT_CORPUS_PATH || defaultPromptCorpusPath;
 }
 
@@ -37,22 +41,30 @@ type PromptRecord = {
   timestamp: string;
 };
 
-function readJsonlFile<T>(filePath: string): T[] {
-  return readJsonlLinesCached(filePath, (line) => {
-    try {
-      return JSON.parse(line) as T;
-    } catch {
-      return null;
-    }
-  }).items;
+function parseJsonlLine<T>(line: string): T | null {
+  try {
+    return JSON.parse(line) as T;
+  } catch {
+    return null;
+  }
+}
+
+function readJsonlFile<T>(
+  basePath: string,
+  opts?: { from?: string; to?: string }
+): T[] {
+  return readMergedJsonlLinesCached(basePath, parseJsonlLine<T>, opts).items;
 }
 
 /**
  * Groups thinking records by their matched prompt.
  * One prompt can trigger multiple thinking records (one-to-many).
  */
-function groupByPrompt(thinkingItems: ThinkingRecord[]): ThinkingGroup[] {
-  const prompts = readJsonlFile<PromptRecord>(getPromptCorpusPath());
+function groupByPrompt(
+  thinkingItems: ThinkingRecord[],
+  opts?: { from?: string; to?: string }
+): ThinkingGroup[] {
+  const prompts = readJsonlFile<PromptRecord>(getPromptCorpusPath(), opts);
 
   const promptsByConv = new Map<string, PromptRecord[]>();
   for (const p of prompts) {
@@ -124,7 +136,7 @@ export function getThinking(params: {
 }): { groups: ThinkingGroup[]; total: number } {
   const { page = 1, pageSize = 20, from, to, model, highlight } = params;
   const filePath = getCorpusPath();
-  let items = readJsonlFile<ThinkingRecord>(filePath);
+  let items = readJsonlFile<ThinkingRecord>(filePath, { from, to });
 
   if (from) items = items.filter((r) => r.timestamp.slice(0, 10) >= from);
   if (to) items = items.filter((r) => r.timestamp.slice(0, 10) <= to);
@@ -133,7 +145,7 @@ export function getThinking(params: {
   // newest first for grouping order
   items.reverse();
 
-  const allGroups = groupByPrompt(items);
+  const allGroups = groupByPrompt(items, { from, to });
 
   const filteredGroups = (() => {
     if (!highlight) return allGroups;

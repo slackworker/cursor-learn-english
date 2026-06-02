@@ -10,7 +10,32 @@ type KeywordRow = {
   interested?: boolean;
 };
 
-const KEYWORD_JSONL_PATH = "./data/keyword-data.jsonl";
+function getKeywordJsonlPath(): string | undefined {
+  const configured = process.env.KEYWORD_JSONL_PATH?.trim();
+  return configured || undefined;
+}
+
+function notConfiguredResponse() {
+  return Response.json(
+    {
+      rows: [],
+      error: "KEYWORD_JSONL_PATH is not configured",
+      hint: "Set KEYWORD_JSONL_PATH to the absolute path of your keyword JSONL file",
+    },
+    { status: 503 },
+  );
+}
+
+function notConfiguredPostResponse() {
+  return Response.json(
+    {
+      ok: false,
+      error: "KEYWORD_JSONL_PATH is not configured",
+      hint: "Set KEYWORD_JSONL_PATH to the absolute path of your keyword JSONL file",
+    },
+    { status: 503 },
+  );
+}
 
 function parseJsonl(text: string): KeywordRow[] {
   const rows: KeywordRow[] = [];
@@ -36,8 +61,13 @@ function parseJsonl(text: string): KeywordRow[] {
 }
 
 export async function GET() {
+  const keywordJsonlPath = getKeywordJsonlPath();
+  if (!keywordJsonlPath) {
+    return notConfiguredResponse();
+  }
+
   try {
-    const text = await readFile(KEYWORD_JSONL_PATH, "utf-8");
+    const text = await readFile(keywordJsonlPath, "utf-8");
     const rows = parseJsonl(text);
     return Response.json({ rows });
   } catch (error) {
@@ -52,6 +82,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const keywordJsonlPath = getKeywordJsonlPath();
+  if (!keywordJsonlPath) {
+    return notConfiguredPostResponse();
+  }
+
   try {
     const body = (await request.json()) as {
       name?: string;
@@ -68,7 +103,7 @@ export async function POST(request: Request) {
       return Response.json({ ok: false, error: "invalid name or time" }, { status: 400 });
     }
 
-    const text = await readFile(KEYWORD_JSONL_PATH, "utf-8");
+    const text = await readFile(keywordJsonlPath, "utf-8");
     const rows = parseJsonl(text);
 
     let found = false;
@@ -88,7 +123,7 @@ export async function POST(request: Request) {
     }
 
     const jsonl = `${updatedRows.map((row) => JSON.stringify(row)).join("\n")}\n`;
-    await writeFile(KEYWORD_JSONL_PATH, jsonl, "utf-8");
+    await writeFile(keywordJsonlPath, jsonl, "utf-8");
 
     return Response.json({ ok: true });
   } catch (error) {

@@ -1,6 +1,6 @@
 import path from "path";
 import os from "os";
-import { readJsonlLinesCached } from "./jsonl-cache";
+import { readMergedJsonlLinesCached } from "./jsonl-daily";
 
 const defaultEventsPath = path.join(
   os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir(),
@@ -12,7 +12,11 @@ const defaultCorpusPath = path.join(
 );
 
 export function getEventsPath(): string {
-  return process.env.EVENTS_JSONL_PATH || defaultEventsPath;
+  return (
+    process.env.EVENTS_JSONL_PATH ||
+    process.env.CURSOR_EVENTS_PATH ||
+    defaultEventsPath
+  );
 }
 
 export function getCorpusPath(): string {
@@ -35,8 +39,11 @@ function parseEventLine(line: string): CursorEvent | null {
   }
 }
 
-function readEventsLines(filePath: string): CursorEvent[] {
-  return readJsonlLinesCached(filePath, parseEventLine).items;
+function readEventsLines(
+  basePath: string,
+  opts?: { from?: string; to?: string }
+): CursorEvent[] {
+  return readMergedJsonlLinesCached(basePath, parseEventLine, opts).items;
 }
 
 function toDateKey(iso: string): string {
@@ -45,7 +52,7 @@ function toDateKey(iso: string): string {
 
 export function getEvents(from?: string, to?: string, eventType?: string): CursorEvent[] {
   const filePath = getEventsPath();
-  let events = readEventsLines(filePath);
+  let events = readEventsLines(filePath, { from, to });
   if (from) events = events.filter((e) => toDateKey(e.timestamp) >= from);
   if (to) events = events.filter((e) => toDateKey(e.timestamp) <= to);
   if (eventType) events = events.filter((e) => e.event_type === eventType);
@@ -65,7 +72,6 @@ export function aggregateByDay(events: CursorEvent[]): Record<string, Record<str
 
 export function getStats(period: "day" | "week" | "month") {
   const filePath = getEventsPath();
-  const events = readEventsLines(filePath);
   const now = new Date();
   let from: string;
   if (period === "day") {
@@ -80,6 +86,7 @@ export function getStats(period: "day" | "week" | "month") {
     from = d.toISOString().slice(0, 10);
   }
   const to = now.toISOString().slice(0, 10);
+  const events = readEventsLines(filePath, { from, to });
   const filtered = events.filter((e) => {
     const d = toDateKey(e.timestamp);
     return d >= from && d <= to;

@@ -1,9 +1,10 @@
-import fs from 'fs';
 import os from 'os';
+import { appendJsonlLine } from './jsonl-daily.mjs';
 
 const MAX_TEXT_LEN = 2000;
 
 function getEventsPath() {
+  if (process.env.EVENTS_JSONL_PATH) return process.env.EVENTS_JSONL_PATH;
   if (process.env.CURSOR_EVENTS_PATH) return process.env.CURSOR_EVENTS_PATH;
   const home = os.platform() === 'win32' ? process.env.USERPROFILE : process.env.HOME;
   return `${home || os.homedir()}${os.platform() === 'win32' ? '\\' : '/'}cursor-events.jsonl`;
@@ -87,8 +88,7 @@ try {
   if (!eventType) process.exit(0);
 
   const payload = buildPayload(eventType, input);
-  const path = getEventsPath();
-  fs.appendFileSync(path, JSON.stringify(payload) + '\n');
+  appendJsonlLine(getEventsPath(), JSON.stringify(payload) + '\n');
 } catch {
   process.exit(0);
 }

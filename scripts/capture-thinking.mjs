@@ -1,16 +1,15 @@
-import fs from 'fs';
 import os from 'os';
-
-function getCorpusPath() {
-  if (process.env.THINKING_CORPUS_PATH) {
-    return process.env.THINKING_CORPUS_PATH;
-  }
-  const home = os.platform() === 'win32' ? process.env.USERPROFILE : process.env.HOME;
-  return `${home || os.homedir()}${pathSep()}thinking-corpus.jsonl`;
-}
+import { appendJsonlLine } from './jsonl-daily.mjs';
 
 function pathSep() {
   return os.platform() === 'win32' ? '\\' : '/';
+}
+
+function getCorpusPath() {
+  if (process.env.CORPUS_JSONL_PATH) return process.env.CORPUS_JSONL_PATH;
+  if (process.env.THINKING_CORPUS_PATH) return process.env.THINKING_CORPUS_PATH;
+  const home = os.platform() === 'win32' ? process.env.USERPROFILE : process.env.HOME;
+  return `${home || os.homedir()}${pathSep()}thinking-corpus.jsonl`;
 }
 
 
@@ -33,9 +32,7 @@ try {
     duration_ms: Number(input.duration_ms) || 0,
   };
 
-  const corpusPath = getCorpusPath();
-  const line = JSON.stringify(record) + '\n';
-  fs.appendFileSync(corpusPath, line);
+  appendJsonlLine(getCorpusPath(), JSON.stringify(record) + '\n');
 } catch {
   process.exit(0);
 }

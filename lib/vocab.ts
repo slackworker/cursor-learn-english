@@ -1,5 +1,10 @@
 import fs from "fs";
-import { readJsonlLines } from "./jsonl";
+import path from "path";
+import {
+  listDailyPaths,
+  readMergedJsonlLines,
+  stemFromBasePath,
+} from "./jsonl-daily";
 import { getCorpusPath, type ThinkingRecord } from "./thinking";
 
 export type WordFreq = { word: string; count: number };
@@ -69,13 +74,13 @@ function readRecords(opts?: {
   model?: string;
 }): ThinkingRecord[] {
   const filePath = getCorpusPath();
-  let records = readJsonlLines(filePath, (line) => {
+  let records = readMergedJsonlLines(filePath, (line) => {
     try {
       return JSON.parse(line) as ThinkingRecord;
     } catch {
       return null;
     }
-  }).items;
+  }, { from: opts?.from, to: opts?.to }).items;
   if (opts?.from) records = records.filter((r) => r.timestamp.slice(0, 10) >= opts.from!);
   if (opts?.to) records = records.filter((r) => r.timestamp.slice(0, 10) <= opts.to!);
   if (opts?.model) records = records.filter((r) => r.model === opts.model);
@@ -129,14 +134,23 @@ function getCacheKey(opts?: {
   phraseLimit?: number;
 }): string {
   const filePath = getCorpusPath();
-  let mtime = "0";
-  try {
-    mtime = fs.statSync(filePath).mtimeMs.toString();
-  } catch {
-    // file may not exist
+  const parts: string[] = [];
+  const paths = [
+    filePath,
+    ...listDailyPaths(filePath, opts?.from, opts?.to),
+  ];
+  const { stem } = stemFromBasePath(filePath);
+  for (const p of paths) {
+    try {
+      const s = fs.statSync(p);
+      parts.push(`${path.basename(p)}:${s.mtimeMs}:${s.size}`);
+    } catch {
+      parts.push(`${p}:missing`);
+    }
   }
   return [
-    mtime,
+    stem,
+    parts.join(","),
     opts?.from || "",
     opts?.to || "",
     opts?.model || "",

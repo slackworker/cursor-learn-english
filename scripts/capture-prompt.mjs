@@ -1,5 +1,5 @@
-import fs from 'fs';
 import os from 'os';
+import { appendJsonlLine } from './jsonl-daily.mjs';
 
 const MAX_PROMPT_LEN = 6000;
 
@@ -24,8 +24,7 @@ try {
     timestamp: new Date().toISOString(),
   };
 
-  const corpusPath = getPromptCorpusPath();
-  fs.appendFileSync(corpusPath, JSON.stringify(record) + '\n');
+  appendJsonlLine(getPromptCorpusPath(), JSON.stringify(record) + '\n');
 } catch {
   process.exit(0);
 }
