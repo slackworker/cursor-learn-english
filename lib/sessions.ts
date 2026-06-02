@@ -10,8 +10,11 @@ export type SessionSummary = {
   title?: string;
   reason?: string;
   duration_ms?: number;
+  // sessionEnd timestamp
   timestamp?: string;
+  // sessionStart timestamp
   start?: string;
+  is_open?: boolean;
 };
 
 type PromptRecord = {
@@ -83,8 +86,16 @@ export function getSessionSummaries(from?: string, to?: string): {
   }
 
   const sessions = Array.from(bySessionId.values())
-    .filter((s) => s.timestamp)
-    .sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""));
+    .map((session) => {
+      const hasEnd = Boolean(session.timestamp);
+      return {
+        ...session,
+        reason: session.reason ?? (hasEnd ? session.reason : "open"),
+        is_open: !hasEnd,
+      };
+    })
+    .filter((s) => Boolean(s.start ?? s.timestamp))
+    .sort((a, b) => (b.start ?? b.timestamp ?? "").localeCompare(a.start ?? a.timestamp ?? ""));
   const titles = getSessionTitles(sessions.map((s) => s.session_id));
   const sessionsWithTitle = sessions.map((session) => ({
     ...session,

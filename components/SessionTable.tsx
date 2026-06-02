@@ -10,6 +10,7 @@ type Session = {
   duration_ms?: number;
   timestamp?: string;
   start?: string;
+  is_open?: boolean;
 };
 
 export function SessionTable() {
@@ -65,9 +66,9 @@ export function SessionTable() {
         <thead>
           <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
             <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">会话标题</th>
-            <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">结束时间</th>
+            <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">开始时间</th>
             <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">时长</th>
-            <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">结束原因</th>
+            <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">状态/结束原因</th>
           </tr>
         </thead>
         <tbody>
@@ -80,10 +81,12 @@ export function SessionTable() {
                 <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{s.session_id?.slice(0, 8)}…</div>
               </td>
               <td className="p-3 text-zinc-600 dark:text-zinc-400">
-                {formatLocalTime(s.timestamp)}
+                {formatLocalTime(s.start ?? s.timestamp)}
               </td>
               <td className="p-3 text-zinc-600 dark:text-zinc-400">{formatMs(s.duration_ms)}</td>
-              <td className="p-3 text-zinc-600 dark:text-zinc-400">{s.reason ?? "—"}</td>
+              <td className="p-3 text-zinc-600 dark:text-zinc-400">
+                {s.is_open ? "进行中" : (s.reason ?? "—")}
+              </td>
             </tr>
           ))}
         </tbody>
