@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownContent } from "@/components/MarkdownContent";
 
 type SessionDetail = {
   session_id: string;
@@ -93,32 +92,6 @@ function formatDateTime(value?: string) {
   }
   return value;
 }
-
-const markdownComponents = {
-  p: ({ children }: { children?: React.ReactNode }) => (
-    <p className="mb-2 last:mb-0">{children}</p>
-  ),
-  ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="mb-2 list-disc space-y-0.5 pl-5">{children}</ul>
-  ),
-  ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="mb-2 list-decimal space-y-0.5 pl-5">{children}</ol>
-  ),
-  li: ({ children }: { children?: React.ReactNode }) => (
-    <li className="leading-relaxed">{children}</li>
-  ),
-  code: ({ children }: { children?: React.ReactNode }) => (
-    <code className="rounded bg-base-300 px-1.5 py-0.5 text-sm">{children}</code>
-  ),
-  pre: ({ children }: { children?: React.ReactNode }) => (
-    <pre className="mb-2 overflow-x-auto rounded bg-base-300 p-3 text-sm">{children}</pre>
-  ),
-  blockquote: ({ children }: { children?: React.ReactNode }) => (
-    <blockquote className="border-l-2 border-base-300 pl-3 opacity-70">
-      {children}
-    </blockquote>
-  ),
-};
 
 export default function SessionDetailPage() {
   const params = useParams<{ id: string }>();
@@ -222,11 +195,9 @@ export default function SessionDetailPage() {
                   </div>
                   <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
                     <div className="mb-1 text-xs font-medium text-info">用户问题</div>
-                    <div className="break-words text-sm">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                        {turn.user_prompt || turn.user_text}
-                      </ReactMarkdown>
-                    </div>
+                    <MarkdownContent className="break-words text-sm">
+                      {turn.user_prompt || turn.user_text}
+                    </MarkdownContent>
                   </div>
                   <div className="rounded-lg border border-success/30 bg-success/10 p-3 mb-3">
                     <div className="mb-1 text-xs font-medium text-success">助手回复</div>
@@ -234,20 +205,16 @@ export default function SessionDetailPage() {
                       <div className="space-y-3">
                         {turn.assistant_segments!.map((segment, idx) => (
                           <div key={`${turn.id}-assistant-${idx}`} className={idx > 0 ? "border-t border-success/20 pt-3" : ""}>
-                            <div className="break-words text-sm">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                {segment}
-                              </ReactMarkdown>
-                            </div>
+                            <MarkdownContent className="break-words text-sm">
+                              {segment}
+                            </MarkdownContent>
                           </div>
                         ))}
                       </div>
                     ) : turn.assistant_text ? (
-                      <div className="break-words text-sm">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                          {turn.assistant_text}
-                        </ReactMarkdown>
-                      </div>
+                      <MarkdownContent className="break-words text-sm">
+                        {turn.assistant_text}
+                      </MarkdownContent>
                     ) : (
                       <p className="text-sm opacity-60">（该轮暂无助手文本）</p>
                     )}
@@ -263,10 +230,8 @@ export default function SessionDetailPage() {
                             <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
                               {formatDateTime(t.timestamp)} · {t.model} · {t.duration_ms}ms
                             </summary>
-                            <div className="collapse-content pt-1 text-sm">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                {t.text}
-                              </ReactMarkdown>
+                            <div className="collapse-content pt-1">
+                              <MarkdownContent className="text-sm">{t.text}</MarkdownContent>
                             </div>
                           </details>
                         ))}

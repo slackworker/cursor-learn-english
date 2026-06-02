@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownContent } from "@/components/MarkdownContent";
 import { useSearchParams } from "next/navigation";
 
 type ThinkingRecord = {
@@ -98,33 +97,6 @@ function useTTS() {
   return { speakingId, speak, stop };
 }
 
-const markdownComponents = {
-  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0">{children}</p>,
-  ul: ({ children }: { children?: React.ReactNode }) => <ul className="list-disc pl-5 mb-2 space-y-0.5">{children}</ul>,
-  ol: ({ children }: { children?: React.ReactNode }) => <ol className="list-decimal pl-5 mb-2 space-y-0.5">{children}</ol>,
-  li: ({ children }: { children?: React.ReactNode }) => <li className="leading-relaxed">{children}</li>,
-  code: ({ children }: { children?: React.ReactNode }) => (
-    <code className="rounded bg-base-300 px-1.5 py-0.5 text-sm">{children}</code>
-  ),
-  pre: ({ children }: { children?: React.ReactNode }) => (
-    <pre className="mb-2 overflow-x-auto rounded bg-base-300 p-3 text-sm">{children}</pre>
-  ),
-  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-primary">{children}</strong>,
-  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="link link-primary">
-      {children}
-    </a>
-  ),
-  h1: ({ children }: { children?: React.ReactNode }) => <h1 className="mb-2 mt-3 text-lg font-semibold">{children}</h1>,
-  h2: ({ children }: { children?: React.ReactNode }) => <h2 className="mb-2 mt-3 text-base font-semibold">{children}</h2>,
-  h3: ({ children }: { children?: React.ReactNode }) => <h3 className="mb-1 mt-2 text-sm font-semibold">{children}</h3>,
-  blockquote: ({ children }: { children?: React.ReactNode }) => (
-    <blockquote className="border-l-2 border-base-300 pl-3 opacity-70">
-      {children}
-    </blockquote>
-  ),
-};
-
 function thinkingTitle(record: ThinkingRecord, index: number): string {
   const time = record.timestamp.slice(0, 19).replace("T", " ");
   return `#${index + 1} ${time} · ${record.model} · ${record.duration_ms}ms`;
@@ -179,11 +151,9 @@ function ThinkingItem({
         {thinkingTitle(record, index)}
       </div>
       <div className="collapse-content relative text-sm pr-12">
-        <div className="pt-1 break-words">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-            {applyHighlightMarkdown(record.text, highlight)}
-          </ReactMarkdown>
-        </div>
+        <MarkdownContent className="pt-1 break-words">
+          {applyHighlightMarkdown(record.text, highlight)}
+        </MarkdownContent>
         <div className="absolute right-2 top-1/2 -translate-y-1/2">
           <div className="tooltip tooltip-left" data-tip="点击朗读英语">
             <PlayButton playing={playing} onClick={onTogglePlay} />
@@ -232,11 +202,9 @@ function RoundCard({
             </button>
           )}
         </div>
-        <div className="whitespace-pre-wrap break-words text-sm">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-            {promptDisplay}
-          </ReactMarkdown>
-        </div>
+        <MarkdownContent className="whitespace-pre-wrap break-words text-sm">
+          {promptDisplay}
+        </MarkdownContent>
       </div>
 
       <div className="rounded-lg border border-success/30 bg-success/10 p-3 mb-3">
@@ -250,11 +218,9 @@ function RoundCard({
           ) : null}
         </div>
         {round.response?.text ? (
-          <div className="break-words text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {responseText}
-            </ReactMarkdown>
-          </div>
+          <MarkdownContent className="break-words text-sm">
+            {responseText}
+          </MarkdownContent>
         ) : (
           <p className="text-sm opacity-60">未采集到该轮助手完整回复（请更新 hooks 后重试）。</p>
         )}
