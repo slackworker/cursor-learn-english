@@ -34,7 +34,8 @@ export type TimelineRoundInput = {
 export type DialogueTimelineBlock =
   | { kind: "thinking"; timestamp: string; data: TimelineThinking }
   | { kind: "response"; timestamp: string; data: { text: string; model?: string | null } }
-  | { kind: "tool"; timestamp: string; data: TimelineTool };
+  | { kind: "tool"; timestamp: string; data: TimelineTool }
+  | { kind: "tool-group"; timestamp: string; endTimestamp: string; tools: TimelineTool[] };
 
 const TRANSCRIPT_TS_PREFIX = "__transcript_";
 
@@ -151,8 +152,45 @@ function interleaveByIndex(
 const KIND_ORDER: Record<DialogueTimelineBlock["kind"], number> = {
   thinking: 0,
   tool: 1,
+  "tool-group": 1,
   response: 2,
 };
+
+function groupConsecutiveToolBlocks(blocks: DialogueTimelineBlock[]): DialogueTimelineBlock[] {
+  const result: DialogueTimelineBlock[] = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const block = blocks[i];
+    if (block.kind !== "tool") {
+      result.push(block);
+      i += 1;
+      continue;
+    }
+    const tools: TimelineTool[] = [];
+    let startTs = block.timestamp;
+    let endTs = block.timestamp;
+    while (i < blocks.length && blocks[i].kind === "tool") {
+      const toolBlock = blocks[i] as Extract<DialogueTimelineBlock, { kind: "tool" }>;
+      tools.push(toolBlock.data);
+      endTs = toolBlock.timestamp;
+      i += 1;
+    }
+    result.push({ kind: "tool-group", timestamp: startTs, endTimestamp: endTs, tools });
+  }
+  return result;
+}
+
+export function summarizeToolNames(tools: TimelineTool[]): string {
+  const counts = new Map<string, number>();
+  for (const tool of tools) {
+    const name = tool.tool_name || "unknown";
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count]) => (count > 1 ? `${name}×${count}` : name))
+    .join(", ");
+}
 
 export function buildDialogueTimeline(
   round: TimelineRoundInput,
@@ -188,10 +226,10 @@ export function buildDialogueTimeline(
       if (cmp !== 0) return cmp;
       return KIND_ORDER[a.kind] - KIND_ORDER[b.kind];
     });
-    return timed;
+    return groupConsecutiveToolBlocks(timed);
   }
 
-  return interleaveByIndex(round.thinking, segments, round.tools);
+  return groupConsecutiveToolBlocks(interleaveByIndex(round.thinking, segments, round.tools));
 }
 
 export function formatTimelineTime(timestamp: string): string {

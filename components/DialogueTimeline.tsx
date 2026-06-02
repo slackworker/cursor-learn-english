@@ -4,9 +4,10 @@ import { MarkdownContent } from "@/components/MarkdownContent";
 import {
   buildDialogueTimeline,
   formatTimelineTime,
+  summarizeToolNames,
   type DialogueTimelineBlock,
 } from "@/lib/dialogue-timeline";
-import type { TimelineRoundInput } from "@/lib/dialogue-timeline";
+import type { TimelineRoundInput, TimelineTool } from "@/lib/dialogue-timeline";
 
 function ThinkingBlock({
   block,
@@ -33,26 +34,56 @@ function ThinkingBlock({
   );
 }
 
-function ToolBlock({
+function formatToolTimeRange(start: string, end: string): string {
+  const startLabel = formatTimelineTime(start);
+  const endLabel = formatTimelineTime(end);
+  if (!startLabel) return "";
+  if (!endLabel || startLabel === endLabel) return startLabel.slice(11);
+  return `${startLabel.slice(11)}–${endLabel.slice(11)}`;
+}
+
+function formatToolLine(tool: TimelineTool): string {
+  const timeLabel = formatTimelineTime(tool.timestamp);
+  const parts = [
+    timeLabel ? timeLabel.slice(11) : null,
+    tool.tool_name || "unknown",
+    tool.event_type,
+    tool.duration != null ? `${tool.duration}ms` : null,
+    tool.failure_type ?? null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function ToolGroupBlock({
   block,
   blockKey,
 }: {
-  block: Extract<DialogueTimelineBlock, { kind: "tool" }>;
+  block: Extract<DialogueTimelineBlock, { kind: "tool-group" }>;
   blockKey: string;
 }) {
-  const timeLabel = formatTimelineTime(block.timestamp);
-  const tool = block.data;
+  const { tools } = block;
+  const timeRange = formatToolTimeRange(block.timestamp, block.endTimestamp);
+  const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
   return (
-    <div
+    <details
       key={blockKey}
-      className="rounded border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+      className="collapse collapse-arrow border border-base-300 bg-base-100"
     >
-      <span className="font-medium">工具</span>
-      {timeLabel ? ` · ${timeLabel.slice(11)}` : ""}
-      {` · ${tool.tool_name || "unknown"} · ${tool.event_type}`}
-      {tool.duration ? ` · ${tool.duration}ms` : ""}
-      {tool.failure_type ? ` · ${tool.failure_type}` : ""}
-    </div>
+      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+        工具
+        {timeRange ? ` · ${timeRange}` : ""}
+        {` · ${countLabel} · ${summarizeToolNames(tools)}`}
+      </summary>
+      <div className="collapse-content pt-1">
+        <ul className="space-y-0.5 font-mono text-[11px] opacity-70">
+          {tools.map((tool, idx) => (
+            <li key={`${tool.timestamp}-${tool.tool_name ?? "tool"}-${idx}`}>
+              {formatToolLine(tool)}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
   );
 }
 
@@ -102,10 +133,13 @@ export function DialogueTimeline({
         if (block.kind === "thinking") {
           return <ThinkingBlock key={blockKey} block={block} blockKey={blockKey} />;
         }
-        if (block.kind === "tool") {
-          return <ToolBlock key={blockKey} block={block} blockKey={blockKey} />;
+        if (block.kind === "tool-group") {
+          return <ToolGroupBlock key={blockKey} block={block} blockKey={blockKey} />;
         }
-        return <ResponseBlock key={blockKey} block={block} blockKey={blockKey} />;
+        if (block.kind === "response") {
+          return <ResponseBlock key={blockKey} block={block} blockKey={blockKey} />;
+        }
+        return null;
       })}
     </div>
   );
