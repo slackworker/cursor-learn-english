@@ -6,10 +6,6 @@ const defaultEventsPath = path.join(
   os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir(),
   "cursor-events.jsonl"
 );
-const defaultCorpusPath = path.join(
-  os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir(),
-  "thinking-corpus.jsonl"
-);
 
 export function getEventsPath(): string {
   return (
@@ -17,10 +13,6 @@ export function getEventsPath(): string {
     process.env.CURSOR_EVENTS_PATH ||
     defaultEventsPath
   );
-}
-
-export function getCorpusPath(): string {
-  return process.env.CORPUS_JSONL_PATH || defaultCorpusPath;
 }
 
 export type CursorEvent = {
@@ -92,22 +84,45 @@ export function getStats(period: "day" | "week" | "month") {
   }
   const to = now.toISOString().slice(0, 10);
   const { items: events, truncated } = readEventsLines(filePath, { from, to });
-  const filtered = events.filter((e) => {
-    const d = toDateKey(e.timestamp);
-    return d >= from && d <= to;
-  });
-
-  const prompts = filtered.filter((e) => e.event_type === "beforeSubmitPrompt").length;
-  const toolCalls = filtered.filter((e) => e.event_type === "postToolUse").length;
-  const toolFailures = filtered.filter((e) => e.event_type === "postToolUseFailure").length;
-  const sessions = filtered.filter((e) => e.event_type === "sessionStart").length;
-  const thoughts = filtered.filter((e) => e.event_type === "afterAgentThought").length;
-  const fileEdits = filtered.filter((e) => e.event_type === "afterFileEdit").length;
-
+  let prompts = 0;
+  let toolCalls = 0;
+  let toolFailures = 0;
+  let sessions = 0;
+  let thoughts = 0;
+  let fileEdits = 0;
   let contextTokens = 0;
-  const preCompacts = filtered.filter((e) => e.event_type === "preCompact");
-  for (const p of preCompacts) {
-    contextTokens += Number((p as { context_tokens?: number }).context_tokens) || 0;
+  const filtered: CursorEvent[] = [];
+
+  for (const event of events) {
+    const d = toDateKey(event.timestamp);
+    if (d < from || d > to) continue;
+    filtered.push(event);
+
+    switch (event.event_type) {
+      case "beforeSubmitPrompt":
+        prompts += 1;
+        break;
+      case "postToolUse":
+        toolCalls += 1;
+        break;
+      case "postToolUseFailure":
+        toolFailures += 1;
+        break;
+      case "sessionStart":
+        sessions += 1;
+        break;
+      case "afterAgentThought":
+        thoughts += 1;
+        break;
+      case "afterFileEdit":
+        fileEdits += 1;
+        break;
+      case "preCompact":
+        contextTokens += Number((event as { context_tokens?: number }).context_tokens) || 0;
+        break;
+      default:
+        break;
+    }
   }
 
   return {
