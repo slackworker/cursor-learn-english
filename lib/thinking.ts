@@ -52,8 +52,8 @@ function parseJsonlLine<T>(line: string): T | null {
 function readJsonlFile<T>(
   basePath: string,
   opts?: { from?: string; to?: string }
-): T[] {
-  return readMergedJsonlLinesCached(basePath, parseJsonlLine<T>, opts).items;
+) {
+  return readMergedJsonlLinesCached(basePath, parseJsonlLine<T>, opts);
 }
 
 /**
@@ -63,8 +63,11 @@ function readJsonlFile<T>(
 function groupByPrompt(
   thinkingItems: ThinkingRecord[],
   opts?: { from?: string; to?: string }
-): ThinkingGroup[] {
-  const prompts = readJsonlFile<PromptRecord>(getPromptCorpusPath(), opts);
+): { groups: ThinkingGroup[]; truncated: boolean } {
+  const { items: prompts, truncated } = readJsonlFile<PromptRecord>(
+    getPromptCorpusPath(),
+    opts
+  );
 
   const promptsByConv = new Map<string, PromptRecord[]>();
   for (const p of prompts) {
@@ -123,7 +126,7 @@ function groupByPrompt(
     group.items.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   }
 
-  return groupOrder.map((k) => groupMap.get(k)!);
+  return { groups: groupOrder.map((k) => groupMap.get(k)!), truncated };
 }
 
 export function getThinking(params: {
@@ -133,10 +136,12 @@ export function getThinking(params: {
   to?: string;
   model?: string;
   highlight?: string;
-}): { groups: ThinkingGroup[]; total: number } {
+}): { groups: ThinkingGroup[]; total: number; truncated: boolean } {
   const { page = 1, pageSize = 20, from, to, model, highlight } = params;
   const filePath = getCorpusPath();
-  let items = readJsonlFile<ThinkingRecord>(filePath, { from, to });
+  const { items: rawItems, truncated: corpusTruncated } =
+    readJsonlFile<ThinkingRecord>(filePath, { from, to });
+  let items = rawItems;
 
   if (from) items = items.filter((r) => r.timestamp.slice(0, 10) >= from);
   if (to) items = items.filter((r) => r.timestamp.slice(0, 10) <= to);
@@ -145,7 +150,11 @@ export function getThinking(params: {
   // newest first for grouping order
   items.reverse();
 
-  const allGroups = groupByPrompt(items, { from, to });
+  const { groups: allGroups, truncated: promptTruncated } = groupByPrompt(items, {
+    from,
+    to,
+  });
+  const truncated = corpusTruncated || promptTruncated;
 
   const filteredGroups = (() => {
     if (!highlight) return allGroups;
@@ -165,5 +174,5 @@ export function getThinking(params: {
   const start = (page - 1) * pageSize;
   const groups = filteredGroups.slice(start, start + pageSize);
 
-  return { groups, total };
+  return { groups, total, truncated };
 }

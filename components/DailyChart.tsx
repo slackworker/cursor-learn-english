@@ -5,18 +5,34 @@ import * as echarts from "echarts";
 
 type ByDay = Record<string, Record<string, number>>;
 
-export function DailyChart({ days = 7 }: { days?: number }) {
+export function DailyChart({
+  days = 7,
+  onTruncated,
+}: {
+  days?: number;
+  onTruncated?: () => void;
+}) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<ByDay | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
+    setLoadError(false);
     const to = new Date().toISOString().slice(0, 10);
-    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    fetch(`/api/events?from=${from}&to=${to}`)
+    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    fetch(`/api/events?from=${from}&to=${to}&aggregateOnly=1`)
       .then((r) => r.json())
-      .then((res) => setData(res.byDay))
-      .catch(() => setData(null));
-  }, [days]);
+      .then((res) => {
+        setData(res.byDay);
+        if (res.truncated) onTruncated?.();
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  }, [days, onTruncated]);
 
   useEffect(() => {
     if (!chartRef.current || !data) return;
@@ -45,18 +61,30 @@ export function DailyChart({ days = 7 }: { days?: number }) {
     };
   }, [data]);
 
-  if (data === null) {
+  if (loading) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-        <p className="text-zinc-500 dark:text-zinc-400">无法加载趋势数据</p>
+      <div className="card h-80 animate-pulse border border-base-300 bg-base-200 shadow-sm" />
+    );
+  }
+
+  if (loadError || !data) {
+    return (
+      <div className="card border border-base-300 bg-base-100 shadow-sm">
+        <div className="card-body p-4">
+          <p className="text-base-content/60">无法加载趋势数据</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-      <h3 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">过去 {days} 天趋势</h3>
-      <div ref={chartRef} className="h-64 w-full" />
+    <div className="card border border-base-300 bg-base-100 shadow-sm">
+      <div className="card-body p-4">
+        <h3 className="mb-2 text-sm font-medium text-base-content/70">
+          过去 {days} 天趋势
+        </h3>
+        <div ref={chartRef} className="h-64 w-full" />
+      </div>
     </div>
   );
 }

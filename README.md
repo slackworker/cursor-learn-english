@@ -71,11 +71,34 @@
 | `~/cursor-events.jsonl`   | `capture-event.mjs`    | 每行一条事件（event_type、timestamp、conversation_id 及事件字段）   |
 
 
-可通过环境变量覆盖路径：
+可通过环境变量覆盖路径（Hooks 与 Web 使用**同一套变量名**，见下表）。Web 端在项目根目录复制 [`.env.local.example`](.env.local.example) 为 `.env.local` 后按需取消注释；Hooks 脚本从进程环境读取，可在 shell 配置中 `export`，或确保与 `.env.local` 指向相同绝对路径。
 
-- `THINKING_CORPUS_PATH` / `CORPUS_JSONL_PATH` → Thinking 语料（采集与 Web 读侧，二者等价，Web 优先 `CORPUS_JSONL_PATH`）
-- `PROMPT_CORPUS_PATH` → 用户提问语料
-- `CURSOR_EVENTS_PATH` / `EVENTS_JSONL_PATH` → 事件文件
+#### 路径变量总览
+
+| 数据 | 默认文件 | 变量（优先级从高到低） | 读/写方 |
+|------|----------|------------------------|---------|
+| 事件 | `~/cursor-events.jsonl` | `EVENTS_JSONL_PATH` → `CURSOR_EVENTS_PATH` | `capture-event.mjs`、Web API |
+| Thinking 语料 | `~/thinking-corpus.jsonl` | `CORPUS_JSONL_PATH` → `THINKING_CORPUS_PATH` | `capture-thinking.mjs`、Web API |
+| 用户提问 | `~/prompt-corpus.jsonl` | `PROMPT_CORPUS_PATH` | `capture-prompt.mjs`、Web API |
+| 关键词（可选） | — | `KEYWORD_JSONL_PATH` | 仅 Web `/api/keyword`；未配置时返回 503 |
+
+#### Thinking 语料：`CORPUS_*` ↔ `THINKING_*` 对照
+
+两套名称指向**同一文件**，任选其一即可；若同时设置，以 `CORPUS_JSONL_PATH` 为准。
+
+| 变量 | 常见来源 | 说明 |
+|------|----------|------|
+| `CORPUS_JSONL_PATH` | Web / 新版文档 | Next.js（`lib/thinking.ts`）与 `capture-thinking.mjs` **优先**使用 |
+| `THINKING_CORPUS_PATH` | Hooks / 旧版 README | 与上式等价；`capture-response-to-txt.mjs` 仅识别此名 |
+
+#### 事件文件：`EVENTS_*` ↔ `CURSOR_*` 对照
+
+| 变量 | 常见来源 | 说明 |
+|------|----------|------|
+| `EVENTS_JSONL_PATH` | Web / 新版文档 | Next.js（`lib/events.ts`）与 `capture-event.mjs` **优先**使用 |
+| `CURSOR_EVENTS_PATH` | Hooks / 旧版 README | 与上式等价，次优先 |
+
+> **对齐建议**：本地开发时在 `.env.local` 中写 `CORPUS_JSONL_PATH` 与 `EVENTS_JSONL_PATH`；若 Hooks 与 Web 不同机或不同用户，请在 Hooks 运行环境中 export **相同绝对路径**，避免仪表盘读不到采集文件。
 
 #### 按日切分、保留与清理（#5 中期）
 
@@ -99,7 +122,7 @@ node scripts/prune-jsonl.mjs
 ### 4. 依赖与运行
 
 - 脚本需 **Node.js**（无 npm 依赖）。
-- Web 端：在项目根目录执行 `npm install` 后 `npm run dev`，浏览器打开仪表盘；API 默认读取上述 JSONL 路径（可通过 `EVENTS_JSONL_PATH`、`CORPUS_JSONL_PATH`、`PROMPT_CORPUS_PATH` 覆盖）。Thinking 页「我的问题」依赖 `~/prompt-corpus.jsonl`（或 `PROMPT_CORPUS_PATH`），需确保 `beforeSubmitPrompt` 已挂载 `capture-prompt.mjs`。
+- Web 端：在项目根目录执行 `npm install` 后 `npm run dev`，浏览器打开仪表盘。路径覆盖见上文对照表，亦可复制 `.env.local.example` → `.env.local`。Thinking 页「我的问题」依赖 `~/prompt-corpus.jsonl`（或 `PROMPT_CORPUS_PATH`），需确保 `beforeSubmitPrompt` 已挂载 `capture-prompt.mjs`。
 - 可选关键词页：设置 `KEYWORD_JSONL_PATH` 指向外部 keyword JSONL；未配置时 `/api/keyword` 返回 503 而非 500。
 
 更多事件字段说明见 [hooks.md](hooks.md)。

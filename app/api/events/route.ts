@@ -9,9 +9,16 @@ export async function GET(request: NextRequest) {
     searchParams.get("to") ?? undefined
   );
   const event_type = searchParams.get("event_type") ?? undefined;
+  const aggregateOnly =
+    searchParams.get("aggregateOnly") === "1" ||
+    searchParams.get("aggregateOnly") === "true";
 
-  const events = getEvents(from, to, event_type ?? undefined);
+  const { events, truncated } = getEvents(from, to, event_type ?? undefined);
   const byDay = aggregateByDay(events);
 
-  return Response.json({ events, byDay, from, to });
+  if (aggregateOnly) {
+    return Response.json({ byDay, from, to, truncated });
+  }
+
+  return Response.json({ events, byDay, from, to, truncated });
 }

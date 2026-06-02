@@ -12,17 +12,26 @@ type Stats = {
   contextTokens: number;
 };
 
-export function StatCards({ period = "week" }: { period?: "day" | "week" | "month" }) {
+export function StatCards({
+  period = "week",
+  onTruncated,
+}: {
+  period?: "day" | "week" | "month";
+  onTruncated?: () => void;
+}) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`/api/stats?period=${period}`)
       .then((r) => r.json())
-      .then(setStats)
+      .then((data) => {
+        setStats(data);
+        if (data.truncated) onTruncated?.();
+      })
       .catch(() => setStats(null))
       .finally(() => setLoading(false));
-  }, [period]);
+  }, [period, onTruncated]);
 
   if (loading) {
     return (

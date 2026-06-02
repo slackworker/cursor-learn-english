@@ -42,21 +42,26 @@ function parseEventLine(line: string): CursorEvent | null {
 function readEventsLines(
   basePath: string,
   opts?: { from?: string; to?: string }
-): CursorEvent[] {
-  return readMergedJsonlLinesCached(basePath, parseEventLine, opts).items;
+) {
+  return readMergedJsonlLinesCached(basePath, parseEventLine, opts);
 }
 
 function toDateKey(iso: string): string {
   return iso.slice(0, 10);
 }
 
-export function getEvents(from?: string, to?: string, eventType?: string): CursorEvent[] {
+export function getEvents(
+  from?: string,
+  to?: string,
+  eventType?: string
+): { events: CursorEvent[]; truncated: boolean } {
   const filePath = getEventsPath();
-  let events = readEventsLines(filePath, { from, to });
+  const { items, truncated } = readEventsLines(filePath, { from, to });
+  let events = items;
   if (from) events = events.filter((e) => toDateKey(e.timestamp) >= from);
   if (to) events = events.filter((e) => toDateKey(e.timestamp) <= to);
   if (eventType) events = events.filter((e) => e.event_type === eventType);
-  return events;
+  return { events, truncated };
 }
 
 export function aggregateByDay(events: CursorEvent[]): Record<string, Record<string, number>> {
@@ -86,7 +91,7 @@ export function getStats(period: "day" | "week" | "month") {
     from = d.toISOString().slice(0, 10);
   }
   const to = now.toISOString().slice(0, 10);
-  const events = readEventsLines(filePath, { from, to });
+  const { items: events, truncated } = readEventsLines(filePath, { from, to });
   const filtered = events.filter((e) => {
     const d = toDateKey(e.timestamp);
     return d >= from && d <= to;
@@ -114,5 +119,6 @@ export function getStats(period: "day" | "week" | "month") {
     fileEdits,
     contextTokens,
     byDay: aggregateByDay(filtered),
+    truncated,
   };
 }

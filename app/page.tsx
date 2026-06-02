@@ -1,5 +1,4 @@
-import { StatCards } from "@/components/StatCards";
-import { DailyChart } from "@/components/DailyChart";
+import { HomeSections } from "@/components/HomeSections";
 
 export default function Home() {
   return (
@@ -7,17 +6,7 @@ export default function Home() {
       <p className="mb-4 text-sm opacity-60">
         按日聚合：提问数、工具调用、会话数。上下文 token 为 preCompact 近似值。
       </p>
-      <section className="mb-8">
-        <h2 className="mb-4 text-sm font-medium opacity-70">今日统计</h2>
-        <StatCards period="day" />
-      </section>
-      <section className="mb-8">
-        <h2 className="mb-4 text-sm font-medium opacity-70">本周统计</h2>
-        <StatCards period="week" />
-      </section>
-      <section>
-        <DailyChart days={14} />
-      </section>
+      <HomeSections />
     </main>
   );
 }

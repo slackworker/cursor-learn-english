@@ -15,11 +15,12 @@ export async function GET(request: NextRequest) {
     { defaultSpanDays: DEFAULT_SESSIONS_LOOKBACK_DAYS }
   );
 
-  const events = getEvents(from, to).filter((e) =>
+  const { events, truncated } = getEvents(from, to);
+  const sessionEvents = events.filter((e) =>
     SESSION_EVENT_TYPES.has(e.event_type)
   );
-  const sessionEnds = events.filter((e) => e.event_type === "sessionEnd");
-  const sessionStarts = events.filter((e) => e.event_type === "sessionStart");
+  const sessionEnds = sessionEvents.filter((e) => e.event_type === "sessionEnd");
+  const sessionStarts = sessionEvents.filter((e) => e.event_type === "sessionStart");
 
   const bySessionId = new Map<
     string,
@@ -45,5 +46,5 @@ export async function GET(request: NextRequest) {
     .filter((s) => s.timestamp)
     .sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""));
 
-  return Response.json({ sessions, from, to });
+  return Response.json({ sessions, from, to, truncated });
 }
