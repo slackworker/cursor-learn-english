@@ -45,6 +45,7 @@ export type SessionDetail = SessionSummary & {
 };
 
 const SESSION_EVENT_TYPES = new Set(["sessionStart", "sessionEnd"]);
+const SESSION_LIFECYCLE_EVENT_TYPES = new Set(["sessionStart", "sessionEnd", "stop"]);
 
 function parseJsonlLine<T>(line: string): T | null {
   try {
@@ -66,6 +67,14 @@ export function getSessionSummaries(from?: string, to?: string): {
   const sessionEvents = events.filter((e) => SESSION_EVENT_TYPES.has(e.event_type));
   const sessionEnds = sessionEvents.filter((e) => e.event_type === "sessionEnd");
   const sessionStarts = sessionEvents.filter((e) => e.event_type === "sessionStart");
+  const sessionHasContentEvent = new Map<string, boolean>();
+
+  for (const e of events) {
+    const id = getSessionIdFromEvent(e);
+    if (!id) continue;
+    if (SESSION_LIFECYCLE_EVENT_TYPES.has(e.event_type)) continue;
+    sessionHasContentEvent.set(id, true);
+  }
 
   const bySessionId = new Map<string, SessionSummary>();
   for (const e of sessionStarts) {
@@ -101,8 +110,15 @@ export function getSessionSummaries(from?: string, to?: string): {
     ...session,
     title: titles.get(session.session_id),
   }));
+  const filteredSessions = sessionsWithTitle.filter((session) => {
+    // 过滤仅打开后立刻关闭、无实际交互痕迹的空会话
+    if (session.is_open) return true;
+    const hasTitle = Boolean(session.title?.trim());
+    if (hasTitle) return true;
+    return sessionHasContentEvent.get(session.session_id) === true;
+  });
 
-  return { sessions: sessionsWithTitle, truncated };
+  return { sessions: filteredSessions, truncated };
 }
 
 export function getSessionDetail(sessionId: string): SessionDetail | null {
