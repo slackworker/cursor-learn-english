@@ -42,6 +42,7 @@ export type DialogueRound = {
     text: string;
     timestamp: string;
     model?: string | null;
+    segment_count?: number;
   };
   thinking: ThinkingItem[];
   tools: Array<{
@@ -143,6 +144,9 @@ export function getDialogueRounds(params: {
       const inWindow = (ts: string) => ts >= prompt.timestamp && (!nextPromptTs || ts < nextPromptTs);
 
       const windowResponses = convResponses.filter((r) => inWindow(r.timestamp));
+      const responseSegments = windowResponses
+        .map((r) => r.response_text?.trim() ?? "")
+        .filter(Boolean);
       const lastResponse = windowResponses[windowResponses.length - 1];
       const windowTools = convTools.filter((t) => inWindow(t.timestamp));
       const windowThinking = convThinking.filter((t) => inWindow(t.timestamp));
@@ -152,11 +156,12 @@ export function getDialogueRounds(params: {
         conversation_id: cid,
         prompt: prompt.prompt,
         prompt_timestamp: prompt.timestamp,
-        response: lastResponse?.response_text
+        response: responseSegments.length > 0 && lastResponse
           ? {
-              text: lastResponse.response_text,
+              text: responseSegments.join("\n\n"),
               timestamp: lastResponse.timestamp,
               model: lastResponse.model ?? null,
+              segment_count: responseSegments.length,
             }
           : undefined,
         thinking: windowThinking.map((t) => ({

@@ -8,6 +8,7 @@ export type TranscriptTurn = {
   user_prompt: string;
   user_timestamp?: string;
   assistant_text?: string;
+  assistant_segments?: string[];
 };
 
 type TranscriptRecord = {
@@ -61,7 +62,22 @@ export function getTranscriptTurns(sessionId: string): TranscriptTurn[] {
   if (!content.trim()) return [];
 
   const turns: TranscriptTurn[] = [];
-  let pendingUser: { id: string; user_text: string } | null = null;
+  let pendingUser: { id: string; user_text: string; assistant_parts: string[] } | null = null;
+
+  function flushPendingUser() {
+    if (!pendingUser) return;
+    const assistantSegments = pendingUser.assistant_parts.filter(Boolean);
+    const assistantText = assistantSegments.join("\n\n").trim();
+    turns.push({
+      id: pendingUser.id,
+      user_text: pendingUser.user_text,
+      user_prompt: extractUserPrompt(pendingUser.user_text),
+      user_timestamp: extractUserTimestamp(pendingUser.user_text),
+      assistant_text: assistantText || undefined,
+      assistant_segments: assistantSegments.length > 0 ? assistantSegments : undefined,
+    });
+    pendingUser = null;
+  }
 
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
@@ -76,37 +92,20 @@ export function getTranscriptTurns(sessionId: string): TranscriptTurn[] {
     if (!text) continue;
 
     if (record.role === "user") {
-      if (pendingUser) {
-        turns.push({
-          ...pendingUser,
-          user_prompt: extractUserPrompt(pendingUser.user_text),
-          user_timestamp: extractUserTimestamp(pendingUser.user_text),
-        });
-      }
+      flushPendingUser();
       pendingUser = {
         id: `${sessionId}::${turns.length + 1}`,
         user_text: text,
+        assistant_parts: [],
       };
       continue;
     }
 
     if (record.role === "assistant" && pendingUser) {
-      turns.push({
-        ...pendingUser,
-        user_prompt: extractUserPrompt(pendingUser.user_text),
-        user_timestamp: extractUserTimestamp(pendingUser.user_text),
-        assistant_text: text,
-      });
-      pendingUser = null;
+      pendingUser.assistant_parts.push(text);
     }
   }
 
-  if (pendingUser) {
-    turns.push({
-      ...pendingUser,
-      user_prompt: extractUserPrompt(pendingUser.user_text),
-      user_timestamp: extractUserTimestamp(pendingUser.user_text),
-    });
-  }
+  flushPendingUser();
   return turns;
 }

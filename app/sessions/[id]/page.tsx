@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type SessionDetail = {
   session_id: string;
@@ -54,6 +56,7 @@ type SessionDetail = {
     user_prompt: string;
     user_timestamp?: string;
     assistant_text?: string;
+    assistant_segments?: string[];
     round?: {
       id: string;
       prompt_timestamp: string;
@@ -80,6 +83,37 @@ function formatMs(ms?: number) {
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}min`;
 }
+
+function formatDateTime(value?: string) {
+  if (!value) return "—";
+  return value.slice(0, 19).replace("T", " ");
+}
+
+const markdownComponents = {
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p className="mb-2 last:mb-0">{children}</p>
+  ),
+  ul: ({ children }: { children?: React.ReactNode }) => (
+    <ul className="mb-2 list-disc space-y-0.5 pl-5">{children}</ul>
+  ),
+  ol: ({ children }: { children?: React.ReactNode }) => (
+    <ol className="mb-2 list-decimal space-y-0.5 pl-5">{children}</ol>
+  ),
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li className="leading-relaxed">{children}</li>
+  ),
+  code: ({ children }: { children?: React.ReactNode }) => (
+    <code className="rounded bg-base-300 px-1.5 py-0.5 text-sm">{children}</code>
+  ),
+  pre: ({ children }: { children?: React.ReactNode }) => (
+    <pre className="mb-2 overflow-x-auto rounded bg-base-300 p-3 text-sm">{children}</pre>
+  ),
+  blockquote: ({ children }: { children?: React.ReactNode }) => (
+    <blockquote className="border-l-2 border-base-300 pl-3 opacity-70">
+      {children}
+    </blockquote>
+  ),
+};
 
 export default function SessionDetailPage() {
   const params = useParams<{ id: string }>();
@@ -130,146 +164,143 @@ export default function SessionDetailPage() {
     );
   }
 
+  const sortedTurns = [...session.transcript_turns].sort((a, b) => {
+    const aTs = a.user_timestamp ?? a.round?.prompt_timestamp ?? "";
+    const bTs = b.user_timestamp ?? b.round?.prompt_timestamp ?? "";
+    return aTs.localeCompare(bTs);
+  });
+
+  const sortedRounds = [...session.dialogue_rounds].sort((a, b) =>
+    a.prompt_timestamp.localeCompare(b.prompt_timestamp)
+  );
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       <Link href="/sessions" className="mb-4 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400">
         ← 返回会话列表
       </Link>
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{session.title || `会话 ${session.session_id.slice(0, 8)}…`}</h1>
-      <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-400">{session.session_id}</p>
+      <h1 className="text-2xl font-semibold">{session.title || `会话 ${session.session_id.slice(0, 8)}…`}</h1>
+      <p className="mt-1 font-mono text-xs opacity-60">{session.session_id}</p>
 
       <section className="mt-6 grid gap-3 md:grid-cols-4">
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">开始时间</p>
-          <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">{session.start ? session.start.slice(0, 19).replace("T", " ") : "—"}</p>
+        <div className="card bg-base-200 p-4">
+          <p className="text-xs opacity-60">开始时间</p>
+          <p className="mt-1 text-sm">{formatDateTime(session.start)}</p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">结束时间</p>
-          <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">{session.timestamp ? session.timestamp.slice(0, 19).replace("T", " ") : "—"}</p>
+        <div className="card bg-base-200 p-4">
+          <p className="text-xs opacity-60">结束时间</p>
+          <p className="mt-1 text-sm">{formatDateTime(session.timestamp)}</p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">会话时长</p>
-          <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">{formatMs(session.duration_ms)}</p>
+        <div className="card bg-base-200 p-4">
+          <p className="text-xs opacity-60">会话时长</p>
+          <p className="mt-1 text-sm">{formatMs(session.duration_ms)}</p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">结束原因</p>
-          <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">{session.reason ?? "—"}</p>
-        </div>
-      </section>
-
-      <section className="mt-6 grid gap-3 md:grid-cols-3">
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Prompt 数</p>
-          <p className="mt-1 text-lg font-semibold text-zinc-800 dark:text-zinc-100">{session.prompt_count}</p>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Thinking 数</p>
-          <p className="mt-1 text-lg font-semibold text-zinc-800 dark:text-zinc-100">{session.thinking_count}</p>
-        </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">事件类型数</p>
-          <p className="mt-1 text-lg font-semibold text-zinc-800 dark:text-zinc-100">
-            {Object.keys(session.event_counts).filter((k) => !k.startsWith("_")).length}
-          </p>
+        <div className="card bg-base-200 p-4">
+          <p className="text-xs opacity-60">结束原因</p>
+          <p className="mt-1 text-sm">{session.reason ?? "—"}</p>
         </div>
       </section>
 
-      <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-        <h2 className="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">完整对话轮次（Transcript 优先）</h2>
-        {session.transcript_turns.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无 transcript 对话数据</p>
-        ) : (
-          <ul className="space-y-3 text-sm">
-            {session.transcript_turns.map((r) => (
-              <li key={r.id} className="rounded border border-zinc-100 p-3 dark:border-zinc-800">
-                {r.user_timestamp ? (
-                  <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{r.user_timestamp}</div>
-                ) : null}
-                <div className="mt-2 rounded bg-zinc-50 p-2 dark:bg-zinc-800/60">
-                  <div className="mb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-300">用户</div>
-                  <div className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-100">{r.user_text}</div>
-                </div>
-                <div className="mt-2 rounded bg-blue-50 p-2 dark:bg-blue-950/30">
-                  <div className="mb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-300">助手</div>
-                  <div className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-100">{r.assistant_text ?? "（该轮尚无助手文本）"}</div>
-                </div>
-                <div className="mt-2 rounded border border-zinc-200 p-2 dark:border-zinc-700">
-                  <div className="text-xs font-semibold text-zinc-500 dark:text-zinc-300">Thinking / Tools</div>
-                  <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    thinking: {r.round?.thinking.length ?? 0} · tools: {r.round?.tools.length ?? 0}
+      {sortedTurns.length > 0 ? (
+        <section className="mt-6">
+          <h2 className="mb-3 text-sm font-medium opacity-70">
+            对话流（按 session_id 分组，时间从上到下）
+          </h2>
+          <div className="card bg-base-200">
+            <ul className="divide-y divide-base-300">
+              {sortedTurns.map((turn) => (
+                <li key={turn.id} className="p-4">
+                  <div className="mb-2 text-[11px] opacity-70">
+                    {formatDateTime(turn.user_timestamp ?? turn.round?.prompt_timestamp)}
                   </div>
-                  {(r.round?.thinking.length ?? 0) > 0 ? (
-                    <ul className="mt-2 space-y-1">
-                      {r.round!.thinking.slice(0, 2).map((t) => (
-                        <li key={`${t.generation_id}-${t.timestamp}`} className="rounded bg-zinc-50 p-2 text-xs text-zinc-600 dark:bg-zinc-800/40 dark:text-zinc-300">
-                          {t.text.slice(0, 160)}
-                          {t.text.length > 160 ? "…" : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {(r.round?.tools.length ?? 0) > 0 ? (
-                    <ul className="mt-2 space-y-1">
-                      {r.round!.tools.slice(0, 4).map((tool, idx) => (
-                        <li key={`${tool.timestamp}-${idx}`} className="text-xs text-zinc-600 dark:text-zinc-300">
-                          {tool.event_type} · {tool.tool_name || "unknown"}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+                  <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
+                    <div className="mb-1 text-xs font-medium text-info">用户问题</div>
+                    <div className="break-words text-sm">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                        {turn.user_text}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-success/30 bg-success/10 p-3 mb-3">
+                    <div className="mb-1 text-xs font-medium text-success">助手回复</div>
+                    {(turn.assistant_segments?.length ?? 0) > 0 ? (
+                      <div className="space-y-3">
+                        {turn.assistant_segments!.map((segment, idx) => (
+                          <div key={`${turn.id}-assistant-${idx}`} className={idx > 0 ? "border-t border-success/20 pt-3" : ""}>
+                            <div className="break-words text-sm">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                {segment}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : turn.assistant_text ? (
+                      <div className="break-words text-sm">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          {turn.assistant_text}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm opacity-60">（该轮暂无助手文本）</p>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-base-300 bg-base-100 p-3">
+                    <div className="text-xs font-medium opacity-70">
+                      Thinking / Tools · thinking: {turn.round?.thinking.length ?? 0} · tools: {turn.round?.tools.length ?? 0}
+                    </div>
+                    {(turn.round?.thinking.length ?? 0) > 0 ? (
+                      <div className="mt-2 space-y-2">
+                        {turn.round!.thinking.map((t) => (
+                          <details key={`${t.generation_id}-${t.timestamp}`} className="collapse collapse-arrow border border-base-300 bg-base-100">
+                            <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+                              {formatDateTime(t.timestamp)} · {t.model} · {t.duration_ms}ms
+                            </summary>
+                            <div className="collapse-content pt-1 text-sm">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                {t.text}
+                              </ReactMarkdown>
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    ) : null}
+                    {(turn.round?.tools.length ?? 0) > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs opacity-80">
+                        {turn.round!.tools.map((tool, idx) => (
+                          <li key={`${tool.timestamp}-${idx}`}>
+                            {tool.timestamp.slice(11, 19)} · {tool.tool_name || "unknown"} · {tool.event_type}
+                            {tool.duration ? ` · ${tool.duration}ms` : ""}
+                            {tool.failure_type ? ` · ${tool.failure_type}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      ) : (
+        <section className="mt-6 card bg-base-200 p-4">
+          <p className="text-sm opacity-60">暂无 transcript 对话数据，下面展示事件聚合轮次。</p>
+        </section>
+      )}
+
+      <section className="mt-6 rounded-lg border border-base-300 bg-base-100 p-4">
+        <h2 className="mb-3 text-sm font-medium opacity-70">事件聚合轮次（兜底）</h2>
+        {sortedRounds.length === 0 ? (
+          <p className="text-sm opacity-60">暂无可匹配轮次</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {sortedRounds.map((round) => (
+              <li key={round.id} className="rounded border border-base-300 p-2">
+                <div className="font-mono text-xs opacity-60">
+                  {formatDateTime(round.prompt_timestamp)}
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-        <h2 className="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">事件聚合轮次（用于核对 thinking/tools）</h2>
-        {session.dialogue_rounds.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无可匹配轮次</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {session.dialogue_rounds.map((r) => (
-              <li key={r.id} className="rounded border border-zinc-100 p-2 dark:border-zinc-800">
-                <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{r.prompt_timestamp.slice(0, 19).replace("T", " ")}</div>
-                <div className="mt-1 text-zinc-700 dark:text-zinc-200">thinking: {r.thinking.length} · tools: {r.tools.length} · response: {r.response ? "yes" : "no"}</div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-        <h2 className="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">最近 Prompts</h2>
-        {session.recent_prompts.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {session.recent_prompts.map((p) => (
-              <li key={`${p.timestamp}-${p.prompt.slice(0, 12)}`} className="rounded border border-zinc-100 p-2 dark:border-zinc-800">
-                <div className="text-zinc-700 dark:text-zinc-200">{p.prompt}</div>
-                <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{p.timestamp.slice(0, 19).replace("T", " ")}</div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="mt-6 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-        <h2 className="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">最近事件时间线</h2>
-        {session.timeline.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">暂无</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {session.timeline.map((t) => (
-              <li key={`${t.event_type}-${t.timestamp}`} className="rounded border border-zinc-100 p-2 dark:border-zinc-800">
-                <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{t.timestamp.slice(0, 19).replace("T", " ")}</div>
-                <div className="mt-1 text-zinc-700 dark:text-zinc-200">
-                  {t.event_type}
-                  {t.tool_name ? ` · ${t.tool_name}` : ""}
-                  {t.reason ? ` · ${t.reason}` : ""}
-                  {typeof t.duration_ms === "number" ? ` · ${formatMs(t.duration_ms)}` : ""}
+                <div className="mt-1">
+                  thinking: {round.thinking.length} · tools: {round.tools.length} · response: {round.response ? "yes" : "no"}
                 </div>
               </li>
             ))}
