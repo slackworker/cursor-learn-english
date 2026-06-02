@@ -1,4 +1,5 @@
 import fs from "fs";
+import { readJsonlLines } from "./jsonl";
 import { getCorpusPath, type ThinkingRecord } from "./thinking";
 
 export type WordFreq = { word: string; count: number };
@@ -68,17 +69,13 @@ function readRecords(opts?: {
   model?: string;
 }): ThinkingRecord[] {
   const filePath = getCorpusPath();
-  if (!fs.existsSync(filePath)) return [];
-  const content = fs.readFileSync(filePath, "utf-8");
-  const lines = content.trim().split("\n").filter(Boolean);
-  let records: ThinkingRecord[] = [];
-  for (const line of lines) {
+  let records = readJsonlLines(filePath, (line) => {
     try {
-      records.push(JSON.parse(line) as ThinkingRecord);
+      return JSON.parse(line) as ThinkingRecord;
     } catch {
-      // skip
+      return null;
     }
-  }
+  }).items;
   if (opts?.from) records = records.filter((r) => r.timestamp.slice(0, 10) >= opts.from!);
   if (opts?.to) records = records.filter((r) => r.timestamp.slice(0, 10) <= opts.to!);
   if (opts?.model) records = records.filter((r) => r.model === opts.model);

@@ -1,6 +1,6 @@
-import fs from "fs";
 import path from "path";
 import os from "os";
+import { readJsonlLines } from "./jsonl";
 
 const defaultEventsPath = path.join(
   os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir(),
@@ -27,19 +27,16 @@ export type CursorEvent = {
   [key: string]: unknown;
 };
 
-function readEventsLines(filePath: string): CursorEvent[] {
-  if (!fs.existsSync(filePath)) return [];
-  const content = fs.readFileSync(filePath, "utf-8");
-  const lines = content.trim().split("\n").filter(Boolean);
-  const out: CursorEvent[] = [];
-  for (const line of lines) {
-    try {
-      out.push(JSON.parse(line) as CursorEvent);
-    } catch {
-      // skip invalid lines
-    }
+function parseEventLine(line: string): CursorEvent | null {
+  try {
+    return JSON.parse(line) as CursorEvent;
+  } catch {
+    return null;
   }
-  return out;
+}
+
+function readEventsLines(filePath: string): CursorEvent[] {
+  return readJsonlLines(filePath, parseEventLine).items;
 }
 
 function toDateKey(iso: string): string {
@@ -47,8 +44,8 @@ function toDateKey(iso: string): string {
 }
 
 export function getEvents(from?: string, to?: string, eventType?: string): CursorEvent[] {
-  const path = getEventsPath();
-  let events = readEventsLines(path);
+  const filePath = getEventsPath();
+  let events = readEventsLines(filePath);
   if (from) events = events.filter((e) => toDateKey(e.timestamp) >= from);
   if (to) events = events.filter((e) => toDateKey(e.timestamp) <= to);
   if (eventType) events = events.filter((e) => e.event_type === eventType);
@@ -67,8 +64,8 @@ export function aggregateByDay(events: CursorEvent[]): Record<string, Record<str
 }
 
 export function getStats(period: "day" | "week" | "month") {
-  const path = getEventsPath();
-  const events = readEventsLines(path);
+  const filePath = getEventsPath();
+  const events = readEventsLines(filePath);
   const now = new Date();
   let from: string;
   if (period === "day") {

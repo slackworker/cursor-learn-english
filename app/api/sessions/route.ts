@@ -1,7 +1,23 @@
+import { NextRequest } from "next/server";
 import { getEvents } from "@/lib/events";
+import {
+  DEFAULT_SESSIONS_LOOKBACK_DAYS,
+  normalizeDateRange,
+} from "@/lib/api-limits";
 
-export async function GET() {
-  const events = getEvents();
+const SESSION_EVENT_TYPES = new Set(["sessionStart", "sessionEnd"]);
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const { from, to } = normalizeDateRange(
+    searchParams.get("from") ?? undefined,
+    searchParams.get("to") ?? undefined,
+    { defaultSpanDays: DEFAULT_SESSIONS_LOOKBACK_DAYS }
+  );
+
+  const events = getEvents(from, to).filter((e) =>
+    SESSION_EVENT_TYPES.has(e.event_type)
+  );
   const sessionEnds = events.filter((e) => e.event_type === "sessionEnd");
   const sessionStarts = events.filter((e) => e.event_type === "sessionStart");
 
@@ -29,5 +45,5 @@ export async function GET() {
     .filter((s) => s.timestamp)
     .sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""));
 
-  return Response.json({ sessions });
+  return Response.json({ sessions, from, to });
 }

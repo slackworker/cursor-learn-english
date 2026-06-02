@@ -1,14 +1,30 @@
 import { NextRequest } from "next/server";
 import { getVocabStats } from "@/lib/vocab";
+import {
+  clampLimit,
+  MAX_API_PHRASE_LIMIT,
+  MAX_API_WORD_LIMIT,
+  normalizeDateRange,
+} from "@/lib/api-limits";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const from = searchParams.get("from") ?? undefined;
-  const to = searchParams.get("to") ?? undefined;
+  const { from, to } = normalizeDateRange(
+    searchParams.get("from") ?? undefined,
+    searchParams.get("to") ?? undefined
+  );
   const model = searchParams.get("model") ?? undefined;
-  const wordLimit = parseInt(searchParams.get("wordLimit") ?? "200", 10);
-  const phraseLimit = parseInt(searchParams.get("phraseLimit") ?? "200", 10);
+  const wordLimit = clampLimit(
+    parseInt(searchParams.get("wordLimit") ?? "200", 10),
+    200,
+    MAX_API_WORD_LIMIT
+  );
+  const phraseLimit = clampLimit(
+    parseInt(searchParams.get("phraseLimit") ?? "200", 10),
+    200,
+    MAX_API_PHRASE_LIMIT
+  );
 
   const data = getVocabStats({ from, to, model, wordLimit, phraseLimit });
-  return Response.json(data);
+  return Response.json({ ...data, from, to, wordLimit, phraseLimit });
 }
