@@ -86,7 +86,12 @@ function formatMs(ms?: number) {
 
 function formatDateTime(value?: string) {
   if (!value) return "—";
-  return value.slice(0, 19).replace("T", " ");
+  // 仅对 ISO 8601（如 2026-06-02T10:45:00）做 T 替换；transcript 的
+  // <timestamp>Tuesday, Jun 2, …</timestamp> 含字母 T，不能用 replace("T")
+  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    return value.slice(0, 19).replace("T", " ");
+  }
+  return value;
 }
 
 const markdownComponents = {
