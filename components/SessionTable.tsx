@@ -42,6 +42,23 @@ export function SessionTable() {
     return `${(ms / 60000).toFixed(1)}min`;
   }
 
+  function formatLocalTime(value?: string) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return value.slice(0, 19).replace("T", " ");
+    }
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
       <table className="w-full text-left text-sm">
@@ -63,7 +80,7 @@ export function SessionTable() {
                 <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{s.session_id?.slice(0, 8)}…</div>
               </td>
               <td className="p-3 text-zinc-600 dark:text-zinc-400">
-                {s.timestamp ? s.timestamp.slice(0, 19).replace("T", " ") : "—"}
+                {formatLocalTime(s.timestamp)}
               </td>
               <td className="p-3 text-zinc-600 dark:text-zinc-400">{formatMs(s.duration_ms)}</td>
               <td className="p-3 text-zinc-600 dark:text-zinc-400">{s.reason ?? "—"}</td>
