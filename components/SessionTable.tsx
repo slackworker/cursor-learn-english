@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Session = {
@@ -56,7 +57,9 @@ export function SessionTable() {
           {sessions.map((s) => (
             <tr key={s.session_id} className="border-b border-zinc-100 dark:border-zinc-700">
               <td className="p-3 text-zinc-600 dark:text-zinc-400">
-                <div className="max-w-[28rem] truncate">{s.title || `会话 ${s.session_id?.slice(0, 8)}…`}</div>
+                <Link href={`/sessions/${s.session_id}`} className="block max-w-[28rem] truncate text-blue-600 hover:underline dark:text-blue-400">
+                  {s.title || `会话 ${s.session_id?.slice(0, 8)}…`}
+                </Link>
                 <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{s.session_id?.slice(0, 8)}…</div>
               </td>
               <td className="p-3 text-zinc-600 dark:text-zinc-400">

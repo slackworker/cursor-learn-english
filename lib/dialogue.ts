@@ -83,8 +83,9 @@ export function getDialogueRounds(params: {
   from?: string;
   to?: string;
   highlight?: string;
+  conversationId?: string;
 }): { rounds: DialogueRound[]; total: number; truncated: boolean } {
-  const { page = 1, pageSize = 10, from, to, highlight } = params;
+  const { page = 1, pageSize = 10, from, to, highlight, conversationId } = params;
 
   const { items: prompts, truncated: promptsTruncated } = readPrompts({ from, to });
   const { events, truncated: eventsTruncated } = getEvents(from, to);
@@ -187,9 +188,12 @@ export function getDialogueRounds(params: {
         return r.tools.some((t) => (t.tool_name || "").toLowerCase().includes(q));
       });
 
-  const total = filtered.length;
+  const byConversation = conversationId
+    ? filtered.filter((r) => r.conversation_id === conversationId)
+    : filtered;
+  const total = byConversation.length;
   const start = (page - 1) * pageSize;
-  const pageItems = filtered.slice(start, start + pageSize);
+  const pageItems = byConversation.slice(start, start + pageSize);
   return {
     rounds: pageItems,
     total,
