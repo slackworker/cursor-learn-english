@@ -66,6 +66,18 @@ function readTranscriptTitle(sessionId: string): string | null {
   return null;
 }
 
+export function hasSessionTranscript(sessionId: string): boolean {
+  if (!sessionId) return false;
+  const root = getTranscriptRoot();
+  const transcriptPath = path.join(root, sessionId, `${sessionId}.jsonl`);
+  if (!fs.existsSync(transcriptPath)) return false;
+  try {
+    return fs.statSync(transcriptPath).size > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function getSessionTitles(sessionIds: string[]): Map<string, string> {
   const result = new Map<string, string>();
   for (const sessionId of sessionIds) {

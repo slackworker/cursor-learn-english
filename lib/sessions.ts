@@ -1,5 +1,5 @@
 import { getEvents, type CursorEvent } from "./events";
-import { getSessionTitles } from "./session-titles";
+import { getSessionTitles, hasSessionTranscript } from "./session-titles";
 import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./thinking";
 import { readMergedJsonlLinesCached } from "./jsonl-daily";
 import { getDialogueRounds, type DialogueRound } from "./dialogue";
@@ -111,6 +111,8 @@ export function getSessionSummaries(from?: string, to?: string): {
     title: titles.get(session.session_id),
   }));
   const filteredSessions = sessionsWithTitle.filter((session) => {
+    // 仅展示当前项目 transcript 可见的会话，避免全局 events 混入其它项目会话。
+    if (!hasSessionTranscript(session.session_id)) return false;
     // 过滤仅打开后立刻关闭、无实际交互痕迹的空会话
     if (session.is_open) return true;
     const hasTitle = Boolean(session.title?.trim());
