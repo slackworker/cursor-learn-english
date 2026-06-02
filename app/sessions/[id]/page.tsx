@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MarkdownContent } from "@/components/MarkdownContent";
+import { DialogueTimeline } from "@/components/DialogueTimeline";
 
 type SessionDetail = {
   session_id: string;
@@ -200,60 +201,15 @@ export default function SessionDetailPage() {
                       {turn.round?.prompt || turn.user_prompt || turn.user_text}
                     </MarkdownContent>
                   </div>
-                  <div className="rounded-lg border border-success/30 bg-success/10 p-3 mb-3">
-                    <div className="mb-1 text-xs font-medium text-success">助手回复</div>
-                    {(turn.assistant_segments?.length ?? 0) > 0 ? (
-                      <div className="space-y-3">
-                        {turn.assistant_segments!.map((segment, idx) => (
-                          <div key={`${turn.id}-assistant-${idx}`} className={idx > 0 ? "border-t border-success/20 pt-3" : ""}>
-                            <MarkdownContent className="break-words text-sm">
-                              {segment}
-                            </MarkdownContent>
-                          </div>
-                        ))}
-                      </div>
-                    ) : turn.assistant_text ? (
-                      <MarkdownContent className="break-words text-sm">
-                        {turn.assistant_text}
-                      </MarkdownContent>
-                    ) : (
-                      <p className="text-sm opacity-60">（该轮暂无助手文本）</p>
-                    )}
-                  </div>
-                  <div className="rounded-lg border border-base-300 bg-base-100 p-3">
-                    <div className="text-xs font-medium opacity-70">
-                      Thinking / Tools · thinking: {turn.round?.thinking.length ?? 0} · tools: {turn.round?.tools.length ?? 0}
-                    </div>
-                    {(turn.round?.thinking.length ?? 0) > 0 ? (
-                      <div className="mt-2 space-y-2">
-                        {turn.round!.thinking.map((t) => (
-                          <details key={`${t.generation_id}-${t.timestamp}`} className="collapse collapse-arrow border border-base-300 bg-base-100">
-                            <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
-                              {formatDateTime(t.timestamp)} · {t.model} · {t.duration_ms}ms
-                            </summary>
-                            <div className="collapse-content pt-1">
-                              <MarkdownContent className="text-sm">{t.text}</MarkdownContent>
-                            </div>
-                          </details>
-                        ))}
-                      </div>
-                    ) : null}
-                    {(turn.round?.tools.length ?? 0) > 0 ? (
-                      <details className="mt-2 rounded border border-base-300 bg-base-200 p-2">
-                        <summary className="cursor-pointer text-xs font-medium opacity-70">
-                          工具链调用记录（{turn.round!.tools.length}）- 点击展开
-                        </summary>
-                        <ul className="mt-2 space-y-1 text-xs opacity-80">
-                          {turn.round!.tools.map((tool, idx) => (
-                            <li key={`${tool.timestamp}-${idx}`}>
-                              {tool.timestamp.slice(11, 19)} · {tool.tool_name || "unknown"} · {tool.event_type}
-                              {tool.duration ? ` · ${tool.duration}ms` : ""}
-                              {tool.failure_type ? ` · ${tool.failure_type}` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : null}
+                  <div className="rounded-lg border border-success/30 bg-success/10 p-3">
+                    <div className="mb-2 text-xs font-medium text-success">助手回复与推理过程</div>
+                    <DialogueTimeline
+                      round={turn.round}
+                      transcriptSegments={
+                        turn.assistant_segments ??
+                        (turn.assistant_text ? [turn.assistant_text] : undefined)
+                      }
+                    />
                   </div>
                 </li>
               ))}

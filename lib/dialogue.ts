@@ -33,6 +33,12 @@ type ThinkingItem = {
   generation_id: string;
 };
 
+export type ResponseSegment = {
+  text: string;
+  timestamp: string;
+  model?: string | null;
+};
+
 export type DialogueRound = {
   id: string;
   conversation_id: string;
@@ -44,6 +50,7 @@ export type DialogueRound = {
     model?: string | null;
     segment_count?: number;
   };
+  response_segments?: ResponseSegment[];
   thinking: ThinkingItem[];
   tools: Array<{
     event_type: "postToolUse" | "postToolUseFailure";
@@ -164,6 +171,16 @@ export function getDialogueRounds(params: {
               segment_count: responseSegments.length,
             }
           : undefined,
+        response_segments:
+          windowResponses.length > 0
+            ? windowResponses
+                .map((r) => ({
+                  text: r.response_text?.trim() ?? "",
+                  timestamp: r.timestamp,
+                  model: r.model ?? null,
+                }))
+                .filter((s) => s.text)
+            : undefined,
         thinking: windowThinking.map((t) => ({
           text: t.text,
           timestamp: t.timestamp,

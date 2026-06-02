@@ -1,0 +1,203 @@
+export type ResponseSegment = {
+  text: string;
+  timestamp: string;
+  model?: string | null;
+};
+
+export type TimelineThinking = {
+  text: string;
+  timestamp: string;
+  model: string;
+  duration_ms: number;
+  generation_id: string;
+};
+
+export type TimelineTool = {
+  event_type: "postToolUse" | "postToolUseFailure";
+  timestamp: string;
+  tool_name?: string | null;
+  duration?: number;
+  failure_type?: string | null;
+};
+
+export type TimelineRoundInput = {
+  thinking: TimelineThinking[];
+  tools: TimelineTool[];
+  response?: {
+    text: string;
+    timestamp: string;
+    model?: string | null;
+  };
+  response_segments?: ResponseSegment[];
+};
+
+export type DialogueTimelineBlock =
+  | { kind: "thinking"; timestamp: string; data: TimelineThinking }
+  | { kind: "response"; timestamp: string; data: { text: string; model?: string | null } }
+  | { kind: "tool"; timestamp: string; data: TimelineTool };
+
+const TRANSCRIPT_TS_PREFIX = "__transcript_";
+
+function isSyntheticTimestamp(ts: string): boolean {
+  return ts.startsWith(TRANSCRIPT_TS_PREFIX);
+}
+
+/** Prefer transcript text when segment counts align; keep event timestamps for ordering. */
+export function mergeTranscriptSegments(
+  responseSegments: ResponseSegment[],
+  transcriptSegments: string[]
+): ResponseSegment[] {
+  if (transcriptSegments.length === 0) return responseSegments;
+  if (responseSegments.length === 0) {
+    return transcriptSegments.map((text, i) => ({
+      text,
+      timestamp: `${TRANSCRIPT_TS_PREFIX}${i}`,
+    }));
+  }
+  if (transcriptSegments.length === responseSegments.length) {
+    return responseSegments.map((seg, i) => ({
+      ...seg,
+      text: transcriptSegments[i] || seg.text,
+    }));
+  }
+  if (transcriptSegments.length > responseSegments.length) {
+    const lastTs = responseSegments[responseSegments.length - 1]?.timestamp ?? "";
+    const lastModel = responseSegments[responseSegments.length - 1]?.model;
+    return transcriptSegments.map((text, i) => ({
+      text,
+      timestamp: responseSegments[i]?.timestamp ?? lastTs,
+      model: responseSegments[i]?.model ?? lastModel,
+    }));
+  }
+  return responseSegments;
+}
+
+function getResponseSegments(
+  round: Pick<TimelineRoundInput, "response" | "response_segments">,
+  transcriptSegments?: string[]
+): ResponseSegment[] {
+  let segments = round.response_segments ?? [];
+  if (segments.length === 0 && round.response?.text) {
+    segments = [
+      {
+        text: round.response.text,
+        timestamp: round.response.timestamp,
+        model: round.response.model,
+      },
+    ];
+  }
+  if (transcriptSegments?.length) {
+    segments = mergeTranscriptSegments(segments, transcriptSegments);
+  }
+  return segments;
+}
+
+/** Interleave when response segments lack real timestamps (transcript-only). */
+function interleaveByIndex(
+  thinking: TimelineThinking[],
+  segments: ResponseSegment[],
+  tools: TimelineTool[]
+): DialogueTimelineBlock[] {
+  const blocks: DialogueTimelineBlock[] = [];
+  const sortedThinking = [...thinking].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const sortedTools = [...tools].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  const timedBlocks: DialogueTimelineBlock[] = [
+    ...sortedThinking.map((data) => ({ kind: "thinking" as const, timestamp: data.timestamp, data })),
+    ...sortedTools.map((data) => ({ kind: "tool" as const, timestamp: data.timestamp, data })),
+  ].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  if (segments.length === 0) return timedBlocks;
+  if (timedBlocks.length === 0) {
+    return segments.map((seg) => ({
+      kind: "response" as const,
+      timestamp: isSyntheticTimestamp(seg.timestamp) ? "" : seg.timestamp,
+      data: { text: seg.text, model: seg.model },
+    }));
+  }
+
+  // One final reply after reasoning: all thinking/tools first, then paragraphs.
+  if (segments.length === 1) {
+    blocks.push(...timedBlocks);
+    blocks.push({
+      kind: "response",
+      timestamp: "",
+      data: { text: segments[0].text, model: segments[0].model },
+    });
+    return blocks;
+  }
+
+  // Multiple paragraphs: alternate thinking[i] → segment[i], then remainder.
+  const maxLen = Math.max(sortedThinking.length, segments.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    if (i < sortedThinking.length) {
+      const data = sortedThinking[i];
+      blocks.push({ kind: "thinking", timestamp: data.timestamp, data });
+    }
+    if (i < segments.length) {
+      blocks.push({
+        kind: "response",
+        timestamp: "",
+        data: { text: segments[i].text, model: segments[i].model },
+      });
+    }
+  }
+  for (const data of sortedTools) {
+    blocks.push({ kind: "tool", timestamp: data.timestamp, data });
+  }
+  return blocks;
+}
+
+const KIND_ORDER: Record<DialogueTimelineBlock["kind"], number> = {
+  thinking: 0,
+  tool: 1,
+  response: 2,
+};
+
+export function buildDialogueTimeline(
+  round: TimelineRoundInput,
+  transcriptSegments?: string[]
+): DialogueTimelineBlock[] {
+  const segments = getResponseSegments(round, transcriptSegments);
+  const hasContent =
+    segments.length > 0 || round.thinking.length > 0 || round.tools.length > 0;
+  if (!hasContent) return [];
+
+  const allHaveRealTimestamps =
+    segments.every((s) => s.timestamp && !isSyntheticTimestamp(s.timestamp)) &&
+    round.thinking.every((t) => Boolean(t.timestamp)) &&
+    round.tools.every((t) => Boolean(t.timestamp));
+
+  if (allHaveRealTimestamps) {
+    const timed: DialogueTimelineBlock[] = [];
+    for (const data of round.thinking) {
+      timed.push({ kind: "thinking", timestamp: data.timestamp, data });
+    }
+    for (const seg of segments) {
+      timed.push({
+        kind: "response",
+        timestamp: seg.timestamp,
+        data: { text: seg.text, model: seg.model },
+      });
+    }
+    for (const data of round.tools) {
+      timed.push({ kind: "tool", timestamp: data.timestamp, data });
+    }
+    timed.sort((a, b) => {
+      const cmp = a.timestamp.localeCompare(b.timestamp);
+      if (cmp !== 0) return cmp;
+      return KIND_ORDER[a.kind] - KIND_ORDER[b.kind];
+    });
+    return timed;
+  }
+
+  return interleaveByIndex(round.thinking, segments, round.tools);
+}
+
+export function formatTimelineTime(timestamp: string): string {
+  if (!timestamp || isSyntheticTimestamp(timestamp)) return "";
+  if (/^\d{4}-\d{2}-\d{2}T/.test(timestamp)) {
+    return timestamp.slice(0, 19).replace("T", " ");
+  }
+  return timestamp;
+}
