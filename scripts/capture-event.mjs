@@ -1,7 +1,7 @@
 import os from 'os';
 import { appendJsonlLine } from './jsonl-daily.mjs';
 
-const MAX_TEXT_LEN = 2000;
+const MAX_TEXT_LEN = 20000;
 
 function getEventsPath() {
   if (process.env.EVENTS_JSONL_PATH) return process.env.EVENTS_JSONL_PATH;
@@ -24,9 +24,17 @@ function buildPayload(eventType, input) {
   };
   switch (eventType) {
     case 'beforeSubmitPrompt':
-      return { ...base, prompt_length: (input.prompt || '').length };
+      return {
+        ...base,
+        prompt_length: (input.prompt || '').length,
+        prompt_text: trimText(input.prompt || ''),
+      };
     case 'afterAgentResponse':
-      return { ...base, text_length: (input.text || '').length };
+      return {
+        ...base,
+        text_length: (input.text || '').length,
+        response_text: trimText(input.text || ''),
+      };
     case 'afterAgentThought':
       return {
         ...base,

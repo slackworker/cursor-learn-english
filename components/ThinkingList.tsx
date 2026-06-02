@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useSearchParams } from "next/navigation";
@@ -9,16 +9,30 @@ type ThinkingRecord = {
   text: string;
   timestamp: string;
   model: string;
-  conversation_id: string;
   generation_id: string;
   duration_ms: number;
 };
 
-type ThinkingGroup = {
-  user_prompt?: string;
-  prompt_timestamp?: string;
+type ToolRecord = {
+  event_type: "postToolUse" | "postToolUseFailure";
+  timestamp: string;
+  tool_name?: string | null;
+  duration?: number;
+  failure_type?: string | null;
+};
+
+type DialogueRound = {
+  id: string;
   conversation_id: string;
-  items: ThinkingRecord[];
+  prompt: string;
+  prompt_timestamp: string;
+  response?: {
+    text: string;
+    timestamp: string;
+    model?: string | null;
+  };
+  thinking: ThinkingRecord[];
+  tools: ToolRecord[];
 };
 
 function escapeRegExp(str: string): string {
@@ -180,53 +194,96 @@ function ThinkingItem({
   );
 }
 
-function GroupCard({
-  group,
-  groupIndex,
+function RoundCard({
+  round,
+  roundIndex,
   speakingId,
   onSpeak,
   highlight,
 }: {
-  group: ThinkingGroup;
-  groupIndex: number;
+  round: DialogueRound;
+  roundIndex: number;
   speakingId: string | null;
   onSpeak: (id: string, text: string) => void;
   highlight: string;
 }) {
-  const accordionName = `thinking-accordion-${groupIndex}`;
+  const accordionName = `thinking-accordion-${roundIndex}`;
   const [showFullPrompt, setShowFullPrompt] = useState(false);
-  const prompt = group.user_prompt ?? "";
+  const prompt = round.prompt ?? "";
   const isLongPrompt = prompt.length > 200;
+  const promptDisplay = applyHighlightMarkdown(
+    showFullPrompt || !isLongPrompt ? prompt : `${prompt.slice(0, 200)}...`,
+    highlight
+  );
+  const responseText = round.response?.text ? applyHighlightMarkdown(round.response.text, highlight) : "";
 
   return (
     <li className="p-4">
-      {group.user_prompt && (
-        <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="block text-xs font-medium text-info">
-              我的问题
+      <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="block text-xs font-medium text-info">用户问题</span>
+          {isLongPrompt && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs px-1 text-[11px]"
+              onClick={() => setShowFullPrompt((v) => !v)}
+            >
+              {showFullPrompt ? "收起" : "展开"}
+            </button>
+          )}
+        </div>
+        <div className="whitespace-pre-wrap break-words text-sm">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {promptDisplay}
+          </ReactMarkdown>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-success/30 bg-success/10 p-3 mb-3">
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="block text-xs font-medium text-success">助手回复</span>
+          {round.response?.timestamp ? (
+            <span className="text-[11px] opacity-70">
+              {round.response.timestamp.slice(0, 19).replace("T", " ")}
+              {round.response.model ? ` · ${round.response.model}` : ""}
             </span>
-            {isLongPrompt && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-xs px-1 text-[11px]"
-                onClick={() => setShowFullPrompt((v) => !v)}
-              >
-                {showFullPrompt ? "收起" : "展开"}
-              </button>
-            )}
+          ) : null}
+        </div>
+        {round.response?.text ? (
+          <div className="break-words text-sm">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {responseText}
+            </ReactMarkdown>
           </div>
-          <p className="whitespace-pre-wrap break-words text-sm">
-            {showFullPrompt || !isLongPrompt ? prompt : `${prompt.slice(0, 200)}...`}
-          </p>
+        ) : (
+          <p className="text-sm opacity-60">未采集到该轮助手完整回复（请更新 hooks 后重试）。</p>
+        )}
+      </div>
+
+      <div className="mb-2 text-[11px] opacity-70">
+        会话：<span className="font-mono">{round.conversation_id}</span>
+      </div>
+
+      {round.tools.length > 0 && (
+        <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 mb-3">
+          <div className="mb-1 text-xs font-medium text-warning">工具调用轨迹（{round.tools.length}）</div>
+          <ul className="space-y-1 text-xs">
+            {round.tools.map((tool, idx) => (
+              <li key={`${tool.timestamp}-${idx}`} className="opacity-80">
+                {tool.timestamp.slice(11, 19)} · {tool.tool_name || "unknown"} · {tool.event_type}
+                {tool.duration ? ` · ${tool.duration}ms` : ""}
+                {tool.failure_type ? ` · ${tool.failure_type}` : ""}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
       <span className="mb-2 block text-xs font-medium text-success">
-        Thinking ({group.items.length} 条)
+        Thinking ({round.thinking.length} 条)
       </span>
       <div className="space-y-2">
-        {group.items.map((r, i) => {
+        {round.thinking.map((r, i) => {
           const itemId = `${r.generation_id}-${i}`;
           return (
             <ThinkingItem
@@ -247,18 +304,17 @@ function GroupCard({
 }
 
 export function ThinkingList() {
-  const [groups, setGroups] = useState<ThinkingGroup[]>([]);
+  const [rounds, setRounds] = useState<DialogueRound[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [isLoaded, setIsLoaded] = useState(false);
   const pageSize = 10;
   const { speakingId, speak } = useTTS();
   const searchParams = useSearchParams();
   const highlight = searchParams.get("highlight")?.toLowerCase().trim() || "";
 
   useEffect(() => {
-    setLoading(true);
-    const url = new URL("/api/thinking", window.location.origin);
+    const url = new URL("/api/dialogues", window.location.origin);
     url.searchParams.set("page", String(page));
     url.searchParams.set("pageSize", String(pageSize));
     if (highlight) {
@@ -267,30 +323,21 @@ export function ThinkingList() {
     fetch(url.toString())
       .then((r) => r.json())
       .then((res) => {
-        setGroups(res.groups ?? []);
+        setRounds(res.rounds ?? []);
         setTotal(res.total ?? 0);
       })
-      .catch(() => setGroups([]))
-      .finally(() => setLoading(false));
+      .catch(() => setRounds([]))
+      .finally(() => setIsLoaded(true));
   }, [page, highlight]);
 
-  const visibleGroups = useMemo(() => {
-    if (!highlight) return groups;
-    const q = highlight.toLowerCase();
-    return groups.filter((g) => {
-      if (g.user_prompt && g.user_prompt.toLowerCase().includes(q)) return true;
-      return g.items.some((r) => r.text.toLowerCase().includes(q));
-    });
-  }, [groups, highlight]);
-
-  if (loading && visibleGroups.length === 0) {
+  if (!isLoaded && rounds.length === 0) {
     return <div className="card bg-base-200 p-6"><span className="loading loading-spinner loading-sm"></span> 加载中…</div>;
   }
 
-  if (visibleGroups.length === 0) {
+  if (rounds.length === 0) {
     return (
       <div className="card bg-base-200 p-6">
-        <p className="opacity-60">暂无 Thinking 记录。请使用带 thinking 的模型（如 Claude Opus thinking）并确保 Hooks 已采集。</p>
+        <p className="opacity-60">暂无完整轮次记录。请先在更新后的 Hooks 配置下继续对话生成数据。</p>
       </div>
     );
   }
@@ -304,17 +351,17 @@ export function ThinkingList() {
           <span>
             当前高亮词：
             <span className="font-mono font-semibold">{highlight}</span>
-            ，仅展示包含该词的 Thinking 记录。
+            ，仅展示包含该词的整轮记录。
           </span>
         </div>
       )}
       <div className="card bg-base-200">
         <ul className="divide-y divide-base-300">
-          {visibleGroups.map((g, i) => (
-            <GroupCard
-              key={`${g.conversation_id}-${g.prompt_timestamp ?? i}`}
-              group={g}
-              groupIndex={i}
+          {rounds.map((round, i) => (
+            <RoundCard
+              key={round.id}
+              round={round}
+              roundIndex={i}
               speakingId={speakingId}
               onSpeak={speak}
               highlight={highlight}
@@ -323,7 +370,7 @@ export function ThinkingList() {
         </ul>
       </div>
       <div className="flex items-center justify-between">
-        <p className="text-sm opacity-60">共 {total} 组</p>
+        <p className="text-sm opacity-60">共 {total} 轮</p>
         <div className="join">
           <button
             type="button"

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
-  { href: "/thinking", label: "Thinking语料" },
+  { href: "/thinking", label: "完整对话" },
   { href: "/vocab", label: "词频统计" },
   { href: "/sessions", label: "会话记录" },
 ];

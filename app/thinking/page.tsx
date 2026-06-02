@@ -13,7 +13,7 @@ export default function ThinkingPage() {
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
       <p className="mb-4 text-sm opacity-60">
-        来自 afterAgentThought 的推理文本，需使用带 thinking 的模型（如 Claude Opus thinking）。
+        按“整轮对话”展示用户问题、助手完整回复、thinking 与工具调用轨迹。
       </p>
       <Suspense fallback={<ThinkingListFallback />}>
         <ThinkingList />
