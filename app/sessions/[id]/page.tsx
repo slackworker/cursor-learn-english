@@ -173,6 +173,8 @@ export default function SessionDetailPage() {
   const sortedRounds = [...session.dialogue_rounds].sort((a, b) =>
     a.prompt_timestamp.localeCompare(b.prompt_timestamp)
   );
+  const hasUnmatchedTurns = sortedTurns.some((turn) => !turn.round);
+  const openDebugRounds = sortedTurns.length === 0 || hasUnmatchedTurns;
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
@@ -217,7 +219,7 @@ export default function SessionDetailPage() {
                     <div className="mb-1 text-xs font-medium text-info">用户问题</div>
                     <div className="break-words text-sm">
                       <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                        {turn.user_text}
+                        {turn.user_prompt || turn.user_text}
                       </ReactMarkdown>
                     </div>
                   </div>
@@ -266,15 +268,20 @@ export default function SessionDetailPage() {
                       </div>
                     ) : null}
                     {(turn.round?.tools.length ?? 0) > 0 ? (
-                      <ul className="mt-2 space-y-1 text-xs opacity-80">
-                        {turn.round!.tools.map((tool, idx) => (
-                          <li key={`${tool.timestamp}-${idx}`}>
-                            {tool.timestamp.slice(11, 19)} · {tool.tool_name || "unknown"} · {tool.event_type}
-                            {tool.duration ? ` · ${tool.duration}ms` : ""}
-                            {tool.failure_type ? ` · ${tool.failure_type}` : ""}
-                          </li>
-                        ))}
-                      </ul>
+                      <details className="mt-2 rounded border border-base-300 bg-base-200 p-2">
+                        <summary className="cursor-pointer text-xs font-medium opacity-70">
+                          工具链调用记录（{turn.round!.tools.length}）- 点击展开
+                        </summary>
+                        <ul className="mt-2 space-y-1 text-xs opacity-80">
+                          {turn.round!.tools.map((tool, idx) => (
+                            <li key={`${tool.timestamp}-${idx}`}>
+                              {tool.timestamp.slice(11, 19)} · {tool.tool_name || "unknown"} · {tool.event_type}
+                              {tool.duration ? ` · ${tool.duration}ms` : ""}
+                              {tool.failure_type ? ` · ${tool.failure_type}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
                     ) : null}
                   </div>
                 </li>
@@ -288,24 +295,33 @@ export default function SessionDetailPage() {
         </section>
       )}
 
-      <section className="mt-6 rounded-lg border border-base-300 bg-base-100 p-4">
-        <h2 className="mb-3 text-sm font-medium opacity-70">事件聚合轮次（兜底）</h2>
-        {sortedRounds.length === 0 ? (
-          <p className="text-sm opacity-60">暂无可匹配轮次</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {sortedRounds.map((round) => (
-              <li key={round.id} className="rounded border border-base-300 p-2">
-                <div className="font-mono text-xs opacity-60">
-                  {formatDateTime(round.prompt_timestamp)}
-                </div>
-                <div className="mt-1">
-                  thinking: {round.thinking.length} · tools: {round.tools.length} · response: {round.response ? "yes" : "no"}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+      <section className="mt-6">
+        <details
+          open={openDebugRounds}
+          className="rounded-lg border border-base-300 bg-base-100 p-4"
+        >
+          <summary className="cursor-pointer text-sm font-medium opacity-70">
+            事件聚合轮次（调试）
+          </summary>
+          <div className="mt-3">
+            {sortedRounds.length === 0 ? (
+              <p className="text-sm opacity-60">暂无可匹配轮次</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {sortedRounds.map((round) => (
+                  <li key={round.id} className="rounded border border-base-300 p-2">
+                    <div className="font-mono text-xs opacity-60">
+                      {formatDateTime(round.prompt_timestamp)}
+                    </div>
+                    <div className="mt-1">
+                      thinking: {round.thinking.length} · tools: {round.tools.length} · response: {round.response ? "yes" : "no"}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
       </section>
     </main>
   );
