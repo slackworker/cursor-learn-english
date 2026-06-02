@@ -58,6 +58,7 @@ type SessionDetail = {
     assistant_segments?: string[];
     round?: {
       id: string;
+      prompt: string;
       prompt_timestamp: string;
       thinking: Array<{
         text: string;
@@ -195,8 +196,8 @@ export default function SessionDetailPage() {
                   </div>
                   <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
                     <div className="mb-1 text-xs font-medium text-info">用户问题</div>
-                    <MarkdownContent className="break-words text-sm">
-                      {turn.user_prompt || turn.user_text}
+                    <MarkdownContent className="whitespace-pre-wrap break-words text-sm">
+                      {turn.round?.prompt || turn.user_prompt || turn.user_text}
                     </MarkdownContent>
                   </div>
                   <div className="rounded-lg border border-success/30 bg-success/10 p-3 mb-3">

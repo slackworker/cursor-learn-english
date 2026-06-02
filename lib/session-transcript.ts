@@ -43,10 +43,40 @@ function collectText(record: TranscriptRecord): string {
   return parts.join("\n\n").trim();
 }
 
+const CURSOR_META_BLOCK_TAGS = [
+  "attached_files",
+  "external_links",
+  "code_selection",
+  "terminal_selection",
+  "timestamp",
+  "user_info",
+  "rules",
+  "agent_skills",
+  "mcp_file_system",
+] as const;
+
+function stripCursorMetaBlocks(text: string): string {
+  let result = text;
+  for (const tag of CURSOR_META_BLOCK_TAGS) {
+    result = result.replace(
+      new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?</${tag}>`, "gi"),
+      ""
+    );
+    result = result.replace(new RegExp(`<${tag}\\b[^>]*/>`, "gi"), "");
+  }
+  return result;
+}
+
+/** Extract displayable user prompt from transcript text; preserve Markdown newlines. */
 function extractUserPrompt(raw: string): string {
   const userQueryMatch = raw.match(/<user_query>\s*([\s\S]*?)\s*<\/user_query>/i);
-  const base = userQueryMatch?.[1] ?? raw;
-  return base.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const base = stripCursorMetaBlocks((userQueryMatch?.[1] ?? raw).trim());
+  return base
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function extractUserTimestamp(raw: string): string | undefined {
