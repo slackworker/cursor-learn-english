@@ -1,6 +1,6 @@
 import path from "path";
 import os from "os";
-import { readJsonlLines } from "./jsonl";
+import { readJsonlLinesCached } from "./jsonl-cache";
 
 const homeDir = os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir();
 
@@ -38,7 +38,7 @@ type PromptRecord = {
 };
 
 function readJsonlFile<T>(filePath: string): T[] {
-  return readJsonlLines(filePath, (line) => {
+  return readJsonlLinesCached(filePath, (line) => {
     try {
       return JSON.parse(line) as T;
     } catch {

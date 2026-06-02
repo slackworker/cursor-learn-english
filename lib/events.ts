@@ -1,6 +1,6 @@
 import path from "path";
 import os from "os";
-import { readJsonlLines } from "./jsonl";
+import { readJsonlLinesCached } from "./jsonl-cache";
 
 const defaultEventsPath = path.join(
   os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir(),
@@ -36,7 +36,7 @@ function parseEventLine(line: string): CursorEvent | null {
 }
 
 function readEventsLines(filePath: string): CursorEvent[] {
-  return readJsonlLines(filePath, parseEventLine).items;
+  return readJsonlLinesCached(filePath, parseEventLine).items;
 }
 
 function toDateKey(iso: string): string {
