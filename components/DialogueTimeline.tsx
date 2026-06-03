@@ -1,6 +1,10 @@
 "use client";
 
 import { Fragment, type ReactNode } from "react";
+import {
+  DialogueTtsPlayButton,
+  DialogueTtsProvider,
+} from "@/components/DialogueTtsContext";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import {
   buildDialogueTimeline,
@@ -33,8 +37,11 @@ function ThinkingBlock({
       <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
         {`Thinking · ${block.data.model} · ${block.data.duration_ms}ms`}
       </summary>
-      <div className="collapse-content pt-1">
+      <div className="collapse-content relative pt-1 pr-12">
         <MarkdownContent className="text-sm">{block.data.text}</MarkdownContent>
+        <div className="absolute right-2 top-2">
+          <DialogueTtsPlayButton id={`${blockKey}-tts`} text={block.data.text} />
+        </div>
       </div>
     </details>
   );
@@ -102,7 +109,7 @@ function ResponseBlock({
 }) {
   const timeLabel = formatTimelineTime(block.timestamp);
   return (
-    <div key={blockKey}>
+    <div key={blockKey} className="relative pr-12">
       {(timeLabel || block.data.model) && (
         <div className="mb-1 text-[11px] opacity-60">
           {timeLabel}
@@ -110,6 +117,9 @@ function ResponseBlock({
         </div>
       )}
       <MarkdownContent className="break-words text-sm">{block.data.text}</MarkdownContent>
+      <div className="absolute right-0 top-0">
+        <DialogueTtsPlayButton id={`${blockKey}-tts`} text={block.data.text} />
+      </div>
     </div>
   );
 }
@@ -235,9 +245,12 @@ function TranscriptContentItemView({
 }) {
   if (item.type === "text") {
     return (
-      <MarkdownContent key={itemKey} className="break-words text-sm">
-        {item.text}
-      </MarkdownContent>
+      <div key={itemKey} className="relative pr-12">
+        <MarkdownContent className="break-words text-sm">{item.text}</MarkdownContent>
+        <div className="absolute right-0 top-0">
+          <DialogueTtsPlayButton id={`${itemKey}-tts`} text={item.text} />
+        </div>
+      </div>
     );
   }
   return (
@@ -378,11 +391,13 @@ export function DialogueTimeline({
 }) {
   if (transcriptSteps && transcriptSteps.length > 0) {
     return (
-      <TranscriptStepsTimeline
-        steps={transcriptSteps}
-        thinking={round?.thinking ?? []}
-        tools={round?.tools ?? []}
-      />
+      <DialogueTtsProvider>
+        <TranscriptStepsTimeline
+          steps={transcriptSteps}
+          thinking={round?.thinking ?? []}
+          tools={round?.tools ?? []}
+        />
+      </DialogueTtsProvider>
     );
   }
 
@@ -396,20 +411,22 @@ export function DialogueTimeline({
   }
 
   return (
-    <div className="space-y-2">
-      {blocks.map((block, idx) => {
-        const blockKey = `${block.kind}-${block.timestamp}-${idx}`;
-        if (block.kind === "thinking") {
-          return <ThinkingBlock key={blockKey} block={block} blockKey={blockKey} />;
-        }
-        if (block.kind === "tool-group") {
-          return <ToolGroupBlock key={blockKey} block={block} blockKey={blockKey} />;
-        }
-        if (block.kind === "response") {
-          return <ResponseBlock key={blockKey} block={block} blockKey={blockKey} />;
-        }
-        return null;
-      })}
-    </div>
+    <DialogueTtsProvider>
+      <div className="space-y-2">
+        {blocks.map((block, idx) => {
+          const blockKey = `${block.kind}-${block.timestamp}-${idx}`;
+          if (block.kind === "thinking") {
+            return <ThinkingBlock key={blockKey} block={block} blockKey={blockKey} />;
+          }
+          if (block.kind === "tool-group") {
+            return <ToolGroupBlock key={blockKey} block={block} blockKey={blockKey} />;
+          }
+          if (block.kind === "response") {
+            return <ResponseBlock key={blockKey} block={block} blockKey={blockKey} />;
+          }
+          return null;
+        })}
+      </div>
+    </DialogueTtsProvider>
   );
 }
