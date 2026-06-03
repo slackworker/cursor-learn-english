@@ -56,7 +56,7 @@ export function SessionTable() {
   if (!loadError && !isValidating && sessions.length === 0) {
     return (
       <EmptyState>
-        暂无会话记录。请确保 Cursor Hooks 已配置 sessionStart / sessionEnd。
+        暂无会话。请确保 Cursor Hooks 已配置 sessionStart / sessionEnd。
       </EmptyState>
     );
   }

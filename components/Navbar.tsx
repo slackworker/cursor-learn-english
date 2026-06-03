@@ -9,10 +9,10 @@ import { useTts } from "@/components/TtsProvider";
 const NAV_ICON_CLASS = "h-4 w-4 shrink-0";
 
 const NAV_ITEMS = [
-  { href: "/", label: "概览" },
-  { href: "/thinking", label: "完整对话" },
-  { href: "/vocab", label: "词频统计" },
-  { href: "/sessions", label: "会话记录" },
+  { href: "/sessions", label: "会话" },
+  { href: "/vocab", label: "词汇" },
+  { href: "/thinking", label: "语料" },
+  { href: "/stats", label: "统计" },
 ];
 
 const LIGHT_THEME = "corporate";
@@ -43,7 +43,7 @@ export default function Navbar() {
   return (
     <header className="app-navbar">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link href="/" className="nav-brand">
+        <Link href="/sessions" className="nav-brand">
           Cursor 学英语
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">
