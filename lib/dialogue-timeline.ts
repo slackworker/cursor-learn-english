@@ -62,11 +62,11 @@ export function mergeTranscriptSegments(
     }));
   }
   if (transcriptSegments.length > responseSegments.length) {
-    const lastTs = responseSegments[responseSegments.length - 1]?.timestamp ?? "";
     const lastModel = responseSegments[responseSegments.length - 1]?.model;
     return transcriptSegments.map((text, i) => ({
       text,
-      timestamp: responseSegments[i]?.timestamp ?? lastTs,
+      timestamp:
+        responseSegments[i]?.timestamp ?? `${TRANSCRIPT_TS_PREFIX}${i}`,
       model: responseSegments[i]?.model ?? lastModel,
     }));
   }
@@ -93,60 +93,70 @@ function getResponseSegments(
   return segments;
 }
 
-/** Interleave when response segments lack real timestamps (transcript-only). */
-function interleaveByIndex(
+function responseSegmentBlock(seg: ResponseSegment): DialogueTimelineBlock {
+  return {
+    kind: "response",
+    timestamp: isSyntheticTimestamp(seg.timestamp) ? "" : seg.timestamp,
+    data: { text: seg.text, model: seg.model },
+  };
+}
+
+/**
+ * Interleave transcript segments with thinking/tools when per-segment event
+ * timestamps are missing or duplicated. Matches Cursor: thinking → reply →
+ * tools in that thinking window → next thinking …
+ */
+function interleaveByThinkingPhases(
   thinking: TimelineThinking[],
   segments: ResponseSegment[],
   tools: TimelineTool[]
 ): DialogueTimelineBlock[] {
-  const blocks: DialogueTimelineBlock[] = [];
   const sortedThinking = [...thinking].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   const sortedTools = [...tools].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const blocks: DialogueTimelineBlock[] = [];
+  const usedToolIndices = new Set<number>();
 
-  const timedBlocks: DialogueTimelineBlock[] = [
-    ...sortedThinking.map((data) => ({ kind: "thinking" as const, timestamp: data.timestamp, data })),
-    ...sortedTools.map((data) => ({ kind: "tool" as const, timestamp: data.timestamp, data })),
-  ].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const appendToolsBetween = (afterTs: string, beforeTs?: string) => {
+    for (let i = 0; i < sortedTools.length; i += 1) {
+      if (usedToolIndices.has(i)) continue;
+      const tool = sortedTools[i];
+      if (tool.timestamp <= afterTs) continue;
+      if (beforeTs && tool.timestamp >= beforeTs) continue;
+      usedToolIndices.add(i);
+      blocks.push({ kind: "tool", timestamp: tool.timestamp, data: tool });
+    }
+  };
 
-  if (segments.length === 0) return timedBlocks;
-  if (timedBlocks.length === 0) {
-    return segments.map((seg) => ({
-      kind: "response" as const,
-      timestamp: isSyntheticTimestamp(seg.timestamp) ? "" : seg.timestamp,
-      data: { text: seg.text, model: seg.model },
-    }));
-  }
-
-  // One final reply after reasoning: all thinking/tools first, then paragraphs.
-  if (segments.length === 1) {
-    blocks.push(...timedBlocks);
-    blocks.push({
-      kind: "response",
-      timestamp: "",
-      data: { text: segments[0].text, model: segments[0].model },
-    });
+  if (sortedThinking.length === 0) {
+    for (const seg of segments) blocks.push(responseSegmentBlock(seg));
+    for (const data of sortedTools) {
+      blocks.push({ kind: "tool", timestamp: data.timestamp, data });
+    }
     return blocks;
   }
 
-  // Multiple paragraphs: alternate thinking[i] → segment[i], then remainder.
-  const maxLen = Math.max(sortedThinking.length, segments.length);
-  for (let i = 0; i < maxLen; i += 1) {
-    if (i < sortedThinking.length) {
-      const data = sortedThinking[i];
-      blocks.push({ kind: "thinking", timestamp: data.timestamp, data });
-    }
-    if (i < segments.length) {
-      blocks.push({
-        kind: "response",
-        timestamp: "",
-        data: { text: segments[i].text, model: segments[i].model },
-      });
-    }
+  for (let i = 0; i < sortedThinking.length; i += 1) {
+    const think = sortedThinking[i];
+    blocks.push({ kind: "thinking", timestamp: think.timestamp, data: think });
+    if (i < segments.length) blocks.push(responseSegmentBlock(segments[i]));
+    appendToolsBetween(think.timestamp, sortedThinking[i + 1]?.timestamp);
   }
-  for (const data of sortedTools) {
-    blocks.push({ kind: "tool", timestamp: data.timestamp, data });
+
+  for (let i = sortedThinking.length; i < segments.length; i += 1) {
+    blocks.push(responseSegmentBlock(segments[i]));
   }
+
+  const lastThinkTs = sortedThinking[sortedThinking.length - 1]?.timestamp ?? "";
+  appendToolsBetween(lastThinkTs);
+
   return blocks;
+}
+
+function shouldInterleaveByPhase(segments: ResponseSegment[]): boolean {
+  if (segments.some((s) => isSyntheticTimestamp(s.timestamp))) return true;
+  if (segments.length <= 1) return false;
+  const uniqueTs = new Set(segments.map((s) => s.timestamp).filter(Boolean));
+  return uniqueTs.size < segments.length;
 }
 
 const KIND_ORDER: Record<DialogueTimelineBlock["kind"], number> = {
@@ -206,7 +216,7 @@ export function buildDialogueTimeline(
     round.thinking.every((t) => Boolean(t.timestamp)) &&
     round.tools.every((t) => Boolean(t.timestamp));
 
-  if (allHaveRealTimestamps) {
+  if (!shouldInterleaveByPhase(segments) && allHaveRealTimestamps) {
     const timed: DialogueTimelineBlock[] = [];
     for (const data of round.thinking) {
       timed.push({ kind: "thinking", timestamp: data.timestamp, data });
@@ -229,7 +239,9 @@ export function buildDialogueTimeline(
     return groupConsecutiveToolBlocks(timed);
   }
 
-  return groupConsecutiveToolBlocks(interleaveByIndex(round.thinking, segments, round.tools));
+  return groupConsecutiveToolBlocks(
+    interleaveByThinkingPhases(round.thinking, segments, round.tools)
+  );
 }
 
 export function formatTimelineTime(timestamp: string): string {
