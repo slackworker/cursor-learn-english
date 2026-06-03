@@ -137,6 +137,164 @@ html {
   color: color-mix(in oklab, var(--color-primary) 72%, var(--color-base-content));
 }
 
+.prompt-contrib {
+  line-height: 0;
+}
+
+.prompt-contrib-loading {
+  @apply animate-pulse rounded-lg bg-base-200;
+}
+
+.prompt-contrib-hero.prompt-contrib-loading {
+  min-height: 10rem;
+}
+
+.prompt-contrib-compact.prompt-contrib-loading {
+  width: 5.5rem;
+  height: 1.25rem;
+}
+
+.prompt-contrib-body {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.prompt-contrib-day-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: calc(7 * 11px + 6 * 3px);
+  padding-top: 1.125rem;
+  font-size: 0.625rem;
+  line-height: 1;
+  color: color-mix(in oklab, var(--color-base-content) 45%, transparent);
+}
+
+.prompt-contrib-chart {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.prompt-contrib-months {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+  margin-bottom: 0.25rem;
+  min-height: 0.875rem;
+  font-size: 0.625rem;
+  line-height: 1;
+  color: color-mix(in oklab, var(--color-base-content) 45%, transparent);
+}
+
+.prompt-contrib-month-slot {
+  width: 11px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.prompt-contrib-grid {
+  display: flex;
+  flex-direction: row;
+  gap: 3px;
+}
+
+.prompt-contrib-compact .prompt-contrib-grid {
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.prompt-contrib-compact .prompt-contrib-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.prompt-contrib-week {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prompt-contrib-compact .prompt-contrib-week {
+  gap: 2px;
+}
+
+.prompt-contrib-cell {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: var(--contrib-empty);
+}
+
+.prompt-contrib-compact .prompt-contrib-cell {
+  width: 8px;
+  height: 8px;
+}
+
+.prompt-contrib-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  margin-top: 1rem;
+  line-height: normal;
+}
+
+.prompt-contrib-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 0;
+}
+
+.prompt-contrib-legend .prompt-contrib-cell {
+  width: 11px;
+  height: 11px;
+}
+
+.prompt-contrib-pad {
+  visibility: hidden;
+}
+
+.prompt-contrib-l0 {
+  background: var(--contrib-empty);
+}
+
+.prompt-contrib-l1 {
+  background: var(--contrib-l1);
+}
+
+.prompt-contrib-l2 {
+  background: var(--contrib-l2);
+}
+
+.prompt-contrib-l3 {
+  background: var(--contrib-l3);
+}
+
+.prompt-contrib-l4 {
+  background: var(--contrib-l4);
+}
+
+html[data-theme="corporate"] {
+  --contrib-empty: #ebedf0;
+  --contrib-l1: #9be9a8;
+  --contrib-l2: #40c463;
+  --contrib-l3: #30a14e;
+  --contrib-l4: #216e39;
+}
+
+html[data-theme="business"] {
+  --contrib-empty: #161b22;
+  --contrib-l1: #0e4429;
+  --contrib-l2: #006d32;
+  --contrib-l3: #26a641;
+  --contrib-l4: #39d353;
+}
+
 .theme-toggle {
   @apply flex h-8 w-8 items-center justify-center rounded-lg text-base-content/60 transition-colors hover:bg-base-200 hover:text-base-content;
 }

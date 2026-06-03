@@ -1,21 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { StatCards } from "@/components/StatCards";
 import { DailyChart } from "@/components/DailyChart";
+import { PromptContributionGraph } from "@/components/PromptContributionGraph";
 import { RecentSessions } from "@/components/RecentSessions";
+import { Surface } from "@/components/ui/Surface";
 
 export function DashboardHome() {
   return (
     <div className="space-y-10">
       <section>
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-          <h2 className="section-title mb-0">今日概览</h2>
-          <Link href="/stats" className="text-xs font-medium text-primary hover:underline">
-            查看完整统计 →
-          </Link>
-        </div>
-        <StatCards period="day" />
+        <Surface padding="lg">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="section-title mb-1">过去一年提问</h2>
+              <p className="text-sm text-base-content/55">
+                基于用户提示词语料，颜色越深表示当日提问越多
+              </p>
+            </div>
+            <Link href="/stats" className="text-xs font-medium text-primary hover:underline">
+              查看完整统计 →
+            </Link>
+          </div>
+          <PromptContributionGraph variant="hero" />
+        </Surface>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-5 lg:gap-8">
