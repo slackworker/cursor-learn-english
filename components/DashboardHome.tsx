@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DailyChart } from "@/components/DailyChart";
+import { ActiveHoursChart } from "@/components/ActiveHoursChart";
 import { PromptContributionGraph } from "@/components/PromptContributionGraph";
 import { RecentSessions } from "@/components/RecentSessions";
 import { Surface } from "@/components/ui/Surface";
@@ -28,7 +28,7 @@ export function DashboardHome() {
 
       <section className="grid gap-6 lg:grid-cols-5 lg:gap-8">
         <div className="lg:col-span-3">
-          <DailyChart days={7} />
+          <ActiveHoursChart days={7} />
         </div>
         <div className="lg:col-span-2">
           <RecentSessions limit={5} />

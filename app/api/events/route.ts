@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getEvents, aggregateByDay } from "@/lib/events";
+import { getEvents, aggregateByDay, aggregatePromptsByHourOfDay } from "@/lib/events";
 import { normalizeDateRange } from "@/lib/api-limits";
 
 export async function GET(request: NextRequest) {
@@ -15,10 +15,14 @@ export async function GET(request: NextRequest) {
 
   const { events, truncated } = getEvents(from, to, event_type ?? undefined);
   const byDay = aggregateByDay(events);
+  const tzRaw = searchParams.get("tzOffset");
+  const tzParsed = tzRaw != null && tzRaw !== "" ? Number(tzRaw) : 0;
+  const tzOffset = Number.isFinite(tzParsed) ? tzParsed : 0;
+  const promptsByHour = aggregatePromptsByHourOfDay(events, tzOffset);
 
   if (aggregateOnly) {
-    return Response.json({ byDay, from, to, truncated });
+    return Response.json({ byDay, promptsByHour, from, to, truncated });
   }
 
-  return Response.json({ events, byDay, from, to, truncated });
+  return Response.json({ events, byDay, promptsByHour, from, to, truncated });
 }
