@@ -1,5 +1,16 @@
 /** Parsed assistant content from Cursor agent-transcripts JSONL (read-only). */
 
+const CURSOR_REDACTED_MARKER = "[REDACTED]";
+
+/** Remove Cursor privacy placeholders from transcript text (standalone lines and trailing suffixes). */
+export function stripCursorRedacted(text: string): string {
+  if (!text) return "";
+  const lines = text.split("\n").filter((line) => line.trim() !== CURSOR_REDACTED_MARKER);
+  let result = lines.join("\n").replace(/\n*\[REDACTED\]\s*$/g, "").trim();
+  result = result.replace(/\n{3,}/g, "\n\n").trim();
+  return result;
+}
+
 export type TranscriptTextItem = {
   type: "text";
   text: string;
@@ -64,7 +75,7 @@ export function parseAssistantContent(
   const items: TranscriptContentItem[] = [];
   for (const block of content) {
     if (block.type === "text" && typeof block.text === "string") {
-      const text = block.text;
+      const text = stripCursorRedacted(block.text);
       if (text.length > 0) items.push({ type: "text", text });
       continue;
     }

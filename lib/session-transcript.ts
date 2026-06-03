@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import {
   parseAssistantContent,
+  stripCursorRedacted,
   type TranscriptAssistantStep,
 } from "./transcript-content";
 
@@ -44,12 +45,12 @@ function getTranscriptPath(sessionId: string): string {
   return path.join(getTranscriptRoot(), sessionId, `${sessionId}.jsonl`);
 }
 
-/** Join text blocks only (legacy segments); does not strip Cursor [REDACTED]. */
+/** Join text blocks only (legacy segments); strips Cursor [REDACTED] placeholders. */
 function collectText(record: TranscriptRecord): string {
   const parts =
     record.message?.content
       ?.filter((c) => c?.type === "text" && typeof c.text === "string")
-      .map((c) => c.text ?? "")
+      .map((c) => stripCursorRedacted(c.text ?? ""))
       .filter((t) => t.length > 0) ?? [];
   return parts.join("\n\n").trim();
 }
