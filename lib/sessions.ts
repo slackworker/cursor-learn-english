@@ -8,6 +8,7 @@ import type { DomContextBlock } from "./parse-dom-context";
 import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./thinking";
 import { getMergedReadSignature, readMergedJsonlLinesCached } from "./jsonl-daily";
 import { getDialogueRounds, type DialogueRound } from "./dialogue";
+import { spanDurationMs } from "./format-duration";
 import { getTranscriptTurns, type TranscriptTurn } from "./session-transcript";
 
 export type SessionSummary = {
@@ -177,10 +178,17 @@ function buildSessionSummaries(from?: string, to?: string): {
         activity?.last_prompt ??
         session.timestamp ??
         session.start;
+      const spanMs = spanDurationMs(session.start, last_activity);
+      const duration_ms =
+        spanMs ??
+        (session.duration_ms != null && session.duration_ms > 0
+          ? session.duration_ms
+          : undefined);
       return {
         ...session,
         last_reply,
         last_activity,
+        duration_ms,
         reason: session.reason ?? (hasEnd ? session.reason : "open"),
         is_open: !hasEnd,
       };

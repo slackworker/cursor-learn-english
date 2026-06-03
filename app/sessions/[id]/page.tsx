@@ -8,6 +8,7 @@ import { SessionTitleView } from "@/components/SessionTitleView";
 import { UserPromptView } from "@/components/UserPromptView";
 import type { DomContextBlock } from "@/lib/parse-dom-context";
 import { formatLocalDateTime } from "@/lib/format-datetime";
+import { formatDurationMs } from "@/lib/format-duration";
 
 type SessionDetail = {
   session_id: string;
@@ -95,12 +96,6 @@ type SessionDetail = {
     };
   }>;
 };
-
-function formatMs(ms?: number) {
-  if (ms == null) return "—";
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}min`;
-}
 
 export default function SessionDetailPage() {
   const params = useParams<{ id: string }>();
@@ -190,7 +185,7 @@ export default function SessionDetailPage() {
         </div>
         <div className="card bg-base-200 p-4">
           <p className="text-xs opacity-60">会话时长</p>
-          <p className="mt-1 text-sm">{formatMs(session.duration_ms)}</p>
+          <p className="mt-1 text-sm">{formatDurationMs(session.duration_ms)}</p>
         </div>
         <div className="card bg-base-200 p-4">
           <p className="text-xs opacity-60">结束原因</p>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { SessionTitleView } from "@/components/SessionTitleView";
 import { formatLocalDateTime } from "@/lib/format-datetime";
+import { formatDurationMs } from "@/lib/format-duration";
 import type { DomContextBlock } from "@/lib/parse-dom-context";
 
 type Session = {
@@ -12,13 +13,11 @@ type Session = {
   title?: string;
   title_dom_contexts?: DomContextBlock[];
   title_body?: string;
-  reason?: string;
   duration_ms?: number;
   timestamp?: string;
   start?: string;
   last_reply?: string;
   last_activity?: string;
-  is_open?: boolean;
 };
 
 type SessionsResponse = {
@@ -33,12 +32,6 @@ function sessionsKey(page: number): string {
   url.searchParams.set("offset", String((page - 1) * PAGE_SIZE));
   url.searchParams.set("limit", String(PAGE_SIZE));
   return url.pathname + url.search;
-}
-
-function formatMs(ms?: number) {
-  if (ms == null) return "—";
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}min`;
 }
 
 export function SessionTable() {
@@ -92,7 +85,6 @@ export function SessionTable() {
               <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">会话标题</th>
               <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">最近活跃</th>
               <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">时长</th>
-              <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">状态/结束原因</th>
             </tr>
           </thead>
           <tbody>
@@ -116,10 +108,7 @@ export function SessionTable() {
                 <td className="p-3 text-zinc-600 dark:text-zinc-400">
                   {formatLocalDateTime(s.last_activity ?? s.last_reply ?? s.start ?? s.timestamp)}
                 </td>
-                <td className="p-3 text-zinc-600 dark:text-zinc-400">{formatMs(s.duration_ms)}</td>
-                <td className="p-3 text-zinc-600 dark:text-zinc-400">
-                  {s.is_open ? "进行中" : (s.reason ?? "—")}
-                </td>
+                <td className="p-3 text-zinc-600 dark:text-zinc-400">{formatDurationMs(s.duration_ms)}</td>
               </tr>
             ))}
           </tbody>
