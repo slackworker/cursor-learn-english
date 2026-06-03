@@ -28,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="zh" data-theme="corporate" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-base-100 text-base-content`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-screen bg-[var(--page-bg)] text-base-content`}
       >
         <ThemeScript />
         <SwrProvider>

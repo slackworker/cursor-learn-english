@@ -1,12 +1,13 @@
+import { PageShell } from "@/components/ui/PageShell";
 import { SessionTable } from "@/components/SessionTable";
 
 export default function SessionsPage() {
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <p className="mb-4 text-sm opacity-60">
-        由 sessionStart / sessionEnd 聚合的会话记录。
-      </p>
+    <PageShell
+      title="会话记录"
+      description="由 sessionStart / sessionEnd 聚合的 Cursor 会话列表。"
+    >
       <SessionTable />
-    </main>
+    </PageShell>
   );
 }

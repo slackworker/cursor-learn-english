@@ -9,25 +9,23 @@ export function HomeSections() {
   const onTruncated = useCallback(() => setTruncated(true), []);
 
   return (
-    <>
+    <div className="space-y-10">
       {truncated && (
-        <div role="alert" className="alert alert-warning mb-4 py-2 text-sm">
-          <span>
-            JSONL 文件较大，当前仅读取尾部片段，统计可能不完整。
-          </span>
+        <div role="alert" className="banner-warning">
+          JSONL 文件较大，当前仅读取尾部片段，统计可能不完整。
         </div>
       )}
-      <section className="mb-8">
-        <h2 className="mb-4 text-sm font-medium opacity-70">今日统计</h2>
+      <section>
+        <h2 className="section-title">今日统计</h2>
         <StatCards period="day" onTruncated={onTruncated} />
       </section>
-      <section className="mb-8">
-        <h2 className="mb-4 text-sm font-medium opacity-70">本周统计</h2>
+      <section>
+        <h2 className="section-title">本周统计</h2>
         <StatCards period="week" onTruncated={onTruncated} />
       </section>
       <section>
         <DailyChart days={14} onTruncated={onTruncated} />
       </section>
-    </>
+    </div>
   );
 }

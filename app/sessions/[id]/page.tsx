@@ -6,6 +6,10 @@ import { useEffect, useState } from "react";
 import { DialogueTimeline } from "@/components/DialogueTimeline";
 import { SessionTitleView } from "@/components/SessionTitleView";
 import { UserPromptView } from "@/components/UserPromptView";
+import { LoadingState } from "@/components/ui/EmptyState";
+import { MessageBubble } from "@/components/ui/MessageBubble";
+import { PageShell } from "@/components/ui/PageShell";
+import { Surface } from "@/components/ui/Surface";
 import type { DomContextBlock } from "@/lib/parse-dom-context";
 import { formatLocalDateTime } from "@/lib/format-datetime";
 import { formatDurationMs } from "@/lib/format-duration";
@@ -134,17 +138,21 @@ export default function SessionDetailPage() {
   }, [sessionId]);
 
   if (loading) {
-    return <main className="mx-auto max-w-6xl px-4 py-8">加载中…</main>;
+    return (
+      <PageShell title="会话详情">
+        <LoadingState />
+      </PageShell>
+    );
   }
 
   if (error || !session) {
     return (
-      <main className="mx-auto max-w-6xl px-4 py-8">
-        <p className="text-zinc-600 dark:text-zinc-300">{error ?? "会话不存在"}</p>
-        <Link href="/sessions" className="mt-3 inline-block text-blue-600 hover:underline dark:text-blue-400">
-          返回会话列表
+      <PageShell title="会话详情">
+        <p className="text-sm text-base-content/60">{error ?? "会话不存在"}</p>
+        <Link href="/sessions" className="back-link mt-4">
+          ← 返回会话列表
         </Link>
-      </main>
+      </PageShell>
     );
   }
 
@@ -161,11 +169,8 @@ export default function SessionDetailPage() {
   const openDebugRounds = sortedTurns.length === 0 || hasUnmatchedTurns;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <Link href="/sessions" className="mb-4 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400">
-        ← 返回会话列表
-      </Link>
-      <h1>
+    <PageShell
+      title={
         <SessionTitleView
           title={session.title}
           domContexts={session.title_dom_contexts}
@@ -173,47 +178,53 @@ export default function SessionDetailPage() {
           fallback={`会话 ${session.session_id.slice(0, 8)}…`}
           variant="heading"
         />
-      </h1>
-      <p className="mt-1 font-mono text-xs opacity-60">{session.session_id}</p>
+      }
+      description={
+        <span className="font-mono text-xs">{session.session_id}</span>
+      }
+    >
+      <Link href="/sessions" className="back-link">
+        ← 返回会话列表
+      </Link>
 
-      <section className="mt-6 grid gap-3 md:grid-cols-4">
-        <div className="card bg-base-200 p-4">
-          <p className="text-xs opacity-60">开始时间</p>
-          <p className="mt-1 text-sm">{formatLocalDateTime(session.start)}</p>
-        </div>
-        <div className="card bg-base-200 p-4">
-          <p className="text-xs opacity-60">结束时间</p>
-          <p className="mt-1 text-sm">
-            {session.is_open ? "进行中" : formatLocalDateTime(session.timestamp)}
-          </p>
-        </div>
-        <div className="card bg-base-200 p-4">
-          <p className="text-xs opacity-60">会话时长</p>
-          <p className="mt-1 text-sm">{formatDurationMs(session.duration_ms)}</p>
-          {session.is_open ? (
-            <p className="mt-0.5 text-xs opacity-50">自开始至最近活跃</p>
-          ) : null}
-        </div>
-        <div className="card bg-base-200 p-4">
-          <p className="text-xs opacity-60">结束原因</p>
-          <p className="mt-1 text-sm">{session.reason ?? "—"}</p>
-        </div>
+      <section className="meta-grid mt-2">
+        {[
+          { label: "开始时间", value: formatLocalDateTime(session.start) },
+          {
+            label: "结束时间",
+            value: session.is_open ? "进行中" : formatLocalDateTime(session.timestamp),
+          },
+          {
+            label: "会话时长",
+            value: (
+              <>
+                {formatDurationMs(session.duration_ms)}
+                {session.is_open ? (
+                  <span className="mt-0.5 block text-xs text-base-content/40">自开始至最近活跃</span>
+                ) : null}
+              </>
+            ),
+          },
+          { label: "结束原因", value: session.reason ?? "—" },
+        ].map((item) => (
+          <Surface key={item.label} className="meta-card" padding="md">
+            <p className="meta-card-label">{item.label}</p>
+            <div className="meta-card-value">{item.value}</div>
+          </Surface>
+        ))}
       </section>
 
       {sortedTurns.length > 0 ? (
-        <section className="mt-6">
-          <h2 className="mb-3 text-sm font-medium opacity-70">
-            对话流（按 session_id 分组，时间从上到下）
-          </h2>
-          <div className="card bg-base-200">
-            <ul className="divide-y divide-base-300">
+        <section className="mt-8">
+          <h2 className="section-title">对话流</h2>
+          <Surface padding="none">
+            <ul className="dialogue-list">
               {sortedTurns.map((turn) => (
-                <li key={turn.id} className="p-4">
-                  <div className="mb-2 text-[11px] opacity-70">
+                <li key={turn.id} className="dialogue-item">
+                  <div className="dialogue-item-meta">
                     {formatLocalDateTime(turn.user_timestamp ?? turn.round?.prompt_timestamp)}
                   </div>
-                  <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
-                    <div className="mb-1 text-xs font-medium text-info">用户问题</div>
+                  <MessageBubble variant="user" label="用户问题">
                     <UserPromptView
                       prompt={
                         turn.user_prompt ||
@@ -222,50 +233,51 @@ export default function SessionDetailPage() {
                       }
                       domContexts={turn.user_dom_contexts}
                     />
-                  </div>
-                  <div className="rounded-lg border border-success/30 bg-success/10 p-3">
-                    <div className="mb-2 text-xs font-medium text-success">助手回复与推理过程</div>
-                    <DialogueTimeline
-                      round={turn.round}
-                      transcriptSteps={turn.assistant_steps}
-                      transcriptSegments={
-                        turn.assistant_steps?.length
-                          ? undefined
-                          : turn.assistant_segments ??
-                            (turn.assistant_text ? [turn.assistant_text] : undefined)
-                      }
-                    />
+                  </MessageBubble>
+                  <div className="mt-3">
+                    <MessageBubble variant="assistant" label="助手回复与推理过程">
+                      <DialogueTimeline
+                        round={turn.round}
+                        transcriptSteps={turn.assistant_steps}
+                        transcriptSegments={
+                          turn.assistant_steps?.length
+                            ? undefined
+                            : turn.assistant_segments ??
+                              (turn.assistant_text ? [turn.assistant_text] : undefined)
+                        }
+                      />
+                    </MessageBubble>
                   </div>
                 </li>
               ))}
             </ul>
-          </div>
+          </Surface>
         </section>
       ) : (
-        <section className="mt-6 card bg-base-200 p-4">
-          <p className="text-sm opacity-60">暂无 transcript 对话数据，下面展示事件聚合轮次。</p>
-        </section>
+        <Surface className="mt-8">
+          <p className="text-sm text-base-content/50">暂无 transcript 对话数据，下面展示事件聚合轮次。</p>
+        </Surface>
       )}
 
       <section className="mt-6">
         <details
           open={openDebugRounds}
-          className="rounded-lg border border-base-300 bg-base-100 p-4"
+          className="surface p-4"
         >
-          <summary className="cursor-pointer text-sm font-medium opacity-70">
+          <summary className="cursor-pointer text-sm font-medium text-base-content/60">
             事件聚合轮次（调试）
           </summary>
           <div className="mt-3">
             {sortedRounds.length === 0 ? (
-              <p className="text-sm opacity-60">暂无可匹配轮次</p>
+              <p className="text-sm text-base-content/50">暂无可匹配轮次</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {sortedRounds.map((round) => (
-                  <li key={round.id} className="rounded border border-base-300 p-2">
-                    <div className="font-mono text-xs opacity-60">
+                  <li key={round.id} className="rounded-lg border border-base-300/60 bg-base-200/30 p-3">
+                    <div className="font-mono text-xs text-base-content/45">
                       {formatLocalDateTime(round.prompt_timestamp)}
                     </div>
-                    <div className="mt-1">
+                    <div className="mt-1 text-base-content/70">
                       thinking: {round.thinking.length} · tools: {round.tools.length} · response: {round.response ? "yes" : "no"}
                     </div>
                   </li>
@@ -275,6 +287,6 @@ export default function SessionDetailPage() {
           </div>
         </details>
       </section>
-    </main>
+    </PageShell>
   );
 }

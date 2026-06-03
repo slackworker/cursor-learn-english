@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 
 export type KeywordRow = {
   score: number;
@@ -163,31 +164,26 @@ export function KeywordTable({ selectedDate }: KeywordTableProps) {
   }
 
   if (loading) {
-    return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
-        加载中…
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (raw.length === 0) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
-        <p className="text-zinc-500 dark:text-zinc-400">
-          暂无关键词数据。请将 JSONL 放到 <code className="text-sm">public/keyword-data.jsonl</code>。
-        </p>
-      </div>
+      <EmptyState>
+        暂无关键词数据。请将 JSONL 放到{" "}
+        <code className="text-xs">public/keyword-data.jsonl</code>。
+      </EmptyState>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-zinc-600 dark:text-zinc-400">国家/地区</span>
-        <div className="flex flex-wrap gap-2">
+      <div className="toolbar">
+        <span className="text-xs font-medium uppercase tracking-wide text-base-content/45">国家/地区</span>
+        <div className="toolbar-tabs">
           <button
             type="button"
-            className={`btn btn-xs ${country === "" ? "btn-primary" : "btn-outline"}`}
+            className={`toolbar-tab ${country === "" ? "toolbar-tab-active" : ""}`}
             onClick={() => setCountry("")}
           >
             全部
@@ -196,7 +192,7 @@ export function KeywordTable({ selectedDate }: KeywordTableProps) {
             <button
               key={c}
               type="button"
-              className={`btn btn-xs ${country === c ? "btn-primary" : "btn-outline"}`}
+              className={`toolbar-tab ${country === c ? "toolbar-tab-active" : ""}`}
               onClick={() => setCountry(c)}
             >
               {c}
@@ -204,96 +200,87 @@ export function KeywordTable({ selectedDate }: KeywordTableProps) {
           ))}
         </div>
         <label className="label cursor-pointer gap-2 p-0">
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">显示分数为 0 的记录</span>
+          <span className="text-sm text-base-content/60">显示分数为 0</span>
           <input
             type="checkbox"
-            className="toggle toggle-sm"
+            className="toggle toggle-sm toggle-primary"
             checked={showZeroScore}
             onChange={(e) => setShowZeroScore(e.target.checked)}
           />
         </label>
         <label className="label cursor-pointer gap-2 p-0">
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">仅看已阅</span>
+          <span className="text-sm text-base-content/60">仅看已阅</span>
           <input
             type="checkbox"
-            className="toggle toggle-sm"
+            className="toggle toggle-sm toggle-primary"
             checked={onlyReviewed}
             onChange={(e) => setOnlyReviewed(e.target.checked)}
           />
         </label>
         <label className="label cursor-pointer gap-2 p-0">
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">仅看感兴趣</span>
+          <span className="text-sm text-base-content/60">仅看感兴趣</span>
           <input
             type="checkbox"
-            className="toggle toggle-sm"
+            className="toggle toggle-sm toggle-primary"
             checked={onlyInterested}
             onChange={(e) => setOnlyInterested(e.target.checked)}
           />
         </label>
-        <span className="text-sm opacity-60">共 {filteredSorted.length} 条</span>
+        <span className="text-sm text-base-content/45">共 {filteredSorted.length} 条</span>
       </div>
 
-      <div className="overflow-x-auto overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
-        <table className="w-full min-w-[640px] text-left text-sm">
+      <div className="data-table-wrap overflow-x-auto">
+        <table className="data-table min-w-[640px]">
           <thead>
-            <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
-              <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">国家</th>
-              <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">关键词</th>
-              <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">说明</th>
-              <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">
+            <tr>
+              <th>国家</th>
+              <th>关键词</th>
+              <th>说明</th>
+              <th>
                 <button
                   type="button"
-                  className="font-medium underline-offset-2 hover:underline"
+                  className="font-semibold underline-offset-2 hover:underline"
                   onClick={() => toggleSort("score")}
                 >
                   分数{sortHint("score")}
                 </button>
               </th>
-              <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">
+              <th>
                 <button
                   type="button"
-                  className="font-medium underline-offset-2 hover:underline"
+                  className="font-semibold underline-offset-2 hover:underline"
                   onClick={() => toggleSort("time")}
                 >
                   时间{sortHint("time")}
                 </button>
               </th>
-              <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">操作</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {filteredSorted.map((r, i) => (
-              <tr
-                key={`${r.time}-${r.name}-${i}`}
-                className="border-b border-zinc-100 dark:border-zinc-700"
-              >
-                <td className="whitespace-nowrap p-3 text-zinc-600 dark:text-zinc-400">
-                  {r.country}
-                </td>
-                <td className="max-w-[140px] p-3 font-medium text-zinc-800 dark:text-zinc-200">
+              <tr key={`${r.time}-${r.name}-${i}`}>
+                <td className="whitespace-nowrap">{r.country}</td>
+                <td className="max-w-[140px] font-medium">
                   <a
                     href={`https://x.com/search?q=${encodeURIComponent(r.name)}&src=typed_query`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="underline hover:text-blue-600"
+                    className="data-table-link"
                   >
                     {r.name}
                   </a>
                 </td>
-                <td className="max-w-md p-3 text-zinc-600 dark:text-zinc-400">{r.msg}</td>
-                <td className="whitespace-nowrap p-3 text-zinc-600 dark:text-zinc-400">
-                  {r.score}
-                </td>
-                <td className="whitespace-nowrap p-3 font-mono text-xs text-zinc-600 dark:text-zinc-400">
-                  {formatTime(r.time)}
-                </td>
-                <td className="whitespace-nowrap p-3 text-zinc-600 dark:text-zinc-400">
+                <td className="max-w-md">{r.msg}</td>
+                <td className="whitespace-nowrap tabular-nums">{r.score}</td>
+                <td className="whitespace-nowrap font-mono text-xs">{formatTime(r.time)}</td>
+                <td className="whitespace-nowrap">
                   <div className="flex flex-col gap-1">
                     <label className="label cursor-pointer justify-start gap-2 p-0">
                       <span className="text-xs">{r.reviewed ? "已阅" : "未查看"}</span>
                       <input
                         type="checkbox"
-                        className="toggle toggle-sm"
+                        className="toggle toggle-sm toggle-primary"
                         checked={Boolean(r.reviewed)}
                         disabled={savingKey === `${r.time}-${r.name}-reviewed`}
                         onChange={(e) =>
@@ -305,7 +292,7 @@ export function KeywordTable({ selectedDate }: KeywordTableProps) {
                       <span className="text-xs">{r.interested ? "感兴趣" : "不感兴趣"}</span>
                       <input
                         type="checkbox"
-                        className="toggle toggle-sm"
+                        className="toggle toggle-sm toggle-primary"
                         checked={Boolean(r.interested)}
                         disabled={savingKey === `${r.time}-${r.name}-interested`}
                         onChange={(e) =>

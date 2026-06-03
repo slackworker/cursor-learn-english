@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
+import { Surface } from "@/components/ui/Surface";
 
 type WordFreq = { word: string; count: number };
 type PhraseFreq = { phrase: string; count: number };
@@ -68,8 +70,8 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
   return (
     <input
       type="text"
-      placeholder="搜索..."
-      className="input input-bordered input-sm w-full max-w-xs"
+      placeholder="搜索…"
+      className="toolbar-input"
       value={value}
       onChange={(e) => onChange(e.target.value)}
     />
@@ -179,20 +181,14 @@ export function VocabStats() {
   };
 
   if (loading) {
-    return (
-      <div className="card bg-base-200 p-6">
-        <span className="loading loading-spinner loading-sm" /> 正在分析词频…
-      </div>
-    );
+    return <LoadingState>正在分析词频…</LoadingState>;
   }
 
   if (!data || (data.words.length === 0 && data.phrases.length === 0)) {
     return (
-      <div className="card bg-base-200 p-6">
-        <p className="opacity-60">
-          暂无数据。请确认 thinking-corpus.jsonl 中有记录。
-        </p>
-      </div>
+      <EmptyState>
+        暂无数据。请确认 thinking-corpus.jsonl 中有记录。
+      </EmptyState>
     );
   }
 
@@ -205,31 +201,27 @@ export function VocabStats() {
 
   return (
     <div className="space-y-6">
-      {/* summary cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="stat-grid md:grid-cols-4 lg:grid-cols-4">
         {[
           { label: "Thinking 条数", value: data.totalRecords },
           { label: "总词数（含重复）", value: data.totalTokens.toLocaleString() },
           { label: "不重复单词", value: data.words.length },
           { label: "高频短语", value: data.phrases.length },
         ].map((c) => (
-          <div
-            key={c.label}
-            className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{c.label}</p>
-            <p className="mt-1 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">{c.value}</p>
+          <div key={c.label} className="stat-card">
+            <div className="stat-card-accent" aria-hidden />
+            <p className="stat-card-label">{c.label}</p>
+            <p className="stat-card-value">{c.value}</p>
           </div>
         ))}
       </div>
 
-      {/* tabs + controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div role="tablist" className="tabs tabs-bordered">
+      <div className="toolbar">
+        <div className="toolbar-tabs" role="tablist">
           <button
             type="button"
             role="tab"
-            className={`tab ${tab === "words" ? "tab-active" : ""}`}
+            className={`toolbar-tab ${tab === "words" ? "toolbar-tab-active" : ""}`}
             onClick={() => {
               setTab("words");
               setSearch("");
@@ -240,7 +232,7 @@ export function VocabStats() {
           <button
             type="button"
             role="tab"
-            className={`tab ${tab === "phrases" ? "tab-active" : ""}`}
+            className={`toolbar-tab ${tab === "phrases" ? "toolbar-tab-active" : ""}`}
             onClick={() => {
               setTab("phrases");
               setSearch("");
@@ -251,20 +243,20 @@ export function VocabStats() {
         </div>
         <SearchInput value={search} onChange={setSearch} />
         {tab === "words" && (
-          <label className="label cursor-pointer gap-2">
-            <span className="label-text text-sm">只看生词</span>
+          <label className="label cursor-pointer gap-2 p-0">
+            <span className="label-text text-sm text-base-content/60">只看生词</span>
             <input
               type="checkbox"
-              className="toggle toggle-sm"
+              className="toggle toggle-sm toggle-primary"
               checked={onlyStarred}
               onChange={() => setOnlyStarred((v) => !v)}
             />
           </label>
         )}
-        <label className="label cursor-pointer gap-2">
-          <span className="label-text text-sm">最小次数</span>
+        <label className="label cursor-pointer gap-2 p-0">
+          <span className="label-text text-sm text-base-content/60">最小次数</span>
           <select
-            className="select select-xs"
+            className="select select-bordered select-sm bg-base-100"
             value={minCount}
             onChange={(e) => setMinCount(Number(e.target.value) || 1)}
           >
@@ -275,52 +267,54 @@ export function VocabStats() {
             <option value={10}>≥10</option>
           </select>
         </label>
-        <div className="ml-auto flex items-center gap-2">
-          <div className="btn-group btn-group-xs">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="toolbar-tabs">
             <button
               type="button"
-              className={`btn btn-xs ${!sortAsc ? "btn-active" : ""}`}
+              className={`toolbar-tab ${!sortAsc ? "toolbar-tab-active" : ""}`}
               onClick={() => setSortAsc(false)}
             >
               次数↓
             </button>
             <button
               type="button"
-              className={`btn btn-xs ${sortAsc ? "btn-active" : ""}`}
+              className={`toolbar-tab ${sortAsc ? "toolbar-tab-active" : ""}`}
               onClick={() => setSortAsc(true)}
             >
               次数↑
             </button>
           </div>
-          <label className="label cursor-pointer gap-2">
-            <span className="label-text text-sm">图表</span>
+          <label className="label cursor-pointer gap-2 p-0">
+            <span className="label-text text-sm text-base-content/60">图表</span>
             <input
               type="checkbox"
-              className="toggle toggle-sm"
+              className="toggle toggle-sm toggle-primary"
               checked={showChart}
               onChange={() => setShowChart(!showChart)}
             />
           </label>
           <button
             type="button"
-            className="btn btn-ghost btn-xs"
+            className="btn btn-ghost btn-sm"
             onClick={handleExport}
             disabled={currentItems.length === 0}
           >
-            导出当前列表
+            导出 CSV
           </button>
         </div>
       </div>
 
-      {/* chart */}
-      {showChart && <BarChart items={chartItems} />}
+      {showChart && (
+        <Surface>
+          <BarChart items={chartItems} />
+        </Surface>
+      )}
 
-      {/* grid cards */}
-      <div className="rounded-xl border border-base-300 p-3">
+      <Surface padding="sm">
         {currentItems.length === 0 ? (
-          <div className="py-8 text-center opacity-50">无匹配结果</div>
+          <div className="py-10 text-center text-sm text-base-content/40">无匹配结果</div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3 lg:grid-cols-4">
+          <div className="vocab-grid">
             {currentItems.map((item, index) => {
               const isWord = "word" in item;
               const text = isWord ? item.word : (item as PhraseFreq).phrase;
@@ -328,16 +322,14 @@ export function VocabStats() {
               return (
                 <div
                   key={text}
-                  className={`flex cursor-pointer flex-col justify-between rounded-lg border bg-base-100 p-3 text-sm hover:border-primary/60 hover:bg-base-200 ${
-                    starred ? "border-warning" : "border-base-300"
-                  }`}
+                  className={`vocab-card ${starred ? "vocab-card-starred" : ""}`}
                   onClick={() => {
                     router.push(`/thinking?highlight=${encodeURIComponent(text)}`);
                   }}
                 >
                   <div className="mb-2 flex items-start justify-between gap-1">
-                    <div className="font-mono text-xs md:text-sm break-words">
-                      <span className="mr-1 text-[10px] text-zinc-400">#{index + 1}</span>
+                    <div className="break-words font-mono text-xs md:text-sm">
+                      <span className="mr-1 text-[10px] text-base-content/35">#{index + 1}</span>
                       {text}
                     </div>
                     {isWord && (
@@ -355,7 +347,7 @@ export function VocabStats() {
                             xmlns="http://www.w3.org/2000/svg"
                             viewBox="0 0 24 24"
                             fill="currentColor"
-                            className="h-3 w-3 text-warning"
+                            className="h-3.5 w-3.5 text-warning"
                           >
                             <path d="M12 2.25l2.955 6.016 6.645.967-4.8 4.68 1.133 6.617L12 17.75l-5.933 3.12 1.133-6.617-4.8-4.68 6.645-.967L12 2.25z" />
                           </svg>
@@ -366,7 +358,7 @@ export function VocabStats() {
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.5"
-                            className="h-3 w-3"
+                            className="h-3.5 w-3.5 text-base-content/40"
                           >
                             <path d="M12 2.75l2.7 5.5 6.05.88-4.375 4.27 1.033 6.02L12 16.96l-5.408 2.91 1.033-6.02L3.25 9.13l6.05-.88L12 2.75z" />
                           </svg>
@@ -374,9 +366,9 @@ export function VocabStats() {
                       </button>
                     )}
                   </div>
-                  <div className="flex items-center justify-between text-xs text-zinc-500">
+                  <div className="flex items-center justify-between text-xs text-base-content/45">
                     <span>{tab === "words" ? "单词" : "短语"}</span>
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-200">
+                    <span className="font-semibold tabular-nums text-base-content/70">
                       {item.count} 次
                     </span>
                   </div>
@@ -385,7 +377,7 @@ export function VocabStats() {
             })}
           </div>
         )}
-      </div>
+      </Surface>
     </div>
   );
 }

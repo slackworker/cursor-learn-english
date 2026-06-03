@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { DialogueTimeline } from "@/components/DialogueTimeline";
+import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
+import { MessageBubble } from "@/components/ui/MessageBubble";
+import { Pagination } from "@/components/ui/Pagination";
+import { Surface } from "@/components/ui/Surface";
 import { useSearchParams } from "next/navigation";
 
 type ThinkingRecord = {
@@ -65,35 +69,38 @@ function RoundCard({
     highlight
   );
   return (
-    <li className="p-4">
-      <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="block text-xs font-medium text-info">用户问题</span>
-          {isLongPrompt && (
+    <li className="dialogue-item">
+      <MessageBubble
+        variant="user"
+        label="用户问题"
+        action={
+          isLongPrompt ? (
             <button
               type="button"
-              className="btn btn-ghost btn-xs px-1 text-[11px]"
+              className="btn btn-ghost btn-xs text-[11px]"
               onClick={() => setShowFullPrompt((v) => !v)}
             >
               {showFullPrompt ? "收起" : "展开"}
             </button>
-          )}
-        </div>
-        <MarkdownContent className="whitespace-pre-wrap break-words text-sm">
+          ) : undefined
+        }
+      >
+        <MarkdownContent className="whitespace-pre-wrap break-words">
           {promptDisplay}
         </MarkdownContent>
+      </MessageBubble>
+
+      <div className="mt-3">
+        <MessageBubble variant="assistant" label="助手回复与推理过程">
+          <DialogueTimeline
+            round={round}
+            emptyMessage="未采集到该轮助手完整回复（请更新 hooks 后重试）。"
+          />
+        </MessageBubble>
       </div>
 
-      <div className="rounded-lg border border-success/30 bg-success/10 p-3 mb-3">
-        <div className="mb-2 text-xs font-medium text-success">助手回复与推理过程</div>
-        <DialogueTimeline
-          round={round}
-          emptyMessage="未采集到该轮助手完整回复（请更新 hooks 后重试）。"
-        />
-      </div>
-
-      <div className="mb-2 text-[11px] opacity-70">
-        会话：<span className="font-mono">{round.conversation_id}</span>
+      <div className="dialogue-item-meta mt-3">
+        会话 {round.conversation_id}
       </div>
     </li>
   );
@@ -126,14 +133,14 @@ export function ThinkingList() {
   }, [page, highlight]);
 
   if (!isLoaded && rounds.length === 0) {
-    return <div className="card bg-base-200 p-6"><span className="loading loading-spinner loading-sm"></span> 加载中…</div>;
+    return <LoadingState />;
   }
 
   if (rounds.length === 0) {
     return (
-      <div className="card bg-base-200 p-6">
-        <p className="opacity-60">暂无完整轮次记录。请先在更新后的 Hooks 配置下继续对话生成数据。</p>
-      </div>
+      <EmptyState>
+        暂无完整轮次记录。请先在更新后的 Hooks 配置下继续对话生成数据。
+      </EmptyState>
     );
   }
 
@@ -142,45 +149,26 @@ export function ThinkingList() {
   return (
     <div className="space-y-4">
       {highlight && (
-        <div className="alert alert-info flex items-center justify-between text-sm">
-          <span>
-            当前高亮词：
-            <span className="font-mono font-semibold">{highlight}</span>
-            ，仅展示包含该词的整轮记录。
-          </span>
+        <div className="banner-info">
+          当前高亮词：
+          <span className="font-mono font-semibold">{highlight}</span>
+          ，仅展示包含该词的整轮记录。
         </div>
       )}
-      <div className="card bg-base-200">
-        <ul className="divide-y divide-base-300">
+      <Surface padding="none">
+        <ul className="dialogue-list">
           {rounds.map((round) => (
             <RoundCard key={round.id} round={round} highlight={highlight} />
           ))}
         </ul>
-      </div>
-      <div className="flex items-center justify-between">
-        <p className="text-sm opacity-60">共 {total} 轮</p>
-        <div className="join">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="join-item btn btn-sm"
-          >
-            上一页
-          </button>
-          <span className="join-item btn btn-sm btn-disabled">
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="join-item btn btn-sm"
-          >
-            下一页
-          </button>
-        </div>
-      </div>
+      </Surface>
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPrev={() => setPage((p) => Math.max(1, p - 1))}
+        onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+        summary={`共 ${total} 轮`}
+      />
     </div>
   );
 }
