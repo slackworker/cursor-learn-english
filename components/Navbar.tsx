@@ -1,19 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { Moon, Sun, Volume2 } from "lucide-react";
+import {
+  BookOpen,
+  Brain,
+  Languages,
+  LayoutDashboard,
+  LineChart,
+  MessagesSquare,
+  Moon,
+  Sun,
+  Volume2,
+  type LucideIcon,
+} from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTts } from "@/components/TtsProvider";
 
 const NAV_ICON_CLASS = "h-4 w-4 shrink-0";
 
-const NAV_ITEMS = [
-  { href: "/", label: "首页" },
-  { href: "/sessions", label: "会话" },
-  { href: "/vocab", label: "词汇" },
-  { href: "/thinking", label: "语料" },
-  { href: "/stats", label: "统计" },
+const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: "/", label: "首页", icon: LayoutDashboard },
+  { href: "/sessions", label: "会话", icon: MessagesSquare },
+  { href: "/vocab", label: "词汇", icon: BookOpen },
+  { href: "/thinking", label: "语料", icon: Brain },
+  { href: "/stats", label: "统计", icon: LineChart },
 ];
 
 const LIGHT_THEME = "corporate";
@@ -45,17 +56,21 @@ export default function Navbar() {
     <header className="app-navbar">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/" className="nav-brand">
-          Cursor 学英语
+          <Languages className={NAV_ICON_CLASS} aria-hidden />
+          <span>Cursor 学英语</span>
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">
           <nav className="flex items-center gap-0.5 sm:gap-1">
-            {NAV_ITEMS.map((item) => (
+            {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
               <Link
-                key={item.href}
-                href={item.href}
-                className={`nav-link ${isActive(item.href) ? "nav-link-active" : ""}`}
+                key={href}
+                href={href}
+                className={`nav-link ${isActive(href) ? "nav-link-active" : ""}`}
               >
-                {item.label}
+                <span className="nav-link-icon" aria-hidden>
+                  <Icon className={NAV_ICON_CLASS} />
+                </span>
+                <span className="nav-link-label">{label}</span>
               </Link>
             ))}
           </nav>

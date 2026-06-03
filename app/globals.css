@@ -70,30 +70,6 @@ html {
   background: var(--color-base-200, oklch(96% 0 0));
 }
 
-/* ── Dashboard quick links ── */
-.dashboard-link-grid {
-  @apply grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4;
-}
-
-.dashboard-link-card {
-  @apply flex items-start gap-3 p-4 sm:p-5;
-  border: 1px solid var(--surface-border);
-  border-radius: 0.875rem;
-  background: var(--color-base-100);
-  box-shadow: var(--surface-shadow);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.dashboard-link-card:hover {
-  border-color: oklch(from var(--color-primary) l c h / 0.35);
-  box-shadow: var(--surface-shadow), 0 4px 12px oklch(0% 0 0 / 0.06);
-}
-
-.dashboard-link-icon {
-  @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-primary;
-  background: var(--accent-soft);
-}
-
 /* ── Stat cards ── */
 .stat-grid {
   @apply grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-5;
@@ -133,15 +109,28 @@ html {
 }
 
 .nav-brand {
-  @apply text-base font-semibold tracking-tight text-base-content transition-colors hover:text-primary sm:text-lg;
+  @apply inline-flex flex-row flex-nowrap items-center gap-2 text-base font-semibold tracking-tight text-base-content transition-colors hover:text-primary sm:text-lg;
 }
 
 .nav-link {
-  @apply rounded-lg px-3 py-1.5 text-sm font-medium text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content;
+  @apply inline-flex flex-row flex-nowrap items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content sm:pl-2 sm:pr-3;
+}
+
+.nav-link-icon {
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-current;
+  background: var(--accent-soft);
+}
+
+.nav-link-label {
+  @apply shrink-0 whitespace-nowrap;
 }
 
 .nav-link-active {
   @apply bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary;
+}
+
+.nav-link-active .nav-link-icon {
+  @apply text-primary;
 }
 
 .theme-toggle {
