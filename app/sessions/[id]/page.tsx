@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MarkdownContent } from "@/components/MarkdownContent";
 import { DialogueTimeline } from "@/components/DialogueTimeline";
+import { UserPromptView } from "@/components/UserPromptView";
 import { formatLocalDateTime } from "@/lib/format-datetime";
 
 type SessionDetail = {
@@ -55,6 +55,12 @@ type SessionDetail = {
     id: string;
     user_text: string;
     user_prompt: string;
+    user_dom_contexts?: Array<{
+      domPath: string;
+      position: string;
+      reactComponent: string;
+      htmlElement: string;
+    }>;
     user_timestamp?: string;
     assistant_text?: string;
     assistant_segments?: string[];
@@ -194,9 +200,14 @@ export default function SessionDetailPage() {
                   </div>
                   <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
                     <div className="mb-1 text-xs font-medium text-info">用户问题</div>
-                    <MarkdownContent className="whitespace-pre-wrap break-words text-sm">
-                      {turn.round?.prompt || turn.user_prompt || turn.user_text}
-                    </MarkdownContent>
+                    <UserPromptView
+                      prompt={
+                        turn.user_prompt ||
+                        turn.round?.prompt ||
+                        turn.user_text
+                      }
+                      domContexts={turn.user_dom_contexts}
+                    />
                   </div>
                   <div className="rounded-lg border border-success/30 bg-success/10 p-3">
                     <div className="mb-2 text-xs font-medium text-success">助手回复与推理过程</div>

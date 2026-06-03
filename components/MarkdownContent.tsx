@@ -74,19 +74,45 @@ const markdownComponents: Components = {
   ),
 };
 
+const inlineMarkdownComponents: Components = {
+  ...markdownComponents,
+  p: ({ children }) => <span className="inline">{children}</span>,
+  ul: ({ children }) => (
+    <ul className="my-2 list-disc space-y-0.5 pl-5">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-2 list-decimal space-y-0.5 pl-5">{children}</ol>
+  ),
+  pre: ({ children }) => (
+    <pre className="my-2 block overflow-x-auto rounded bg-base-300 p-3 text-sm">
+      {children}
+    </pre>
+  ),
+};
+
 type MarkdownContentProps = {
   children: string;
   className?: string;
+  /** Render as inline flow (e.g. text after a DOM chip on the same line). */
+  inline?: boolean;
 };
 
-export function MarkdownContent({ children, className }: MarkdownContentProps) {
+export function MarkdownContent({
+  children,
+  className,
+  inline = false,
+}: MarkdownContentProps) {
   if (!children) return null;
 
+  const Tag = inline ? "span" : "div";
   return (
-    <div className={className}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+    <Tag className={inline ? `inline ${className ?? ""}`.trim() : className}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={inline ? inlineMarkdownComponents : markdownComponents}
+      >
         {children}
       </ReactMarkdown>
-    </div>
+    </Tag>
   );
 }
