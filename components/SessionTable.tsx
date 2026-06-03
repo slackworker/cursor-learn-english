@@ -85,7 +85,7 @@ export function SessionTable() {
           <thead>
             <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
               <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">会话标题</th>
-              <th className="whitespace-nowrap p-3 font-medium text-zinc-700 dark:text-zinc-300">最近活跃</th>
+              <th className="whitespace-nowrap p-3 text-center font-medium text-zinc-700 dark:text-zinc-300">最近活跃</th>
             </tr>
           </thead>
           <tbody>
@@ -106,7 +106,7 @@ export function SessionTable() {
                     />
                   </Link>
                 </td>
-                <td className="whitespace-nowrap p-3 text-zinc-600 dark:text-zinc-400">
+                <td className="whitespace-nowrap p-3 text-center text-zinc-600 dark:text-zinc-400">
                   {formatLocalDateTime(s.last_activity ?? s.last_reply ?? s.start ?? s.timestamp)}
                 </td>
               </tr>
