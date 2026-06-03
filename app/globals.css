@@ -70,6 +70,30 @@ html {
   background: var(--color-base-200, oklch(96% 0 0));
 }
 
+/* ── Dashboard quick links ── */
+.dashboard-link-grid {
+  @apply grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4;
+}
+
+.dashboard-link-card {
+  @apply flex items-start gap-3 p-4 sm:p-5;
+  border: 1px solid var(--surface-border);
+  border-radius: 0.875rem;
+  background: var(--color-base-100);
+  box-shadow: var(--surface-shadow);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard-link-card:hover {
+  border-color: oklch(from var(--color-primary) l c h / 0.35);
+  box-shadow: var(--surface-shadow), 0 4px 12px oklch(0% 0 0 / 0.06);
+}
+
+.dashboard-link-icon {
+  @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-primary;
+  background: var(--accent-soft);
+}
+
 /* ── Stat cards ── */
 .stat-grid {
   @apply grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-5;
