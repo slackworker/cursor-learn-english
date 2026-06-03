@@ -1,6 +1,12 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import {
+  parseAssistantContent,
+  type TranscriptAssistantStep,
+} from "./transcript-content";
+
+export type { TranscriptAssistantStep, TranscriptContentItem } from "./transcript-content";
 
 export type TranscriptTurn = {
   id: string;
@@ -9,6 +15,8 @@ export type TranscriptTurn = {
   user_timestamp?: string;
   assistant_text?: string;
   assistant_segments?: string[];
+  /** Ordered steps from agent-transcripts (text + tool_use per JSONL line). */
+  assistant_steps?: TranscriptAssistantStep[];
 };
 
 type TranscriptRecord = {
@@ -17,6 +25,8 @@ type TranscriptRecord = {
     content?: Array<{
       type?: string;
       text?: string;
+      name?: string;
+      input?: Record<string, unknown>;
     }>;
   };
 };
@@ -34,12 +44,13 @@ function getTranscriptPath(sessionId: string): string {
   return path.join(getTranscriptRoot(), sessionId, `${sessionId}.jsonl`);
 }
 
+/** Join text blocks only (legacy segments); does not strip Cursor [REDACTED]. */
 function collectText(record: TranscriptRecord): string {
   const parts =
     record.message?.content
       ?.filter((c) => c?.type === "text" && typeof c.text === "string")
-      .map((c) => c.text?.trim() ?? "")
-      .filter(Boolean) ?? [];
+      .map((c) => c.text ?? "")
+      .filter((t) => t.length > 0) ?? [];
   return parts.join("\n\n").trim();
 }
 
@@ -92,7 +103,12 @@ export function getTranscriptTurns(sessionId: string): TranscriptTurn[] {
   if (!content.trim()) return [];
 
   const turns: TranscriptTurn[] = [];
-  let pendingUser: { id: string; user_text: string; assistant_parts: string[] } | null = null;
+  let pendingUser: {
+    id: string;
+    user_text: string;
+    assistant_parts: string[];
+    assistant_steps: TranscriptAssistantStep[];
+  } | null = null;
 
   function flushPendingUser() {
     if (!pendingUser) return;
@@ -105,6 +121,10 @@ export function getTranscriptTurns(sessionId: string): TranscriptTurn[] {
       user_timestamp: extractUserTimestamp(pendingUser.user_text),
       assistant_text: assistantText || undefined,
       assistant_segments: assistantSegments.length > 0 ? assistantSegments : undefined,
+      assistant_steps:
+        pendingUser.assistant_steps.length > 0
+          ? pendingUser.assistant_steps
+          : undefined,
     });
     pendingUser = null;
   }
@@ -118,21 +138,26 @@ export function getTranscriptTurns(sessionId: string): TranscriptTurn[] {
       record = null;
     }
     if (!record) continue;
-    const text = collectText(record);
-    if (!text) continue;
 
     if (record.role === "user") {
+      const text = collectText(record);
+      if (!text) continue;
       flushPendingUser();
       pendingUser = {
         id: `${sessionId}::${turns.length + 1}`,
         user_text: text,
         assistant_parts: [],
+        assistant_steps: [],
       };
       continue;
     }
 
     if (record.role === "assistant" && pendingUser) {
-      pendingUser.assistant_parts.push(text);
+      const step = parseAssistantContent(record.message?.content);
+      if (step) pendingUser.assistant_steps.push(step);
+
+      const text = collectText(record);
+      if (text) pendingUser.assistant_parts.push(text);
     }
   }
 

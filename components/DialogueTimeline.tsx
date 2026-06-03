@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import {
   buildDialogueTimeline,
@@ -8,6 +9,13 @@ import {
   type DialogueTimelineBlock,
 } from "@/lib/dialogue-timeline";
 import type { TimelineRoundInput, TimelineTool } from "@/lib/dialogue-timeline";
+import { buildInterleavedTranscriptPhases } from "@/lib/interleave-transcript";
+import {
+  isFileEditTool,
+  toolUseLabel,
+  type TranscriptAssistantStep,
+  type TranscriptContentItem,
+} from "@/lib/transcript-content";
 
 function ThinkingBlock({
   block,
@@ -108,15 +116,174 @@ function ResponseBlock({
   );
 }
 
+function TranscriptToolUseChip({
+  name,
+  input,
+}: {
+  name: string;
+  input: Record<string, unknown>;
+}) {
+  const label = toolUseLabel(name, input);
+  const fileEdit = isFileEditTool(name);
+  return (
+    <span
+      className={
+        fileEdit
+          ? "inline-flex items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 py-0.5 font-mono text-[11px] text-success"
+          : "inline-flex items-center gap-1 rounded-md border border-base-300 bg-base-100 px-2 py-0.5 font-mono text-[11px] opacity-80"
+      }
+      title={typeof input.path === "string" ? input.path : undefined}
+    >
+      {fileEdit ? (
+        <>
+          <span className="font-semibold">{name}</span>
+          <span className="opacity-70">{label}</span>
+        </>
+      ) : (
+        label
+      )}
+    </span>
+  );
+}
+
+function TranscriptContentItemView({
+  item,
+  itemKey,
+}: {
+  item: TranscriptContentItem;
+  itemKey: string;
+}) {
+  if (item.type === "text") {
+    return (
+      <MarkdownContent key={itemKey} className="break-words text-sm">
+        {item.text}
+      </MarkdownContent>
+    );
+  }
+  return (
+    <TranscriptToolUseChip
+      key={itemKey}
+      name={item.name}
+      input={item.input}
+    />
+  );
+}
+
+function TranscriptStepView({
+  step,
+  stepIdx,
+}: {
+  step: TranscriptAssistantStep;
+  stepIdx: number;
+}) {
+        const toolRun: TranscriptContentItem[] = [];
+        const flushTools = (key: string) => {
+          if (toolRun.length === 0) return null;
+          const batch = toolRun.splice(0, toolRun.length);
+          return (
+            <div key={key} className="flex flex-wrap gap-1.5">
+              {batch.map((item, i) => (
+                <TranscriptContentItemView
+                  key={`${key}-${i}`}
+                  item={item}
+                  itemKey={`${key}-${i}`}
+                />
+              ))}
+            </div>
+          );
+        };
+
+        const rows: ReactNode[] = [];
+        step.items.forEach((item, i) => {
+          if (item.type === "tool_use") {
+            toolRun.push(item);
+            return;
+          }
+          const toolRow = flushTools(`step-${stepIdx}-tools-before-${i}`);
+          if (toolRow) rows.push(toolRow);
+          rows.push(
+            <TranscriptContentItemView
+              key={`step-${stepIdx}-item-${i}`}
+              item={item}
+              itemKey={`step-${stepIdx}-item-${i}`}
+            />
+          );
+        });
+        const tailTools = flushTools(`step-${stepIdx}-tools-tail`);
+        if (tailTools) rows.push(tailTools);
+
+  return (
+    <div
+      key={`step-${stepIdx}`}
+      className="border-t border-success/20 pt-3 first:border-t-0 first:pt-0 space-y-2"
+    >
+      {rows}
+    </div>
+  );
+}
+
+/** Transcript steps interleaved with thinking via postToolUse / afterAgentThought timestamps. */
+function TranscriptStepsTimeline({
+  steps,
+  thinking,
+  tools,
+}: {
+  steps: TranscriptAssistantStep[];
+  thinking: TimelineRoundInput["thinking"];
+  tools: TimelineRoundInput["tools"];
+}) {
+  const phases = buildInterleavedTranscriptPhases(thinking, steps, tools);
+
+  return (
+    <div className="space-y-2">
+      {phases.map((phase, phaseIdx) => (
+        <div key={`phase-${phaseIdx}`} className="space-y-2">
+          {phase.thinking ? (
+            <ThinkingBlock
+              key={`phase-${phaseIdx}-think-${phase.thinking.timestamp}`}
+              blockKey={`phase-${phaseIdx}-think`}
+              block={{
+                kind: "thinking",
+                timestamp: phase.thinking.timestamp,
+                data: phase.thinking,
+              }}
+            />
+          ) : null}
+          {phase.steps.map((step, stepIdx) => (
+            <TranscriptStepView
+              key={`phase-${phaseIdx}-step-${stepIdx}`}
+              step={step}
+              stepIdx={stepIdx}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function DialogueTimeline({
   round,
   transcriptSegments,
+  transcriptSteps,
   emptyMessage = "（该轮暂无助手文本）",
 }: {
   round?: TimelineRoundInput;
   transcriptSegments?: string[];
+  /** When set, render from agent-transcripts (text + tool_use) instead of events-only timeline. */
+  transcriptSteps?: TranscriptAssistantStep[];
   emptyMessage?: string;
 }) {
+  if (transcriptSteps && transcriptSteps.length > 0) {
+    return (
+      <TranscriptStepsTimeline
+        steps={transcriptSteps}
+        thinking={round?.thinking ?? []}
+        tools={round?.tools ?? []}
+      />
+    );
+  }
+
   if (!round) {
     return <p className="text-sm opacity-60">{emptyMessage}</p>;
   }

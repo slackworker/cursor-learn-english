@@ -57,6 +57,12 @@ type SessionDetail = {
     user_timestamp?: string;
     assistant_text?: string;
     assistant_segments?: string[];
+    assistant_steps?: Array<{
+      items: Array<
+        | { type: "text"; text: string }
+        | { type: "tool_use"; name: string; input: Record<string, unknown> }
+      >;
+    }>;
     round?: {
       id: string;
       prompt: string;
@@ -205,9 +211,12 @@ export default function SessionDetailPage() {
                     <div className="mb-2 text-xs font-medium text-success">助手回复与推理过程</div>
                     <DialogueTimeline
                       round={turn.round}
+                      transcriptSteps={turn.assistant_steps}
                       transcriptSegments={
-                        turn.assistant_segments ??
-                        (turn.assistant_text ? [turn.assistant_text] : undefined)
+                        turn.assistant_steps?.length
+                          ? undefined
+                          : turn.assistant_segments ??
+                            (turn.assistant_text ? [turn.assistant_text] : undefined)
                       }
                     />
                   </div>
