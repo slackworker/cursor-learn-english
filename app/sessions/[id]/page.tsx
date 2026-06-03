@@ -19,6 +19,8 @@ type SessionDetail = {
   duration_ms?: number;
   timestamp?: string;
   start?: string;
+  last_activity?: string;
+  is_open?: boolean;
   prompt_count: number;
   thinking_count: number;
   event_counts: Record<string, number>;
@@ -181,11 +183,16 @@ export default function SessionDetailPage() {
         </div>
         <div className="card bg-base-200 p-4">
           <p className="text-xs opacity-60">结束时间</p>
-          <p className="mt-1 text-sm">{formatLocalDateTime(session.timestamp)}</p>
+          <p className="mt-1 text-sm">
+            {session.is_open ? "进行中" : formatLocalDateTime(session.timestamp)}
+          </p>
         </div>
         <div className="card bg-base-200 p-4">
           <p className="text-xs opacity-60">会话时长</p>
           <p className="mt-1 text-sm">{formatDurationMs(session.duration_ms)}</p>
+          {session.is_open ? (
+            <p className="mt-0.5 text-xs opacity-50">自开始至最近活跃</p>
+          ) : null}
         </div>
         <div className="card bg-base-200 p-4">
           <p className="text-xs opacity-60">结束原因</p>
