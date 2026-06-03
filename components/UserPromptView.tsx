@@ -46,7 +46,7 @@ export function UserPromptView({
 
   return (
     <div className={`text-sm leading-relaxed ${className}`}>
-      <span className="inline align-baseline">
+      <span className="inline">
         {domContexts.map((block, i) => (
           <DomContextChip
             key={`dom-${i}-${block.domPath.slice(0, 24)}`}

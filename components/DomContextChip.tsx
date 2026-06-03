@@ -40,7 +40,7 @@ export function DomContextChip({
 
   return (
     <span
-      className={`inline-flex max-w-full align-middle items-center gap-1 rounded-[5px] px-1.5 py-px font-mono text-[12px] leading-none [html[data-theme=corporate]_&]:border [html[data-theme=corporate]_&]:border-sky-200/80 [html[data-theme=corporate]_&]:bg-sky-50 [html[data-theme=corporate]_&]:text-sky-600 [html[data-theme=business]_&]:border-transparent [html[data-theme=business]_&]:bg-[#2d333b] [html[data-theme=business]_&]:text-sky-400 ${className}`}
+      className={`inline-flex max-w-full align-middle items-center gap-1 rounded-[5px] px-1.5 py-0 font-mono text-[12px] leading-[inherit] [html[data-theme=corporate]_&]:border [html[data-theme=corporate]_&]:border-sky-200/80 [html[data-theme=corporate]_&]:bg-sky-50 [html[data-theme=corporate]_&]:text-sky-600 [html[data-theme=business]_&]:border-transparent [html[data-theme=business]_&]:bg-[#2d333b] [html[data-theme=business]_&]:text-sky-400 ${className}`}
       title={tooltip}
     >
       <BrowserTargetIcon />
