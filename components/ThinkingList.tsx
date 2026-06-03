@@ -7,7 +7,6 @@ import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { MessageBubble } from "@/components/ui/MessageBubble";
 import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
-import { useSearchParams } from "next/navigation";
 
 type ThinkingRecord = {
   text: string;
@@ -44,30 +43,12 @@ type DialogueRound = {
   tools: ToolRecord[];
 };
 
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function applyHighlightMarkdown(text: string, highlight: string): string {
-  if (!highlight) return text;
-  const pattern = new RegExp(`(${escapeRegExp(highlight)})`, "gi");
-  return text.replace(pattern, "**$1**");
-}
-
-function RoundCard({
-  round,
-  highlight,
-}: {
-  round: DialogueRound;
-  highlight: string;
-}) {
+function RoundCard({ round }: { round: DialogueRound }) {
   const [showFullPrompt, setShowFullPrompt] = useState(false);
   const prompt = round.prompt ?? "";
   const isLongPrompt = prompt.length > 200;
-  const promptDisplay = applyHighlightMarkdown(
-    showFullPrompt || !isLongPrompt ? prompt : `${prompt.slice(0, 200)}...`,
-    highlight
-  );
+  const promptDisplay =
+    showFullPrompt || !isLongPrompt ? prompt : `${prompt.slice(0, 200)}...`;
   return (
     <li className="dialogue-item">
       <MessageBubble
@@ -112,16 +93,11 @@ export function ThinkingList() {
   const [page, setPage] = useState(1);
   const [isLoaded, setIsLoaded] = useState(false);
   const pageSize = 10;
-  const searchParams = useSearchParams();
-  const highlight = searchParams.get("highlight")?.toLowerCase().trim() || "";
 
   useEffect(() => {
     const url = new URL("/api/dialogues", window.location.origin);
     url.searchParams.set("page", String(page));
     url.searchParams.set("pageSize", String(pageSize));
-    if (highlight) {
-      url.searchParams.set("highlight", highlight);
-    }
     fetch(url.toString())
       .then((r) => r.json())
       .then((res) => {
@@ -130,7 +106,7 @@ export function ThinkingList() {
       })
       .catch(() => setRounds([]))
       .finally(() => setIsLoaded(true));
-  }, [page, highlight]);
+  }, [page]);
 
   if (!isLoaded && rounds.length === 0) {
     return <LoadingState />;
@@ -148,17 +124,10 @@ export function ThinkingList() {
 
   return (
     <div className="space-y-4">
-      {highlight && (
-        <div className="banner-info">
-          当前高亮词：
-          <span className="font-mono font-semibold">{highlight}</span>
-          ，仅展示包含该词的整轮记录。
-        </div>
-      )}
       <Surface padding="none">
         <ul className="dialogue-list">
           {rounds.map((round) => (
-            <RoundCard key={round.id} round={round} highlight={highlight} />
+            <RoundCard key={round.id} round={round} />
           ))}
         </ul>
       </Surface>

@@ -14,7 +14,6 @@ export async function GET(request: NextRequest) {
     searchParams.get("to") ?? undefined
   );
   const model = searchParams.get("model") ?? undefined;
-  const highlight = searchParams.get("highlight") ?? undefined;
 
   const { groups, total, truncated } = getThinking({
     page,
@@ -22,7 +21,6 @@ export async function GET(request: NextRequest) {
     from,
     to,
     model,
-    highlight,
   });
   return Response.json({ groups, total, from, to, pageSize, truncated });
 }

@@ -382,17 +382,13 @@ html[data-theme="business"] {
   @apply mb-6 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-content;
 }
 
-.banner-info {
-  @apply flex items-start gap-2 rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm;
-}
-
 /* ── Vocab grid ── */
 .vocab-grid {
   @apply grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3 lg:grid-cols-4;
 }
 
 .vocab-card {
-  @apply flex cursor-pointer flex-col justify-between rounded-xl border border-base-300/60 bg-base-100 p-3 text-sm transition-all hover:border-primary/40 hover:shadow-sm;
+  @apply flex flex-col justify-between rounded-xl border border-base-300/60 bg-base-100 p-3 text-sm;
 }
 
 .vocab-card-starred {

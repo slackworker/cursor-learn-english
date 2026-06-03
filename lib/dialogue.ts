@@ -90,10 +90,9 @@ export function getDialogueRounds(params: {
   pageSize?: number;
   from?: string;
   to?: string;
-  highlight?: string;
   conversationId?: string;
 }): { rounds: DialogueRound[]; total: number; truncated: boolean } {
-  const { page = 1, pageSize = 10, from, to, highlight, conversationId } = params;
+  const { page = 1, pageSize = 10, from, to, conversationId } = params;
 
   const { items: prompts, truncated: promptsTruncated } = readPrompts({ from, to });
   const { events, truncated: eventsTruncated } = getEvents(from, to);
@@ -200,19 +199,10 @@ export function getDialogueRounds(params: {
   }
 
   const sorted = rounds.sort((a, b) => b.prompt_timestamp.localeCompare(a.prompt_timestamp));
-  const filtered = !highlight
-    ? sorted
-    : sorted.filter((r) => {
-        const q = highlight.toLowerCase();
-        if (r.prompt.toLowerCase().includes(q)) return true;
-        if (r.response?.text.toLowerCase().includes(q)) return true;
-        if (r.thinking.some((t) => t.text.toLowerCase().includes(q))) return true;
-        return r.tools.some((t) => (t.tool_name || "").toLowerCase().includes(q));
-      });
 
   const byConversation = conversationId
-    ? filtered.filter((r) => r.conversation_id === conversationId)
-    : filtered;
+    ? sorted.filter((r) => r.conversation_id === conversationId)
+    : sorted;
   const total = byConversation.length;
   const start = (page - 1) * pageSize;
   const pageItems = byConversation.slice(start, start + pageSize);

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { Surface } from "@/components/ui/Surface";
 
@@ -79,7 +78,6 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
 }
 
 export function VocabStats() {
-  const router = useRouter();
   const [data, setData] = useState<VocabData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("words");
@@ -323,9 +321,6 @@ export function VocabStats() {
                 <div
                   key={text}
                   className={`vocab-card ${starred ? "vocab-card-starred" : ""}`}
-                  onClick={() => {
-                    router.push(`/thinking?highlight=${encodeURIComponent(text)}`);
-                  }}
                 >
                   <div className="mb-2 flex items-start justify-between gap-1">
                     <div className="break-words font-mono text-xs md:text-sm">
@@ -336,10 +331,7 @@ export function VocabStats() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-xs px-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleStar(text);
-                        }}
+                        onClick={() => toggleStar(text)}
                         aria-label={starred ? "取消生词标记" : "标记为生词"}
                       >
                         {starred ? (

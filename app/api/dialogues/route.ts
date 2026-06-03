@@ -13,14 +13,11 @@ export async function GET(request: NextRequest) {
     searchParams.get("from") ?? undefined,
     searchParams.get("to") ?? undefined
   );
-  const highlight = searchParams.get("highlight") ?? undefined;
-
   const { rounds, total, truncated } = getDialogueRounds({
     page,
     pageSize,
     from,
     to,
-    highlight,
   });
 
   return Response.json({ rounds, total, from, to, pageSize, truncated });
