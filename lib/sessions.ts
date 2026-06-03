@@ -21,6 +21,10 @@ export type SessionSummary = {
   timestamp?: string;
   // sessionStart timestamp
   start?: string;
+  /** Latest afterAgentResponse in this session (preferred list sort key). */
+  last_reply?: string;
+  /** last_reply, else latest user prompt, else session end/start — used for sorting & display. */
+  last_activity?: string;
   is_open?: boolean;
 };
 
@@ -74,7 +78,52 @@ type SummariesCacheEntry = {
 const summariesCache = new Map<string, SummariesCacheEntry>();
 
 function getSummariesCacheSignature(from?: string, to?: string): string {
-  return getMergedReadSignature(getEventsPath(), from, to);
+  return [
+    getMergedReadSignature(getEventsPath(), from, to),
+    getMergedReadSignature(getPromptCorpusPath(), from, to),
+  ].join("::");
+}
+
+function maxTimestamp(current: string | undefined, next: string | undefined): string | undefined {
+  if (!next) return current;
+  if (!current || next.localeCompare(current) > 0) return next;
+  return current;
+}
+
+function buildSessionActivityById(
+  events: CursorEvent[],
+  prompts: PromptRecord[]
+): Map<string, { last_reply?: string; last_prompt?: string }> {
+  const byId = new Map<string, { last_reply?: string; last_prompt?: string }>();
+  const bump = (
+    id: string,
+    field: "last_reply" | "last_prompt",
+    ts: string | undefined
+  ) => {
+    if (!id || !ts) return;
+    const entry = byId.get(id) ?? {};
+    entry[field] = maxTimestamp(entry[field], ts);
+    byId.set(id, entry);
+  };
+
+  for (const e of events) {
+    if (e.event_type !== "afterAgentResponse") continue;
+    bump(getSessionIdFromEvent(e), "last_reply", e.timestamp);
+  }
+  for (const p of prompts) {
+    bump(p.conversation_id, "last_prompt", p.timestamp);
+  }
+  return byId;
+}
+
+function sessionSortKey(session: SessionSummary): string {
+  return (
+    session.last_activity ??
+    session.last_reply ??
+    session.timestamp ??
+    session.start ??
+    ""
+  );
 }
 
 function buildSessionSummaries(from?: string, to?: string): {
@@ -82,6 +131,12 @@ function buildSessionSummaries(from?: string, to?: string): {
   truncated: boolean;
 } {
   const { events, truncated } = getEvents(from, to);
+  const { items: prompts, truncated: promptsTruncated } = readMergedJsonlLinesCached(
+    getPromptCorpusPath(),
+    parseJsonlLine<PromptRecord>,
+    { from, to }
+  );
+  const activityById = buildSessionActivityById(events, prompts);
   const sessionEvents = events.filter((e) => SESSION_EVENT_TYPES.has(e.event_type));
   const sessionEnds = sessionEvents.filter((e) => e.event_type === "sessionEnd");
   const sessionStarts = sessionEvents.filter((e) => e.event_type === "sessionStart");
@@ -115,14 +170,23 @@ function buildSessionSummaries(from?: string, to?: string): {
   const sessions = Array.from(bySessionId.values())
     .map((session) => {
       const hasEnd = Boolean(session.timestamp);
+      const activity = activityById.get(session.session_id);
+      const last_reply = activity?.last_reply;
+      const last_activity =
+        last_reply ??
+        activity?.last_prompt ??
+        session.timestamp ??
+        session.start;
       return {
         ...session,
+        last_reply,
+        last_activity,
         reason: session.reason ?? (hasEnd ? session.reason : "open"),
         is_open: !hasEnd,
       };
     })
     .filter((s) => Boolean(s.start ?? s.timestamp))
-    .sort((a, b) => (b.start ?? b.timestamp ?? "").localeCompare(a.start ?? a.timestamp ?? ""));
+    .sort((a, b) => sessionSortKey(b).localeCompare(sessionSortKey(a)));
 
   const withTranscript = sessions.filter((session) => hasSessionTranscript(session.session_id));
   const titles = getSessionTitles(withTranscript.map((s) => s.session_id));
@@ -144,7 +208,7 @@ function buildSessionSummaries(from?: string, to?: string): {
     return sessionHasContentEvent.get(session.session_id) === true;
   });
 
-  return { sessions: filteredSessions, truncated };
+  return { sessions: filteredSessions, truncated: truncated || promptsTruncated };
 }
 
 export function getSessionSummaries(from?: string, to?: string): {
