@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { ECharts } from "echarts";
 import * as echarts from "echarts";
 import { Surface } from "@/components/ui/Surface";
 
@@ -22,20 +23,75 @@ function rotateHourCounts(counts: number[]): number[] {
   return Array.from({ length: 24 }, (_, i) => counts[(HOUR_AXIS_START + i) % 24] ?? 0);
 }
 
+function buildChartOption(hours: number[]) {
+  const isDark = document.documentElement.getAttribute("data-theme") === "business";
+  const textColor = isDark ? "#a1a1aa" : "#71717a";
+  const gridColor = isDark ? "#3f3f46" : "#e4e4e7";
+  const barColor = isDark ? "#818cf8" : "#6366f1";
+
+  return {
+    tooltip: {
+      trigger: "axis" as const,
+      axisPointer: { type: "shadow" as const },
+      backgroundColor: isDark ? "#27272a" : "#fff",
+      borderColor: gridColor,
+      textStyle: { color: isDark ? "#fafafa" : "#18181b" },
+      formatter: (params: unknown) => {
+        const p = (Array.isArray(params) ? params[0] : params) as {
+          name?: string;
+          value?: number;
+        };
+        return `${p.name ?? ""}<br/>提问 ${p.value ?? 0} 次`;
+      },
+    },
+    grid: { left: "3%", right: "4%", bottom: "12%", top: "10%", containLabel: true },
+    xAxis: {
+      type: "category" as const,
+      data: HOUR_LABELS,
+      axisLabel: {
+        color: textColor,
+        fontSize: 10,
+        interval: 2,
+      },
+      axisLine: { lineStyle: { color: gridColor } },
+    },
+    yAxis: {
+      type: "value" as const,
+      name: "提问数",
+      nameTextStyle: { color: textColor, fontSize: 11 },
+      axisLabel: { color: textColor, fontSize: 11 },
+      splitLine: { lineStyle: { color: gridColor, type: "dashed" as const } },
+    },
+    series: [
+      {
+        name: "提问",
+        type: "bar" as const,
+        data: rotateHourCounts(hours),
+        itemStyle: {
+          color: barColor,
+          borderRadius: [4, 4, 0, 0],
+        },
+        emphasis: { itemStyle: { color: isDark ? "#a5b4fc" : "#4f46e5" } },
+      },
+    ],
+  };
+}
+
 export function ActiveHoursChart({
   onTruncated,
 }: {
   onTruncated?: () => void;
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<ECharts | null>(null);
   const [range, setRange] = useState<ActiveHoursRange>(7);
   const [hours, setHours] = useState<number[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [truncated, setTruncated] = useState(false);
 
   useEffect(() => {
-    setLoading(true);
+    setRefreshing(true);
     setLoadError(false);
     setTruncated(false);
     const to = new Date().toISOString().slice(0, 10);
@@ -55,75 +111,35 @@ export function ActiveHoursChart({
         }
       })
       .catch(() => setLoadError(true))
-      .finally(() => setLoading(false));
+      .finally(() => setRefreshing(false));
   }, [range, onTruncated]);
 
   useEffect(() => {
-    if (!chartRef.current || !hours || loading) return;
+    if (!chartRef.current || !hours) return;
 
-    const isDark = document.documentElement.getAttribute("data-theme") === "business";
-    const textColor = isDark ? "#a1a1aa" : "#71717a";
-    const gridColor = isDark ? "#3f3f46" : "#e4e4e7";
-    const barColor = isDark ? "#818cf8" : "#6366f1";
+    const option = buildChartOption(hours);
+    let chart = chartInstanceRef.current;
+    if (!chart) {
+      chart = echarts.init(chartRef.current);
+      chartInstanceRef.current = chart;
+    }
+    chart.setOption(option, true);
 
-    const chart = echarts.init(chartRef.current);
-    chart.setOption({
-      tooltip: {
-        trigger: "axis",
-        axisPointer: { type: "shadow" },
-        backgroundColor: isDark ? "#27272a" : "#fff",
-        borderColor: gridColor,
-        textStyle: { color: isDark ? "#fafafa" : "#18181b" },
-        formatter: (params: unknown) => {
-          const p = (Array.isArray(params) ? params[0] : params) as {
-            name?: string;
-            value?: number;
-          };
-          return `${p.name ?? ""}<br/>提问 ${p.value ?? 0} 次`;
-        },
-      },
-      grid: { left: "3%", right: "4%", bottom: "12%", top: "10%", containLabel: true },
-      xAxis: {
-        type: "category",
-        data: HOUR_LABELS,
-        axisLabel: {
-          color: textColor,
-          fontSize: 10,
-          interval: 2,
-        },
-        axisLine: { lineStyle: { color: gridColor } },
-      },
-      yAxis: {
-        type: "value",
-        name: "提问数",
-        nameTextStyle: { color: textColor, fontSize: 11 },
-        axisLabel: { color: textColor, fontSize: 11 },
-        splitLine: { lineStyle: { color: gridColor, type: "dashed" } },
-      },
-      series: [
-        {
-          name: "提问",
-          type: "bar",
-          data: rotateHourCounts(hours),
-          itemStyle: {
-            color: barColor,
-            borderRadius: [4, 4, 0, 0],
-          },
-          emphasis: { itemStyle: { color: isDark ? "#a5b4fc" : "#4f46e5" } },
-        },
-      ],
-    });
-
-    const onResize = () => chart.resize();
+    const onResize = () => chart?.resize();
     window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [hours]);
+
+  useEffect(() => {
     return () => {
-      window.removeEventListener("resize", onResize);
-      chart.dispose();
+      chartInstanceRef.current?.dispose();
+      chartInstanceRef.current = null;
     };
-  }, [hours, loading]);
+  }, []);
 
   const total = hours?.reduce((a, b) => a + b, 0) ?? 0;
-  const showTotal = !loading && !loadError && hours;
+  const initialLoading = refreshing && hours === null;
+  const showTotal = hours !== null && !loadError;
 
   return (
     <Surface>
@@ -132,7 +148,11 @@ export function ActiveHoursChart({
           <h3 className="section-title">活跃时段</h3>
           <p className="mt-1 text-sm text-base-content/55">
             过去 {range} 天
-            {showTotal ? ` · 共 ${total} 次提问` : loading ? " · 加载中…" : ""}
+            {showTotal
+              ? ` · 共 ${total} 次提问`
+              : initialLoading
+                ? " · 加载中…"
+                : ""}
             {showTotal ? " · 按本地时区汇总" : ""}
             {truncated ? " · 数据已截断，结果可能不完整" : ""}
           </p>
@@ -152,12 +172,15 @@ export function ActiveHoursChart({
           ))}
         </div>
       </div>
-      {loadError ? (
+      {loadError && hours === null ? (
         <p className="text-sm text-base-content/50">无法加载活跃时段数据</p>
-      ) : loading ? (
+      ) : initialLoading ? (
         <div className="h-72 w-full animate-pulse rounded-lg bg-base-200" />
       ) : (
-        <div ref={chartRef} className="h-72 w-full" />
+        <div
+          ref={chartRef}
+          className={`h-72 w-full transition-opacity duration-150 ${refreshing ? "opacity-60" : "opacity-100"}`}
+        />
       )}
     </Surface>
   );
