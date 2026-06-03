@@ -93,6 +93,7 @@ export function SessionTable() {
                 <td className="p-3 text-zinc-600 dark:text-zinc-400">
                   <Link
                     href={`/sessions/${s.session_id}`}
+                    title={s.session_id}
                     className="block max-w-[28rem] text-blue-600 hover:underline dark:text-blue-400"
                   >
                     <SessionTitleView
@@ -103,7 +104,6 @@ export function SessionTable() {
                       variant="inline"
                     />
                   </Link>
-                  <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{s.session_id?.slice(0, 8)}…</div>
                 </td>
                 <td className="p-3 text-zinc-600 dark:text-zinc-400">
                   {formatLocalDateTime(s.last_activity ?? s.last_reply ?? s.start ?? s.timestamp)}
