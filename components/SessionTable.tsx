@@ -3,11 +3,15 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
+import { SessionTitleView } from "@/components/SessionTitleView";
 import { formatLocalDateTime } from "@/lib/format-datetime";
+import type { DomContextBlock } from "@/lib/parse-dom-context";
 
 type Session = {
   session_id: string;
   title?: string;
+  title_dom_contexts?: DomContextBlock[];
+  title_body?: string;
   reason?: string;
   duration_ms?: number;
   timestamp?: string;
@@ -93,8 +97,17 @@ export function SessionTable() {
             {sessions.map((s) => (
               <tr key={s.session_id} className="border-b border-zinc-100 dark:border-zinc-700">
                 <td className="p-3 text-zinc-600 dark:text-zinc-400">
-                  <Link href={`/sessions/${s.session_id}`} className="block max-w-[28rem] truncate text-blue-600 hover:underline dark:text-blue-400">
-                    {s.title || `会话 ${s.session_id?.slice(0, 8)}…`}
+                  <Link
+                    href={`/sessions/${s.session_id}`}
+                    className="block max-w-[28rem] text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    <SessionTitleView
+                      title={s.title}
+                      domContexts={s.title_dom_contexts}
+                      body={s.title_body}
+                      fallback={`会话 ${s.session_id?.slice(0, 8)}…`}
+                      variant="inline"
+                    />
                   </Link>
                   <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{s.session_id?.slice(0, 8)}…</div>
                 </td>

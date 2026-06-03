@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { DialogueTimeline } from "@/components/DialogueTimeline";
+import { SessionTitleView } from "@/components/SessionTitleView";
 import { UserPromptView } from "@/components/UserPromptView";
+import type { DomContextBlock } from "@/lib/parse-dom-context";
 import { formatLocalDateTime } from "@/lib/format-datetime";
 
 type SessionDetail = {
   session_id: string;
   title?: string;
+  title_dom_contexts?: DomContextBlock[];
+  title_body?: string;
   reason?: string;
   duration_ms?: number;
   timestamp?: string;
@@ -164,7 +168,15 @@ export default function SessionDetailPage() {
       <Link href="/sessions" className="mb-4 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400">
         ← 返回会话列表
       </Link>
-      <h1 className="text-2xl font-semibold">{session.title || `会话 ${session.session_id.slice(0, 8)}…`}</h1>
+      <h1>
+        <SessionTitleView
+          title={session.title}
+          domContexts={session.title_dom_contexts}
+          body={session.title_body}
+          fallback={`会话 ${session.session_id.slice(0, 8)}…`}
+          variant="heading"
+        />
+      </h1>
       <p className="mt-1 font-mono text-xs opacity-60">{session.session_id}</p>
 
       <section className="mt-6 grid gap-3 md:grid-cols-4">

@@ -1,5 +1,10 @@
 import { getEvents, getEventsPath, type CursorEvent } from "./events";
-import { getSessionTitles, hasSessionTranscript } from "./session-titles";
+import {
+  getSessionTitles,
+  hasSessionTranscript,
+  type ParsedSessionTitle,
+} from "./session-titles";
+import type { DomContextBlock } from "./parse-dom-context";
 import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./thinking";
 import { getMergedReadSignature, readMergedJsonlLinesCached } from "./jsonl-daily";
 import { getDialogueRounds, type DialogueRound } from "./dialogue";
@@ -8,6 +13,8 @@ import { getTranscriptTurns, type TranscriptTurn } from "./session-transcript";
 export type SessionSummary = {
   session_id: string;
   title?: string;
+  title_dom_contexts?: DomContextBlock[];
+  title_body?: string;
   reason?: string;
   duration_ms?: number;
   // sessionEnd timestamp
@@ -119,10 +126,16 @@ function buildSessionSummaries(from?: string, to?: string): {
 
   const withTranscript = sessions.filter((session) => hasSessionTranscript(session.session_id));
   const titles = getSessionTitles(withTranscript.map((s) => s.session_id));
-  const sessionsWithTitle = withTranscript.map((session) => ({
-    ...session,
-    title: titles.get(session.session_id),
-  }));
+  const sessionsWithTitle = withTranscript.map((session) => {
+    const parsed = titles.get(session.session_id) as ParsedSessionTitle | undefined;
+    return {
+      ...session,
+      title: parsed?.plain,
+      title_dom_contexts:
+        parsed && parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
+      title_body: parsed?.body || undefined,
+    };
+  });
   const filteredSessions = sessionsWithTitle.filter((session) => {
     // 过滤仅打开后立刻关闭、无实际交互痕迹的空会话
     if (session.is_open) return true;

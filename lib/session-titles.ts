@@ -1,8 +1,20 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import {
+  domContextChipLabel,
+  parseUserPromptWithDomContext,
+  type DomContextBlock,
+} from "./parse-dom-context";
 
 const DEFAULT_MAX_TITLE_LENGTH = 60;
+
+export type ParsedSessionTitle = {
+  /** Plain text for search, filters, and legacy clients. */
+  plain: string;
+  domContexts: DomContextBlock[];
+  body: string;
+};
 
 function getDefaultTranscriptRoot(): string {
   const homeDir = os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir();
@@ -22,36 +34,26 @@ function clipTitle(value: string, maxLen = DEFAULT_MAX_TITLE_LENGTH): string {
   return `${value.slice(0, maxLen)}…`;
 }
 
-function normalizeTitleFromText(rawText: string): string {
-  // Prefer explicit user_query wrapper first.
+export function parseSessionTitleFromText(rawText: string): ParsedSessionTitle {
   const userQueryMatch = rawText.match(/<user_query>\s*([\s\S]*?)\s*<\/user_query>/i);
   const base = userQueryMatch?.[1] ?? rawText;
-  const cleaned = safeTrim(base.replace(/<[^>]+>/g, " "));
-  return clipTitle(cleaned);
+  const { domContexts, body } = parseUserPromptWithDomContext(base);
+  const displayBody = body.trim();
+  const chipFallback = domContexts
+    .map((block) => domContextChipLabel(block.htmlElement))
+    .join(" ");
+  const plainSource =
+    displayBody ||
+    chipFallback ||
+    safeTrim(base.replace(/<[^>]+>/g, " "));
+  return {
+    plain: clipTitle(plainSource),
+    domContexts,
+    body: displayBody,
+  };
 }
 
-function parseFirstUserTextFromTranscriptLine(line: string): string | null {
-  try {
-    const record = JSON.parse(line) as {
-      role?: string;
-      message?: {
-        content?: Array<{ type?: string; text?: string }>;
-      };
-    };
-    if (record.role !== "user") return null;
-    const blocks = record.message?.content ?? [];
-    for (const block of blocks) {
-      if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
-        return normalizeTitleFromText(block.text);
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function readTranscriptTitle(sessionId: string): string | null {
+function readTranscriptTitleParts(sessionId: string): ParsedSessionTitle | null {
   const root = getTranscriptRoot();
   const transcriptPath = path.join(root, sessionId, `${sessionId}.jsonl`);
   if (!fs.existsSync(transcriptPath)) return null;
@@ -60,8 +62,23 @@ function readTranscriptTitle(sessionId: string): string | null {
   const lines = content.split("\n");
   for (const line of lines) {
     if (!line.trim()) continue;
-    const title = parseFirstUserTextFromTranscriptLine(line);
-    if (title) return title;
+    try {
+      const record = JSON.parse(line) as {
+        role?: string;
+        message?: {
+          content?: Array<{ type?: string; text?: string }>;
+        };
+      };
+      if (record.role !== "user") continue;
+      const blocks = record.message?.content ?? [];
+      for (const block of blocks) {
+        if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
+          return parseSessionTitleFromText(block.text);
+        }
+      }
+    } catch {
+      continue;
+    }
   }
   return null;
 }
@@ -78,12 +95,12 @@ export function hasSessionTranscript(sessionId: string): boolean {
   }
 }
 
-export function getSessionTitles(sessionIds: string[]): Map<string, string> {
-  const result = new Map<string, string>();
+export function getSessionTitles(sessionIds: string[]): Map<string, ParsedSessionTitle> {
+  const result = new Map<string, ParsedSessionTitle>();
   for (const sessionId of sessionIds) {
     if (!sessionId) continue;
-    const title = readTranscriptTitle(sessionId);
-    if (title) result.set(sessionId, title);
+    const parsed = readTranscriptTitleParts(sessionId);
+    if (parsed) result.set(sessionId, parsed);
   }
   return result;
 }
