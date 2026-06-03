@@ -52,11 +52,11 @@ export function StatCards({
   }
 
   const cards = [
-    { label: "提问数", value: stats.prompts },
-    { label: "工具调用", value: stats.toolCalls },
     { label: "会话数", value: stats.sessions },
-    { label: "Thinking 条数", value: stats.thoughts },
+    { label: "用户提示词", value: stats.prompts },
+    { label: "Thinking", value: stats.thoughts },
     { label: "文件编辑", value: stats.fileEdits },
+    { label: "工具调用", value: stats.toolCalls },
   ];
 
   return (
