@@ -3,8 +3,8 @@
 import Link from "next/link";
 import {
   BookOpen,
-  Brain,
   GraduationCap,
+  ScrollText,
   LayoutDashboard,
   MessagesSquare,
   Moon,
@@ -22,7 +22,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "首页", icon: LayoutDashboard },
   { href: "/sessions", label: "会话", icon: MessagesSquare },
   { href: "/vocab", label: "词汇", icon: BookOpen },
-  { href: "/thinking", label: "语料", icon: Brain },
+  { href: "/thinking", label: "语料", icon: ScrollText },
 ];
 
 const LIGHT_THEME = "corporate";
