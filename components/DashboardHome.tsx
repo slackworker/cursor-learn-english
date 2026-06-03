@@ -22,7 +22,7 @@ export function DashboardHome() {
 
       <section className="grid gap-6 lg:grid-cols-5 lg:gap-8">
         <div className="lg:col-span-3">
-          <ActiveHoursChart days={7} />
+          <ActiveHoursChart />
         </div>
         <div className="lg:col-span-2">
           <RecentSessions limit={5} />

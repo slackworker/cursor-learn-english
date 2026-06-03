@@ -11,27 +11,35 @@ const HOUR_LABELS = Array.from(
   (_, i) => `${(HOUR_AXIS_START + i) % 24}时`
 );
 
+type ActiveHoursRange = 7 | 30;
+
+const RANGES: { value: ActiveHoursRange; label: string }[] = [
+  { value: 7, label: "7 天" },
+  { value: 30, label: "30 天" },
+];
+
 function rotateHourCounts(counts: number[]): number[] {
   return Array.from({ length: 24 }, (_, i) => counts[(HOUR_AXIS_START + i) % 24] ?? 0);
 }
 
 export function ActiveHoursChart({
-  days = 7,
   onTruncated,
 }: {
-  days?: number;
   onTruncated?: () => void;
 }) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const [range, setRange] = useState<ActiveHoursRange>(7);
   const [hours, setHours] = useState<number[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [truncated, setTruncated] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setLoadError(false);
+    setTruncated(false);
     const to = new Date().toISOString().slice(0, 10);
-    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    const from = new Date(Date.now() - range * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
     const tzOffset = new Date().getTimezoneOffset();
@@ -41,14 +49,17 @@ export function ActiveHoursChart({
       .then((r) => r.json())
       .then((res) => {
         setHours(Array.isArray(res.promptsByHour) ? res.promptsByHour : null);
-        if (res.truncated) onTruncated?.();
+        if (res.truncated) {
+          setTruncated(true);
+          onTruncated?.();
+        }
       })
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
-  }, [days, onTruncated]);
+  }, [range, onTruncated]);
 
   useEffect(() => {
-    if (!chartRef.current || !hours) return;
+    if (!chartRef.current || !hours || loading) return;
 
     const isDark = document.documentElement.getAttribute("data-theme") === "business";
     const textColor = isDark ? "#a1a1aa" : "#71717a";
@@ -109,31 +120,45 @@ export function ActiveHoursChart({
       window.removeEventListener("resize", onResize);
       chart.dispose();
     };
-  }, [hours]);
+  }, [hours, loading]);
 
-  if (loading) {
-    return <div className="surface h-80 animate-pulse bg-base-200" />;
-  }
-
-  if (loadError || !hours) {
-    return (
-      <Surface>
-        <p className="text-sm text-base-content/50">无法加载活跃时段数据</p>
-      </Surface>
-    );
-  }
-
-  const total = hours.reduce((a, b) => a + b, 0);
+  const total = hours?.reduce((a, b) => a + b, 0) ?? 0;
+  const showTotal = !loading && !loadError && hours;
 
   return (
     <Surface>
-      <div className="mb-4">
-        <h3 className="section-title">活跃时段</h3>
-        <p className="mt-1 text-sm text-base-content/55">
-          过去 {days} 天 · 按本地时区 · 共 {total} 次提问
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="section-title">活跃时段</h3>
+          <p className="mt-1 text-sm text-base-content/55">
+            过去 {range} 天
+            {showTotal ? ` · 共 ${total} 次提问` : loading ? " · 加载中…" : ""}
+            {showTotal ? " · 按本地时区汇总" : ""}
+            {truncated ? " · 数据已截断，结果可能不完整" : ""}
+          </p>
+        </div>
+        <div className="toolbar-tabs shrink-0" role="tablist" aria-label="活跃时段范围">
+          {RANGES.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={range === value}
+              className={`toolbar-tab ${range === value ? "toolbar-tab-active" : ""}`}
+              onClick={() => setRange(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      <div ref={chartRef} className="h-72 w-full" />
+      {loadError ? (
+        <p className="text-sm text-base-content/50">无法加载活跃时段数据</p>
+      ) : loading ? (
+        <div className="h-72 w-full animate-pulse rounded-lg bg-base-200" />
+      ) : (
+        <div ref={chartRef} className="h-72 w-full" />
+      )}
     </Surface>
   );
 }
