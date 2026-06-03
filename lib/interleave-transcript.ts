@@ -57,21 +57,35 @@ export function assignStepTimestamps(
   });
 }
 
+function isTextOnlyStep(step: TranscriptAssistantStep): boolean {
+  return step.items.length > 0 && step.items.every((i) => i.type === "text");
+}
+
+/** Trailing assistant replies (text-only, no postToolUse) — attach after last thinking. */
+function splitTrailingTextOnlySteps(
+  steps: TranscriptAssistantStep[],
+  hookAnchored: (string | undefined)[]
+): { body: TranscriptAssistantStep[]; trailing: TranscriptAssistantStep[]; trailingFrom: number } {
+  let splitAt = steps.length;
+  while (splitAt > 0) {
+    const i = splitAt - 1;
+    if (!isTextOnlyStep(steps[i]) || hookAnchored[i]) break;
+    splitAt = i;
+  }
+  return {
+    body: steps.slice(0, splitAt),
+    trailing: steps.slice(splitAt),
+    trailingFrom: splitAt,
+  };
+}
+
 function fillStepTimestamps(
   stepTs: (string | undefined)[],
-  steps: TranscriptAssistantStep[]
+  steps: TranscriptAssistantStep[],
+  hookAnchored: (string | undefined)[]
 ): (string | undefined)[] {
   const filled = [...stepTs];
-  // Only backward-fill gaps (next known anchor), never forward-fill early ts onto later steps.
-  for (let i = filled.length - 2; i >= 0; i -= 1) {
-    if (filled[i]) continue;
-    for (let j = i + 1; j < filled.length; j += 1) {
-      if (filled[j]) {
-        filled[i] = filled[j];
-        break;
-      }
-    }
-  }
+  // Forward-fill only non-text-only gaps after the last tool anchor.
   let lastToolIdx = -1;
   for (let i = filled.length - 1; i >= 0; i -= 1) {
     if (filled[i] && stepToolNames(steps[i]).length > 0) {
@@ -81,41 +95,38 @@ function fillStepTimestamps(
   }
   if (lastToolIdx >= 0) {
     for (let i = lastToolIdx + 1; i < filled.length; i += 1) {
-      if (!filled[i]) filled[i] = filled[lastToolIdx];
+      if (filled[i]) continue;
+      if (isTextOnlyStep(steps[i]) && !hookAnchored[i]) continue;
+      filled[i] = filled[lastToolIdx];
     }
   }
   return filled;
 }
 
 /**
- * Cursor order per turn: optional steps before first thinking,
- * then (thinking → steps)*, then optional tail (e.g. final reply).
+ * Cursor order per turn: (thinking → step)*, then optional tail steps
+ * (e.g. final reply). Matches interleaveByThinkingPhases in dialogue-timeline.
  */
 function interleaveByIndex(
   sortedThinking: TimelineThinking[],
   steps: TranscriptAssistantStep[]
 ): InterleavedTranscriptPhase[] {
   const phases: InterleavedTranscriptPhase[] = [];
-  const lead = Math.max(0, steps.length - sortedThinking.length);
-  if (lead > 0) phases.push({ steps: steps.slice(0, lead) });
-
-  let si = lead;
   for (let ti = 0; ti < sortedThinking.length; ti += 1) {
     const chunk: TranscriptAssistantStep[] = [];
-    if (si < steps.length) {
-      chunk.push(steps[si]);
-      si += 1;
-    }
+    if (ti < steps.length) chunk.push(steps[ti]);
     phases.push({ thinking: sortedThinking[ti], steps: chunk });
   }
-  if (si < steps.length) phases.push({ steps: steps.slice(si) });
+  if (steps.length > sortedThinking.length) {
+    phases.push({ steps: steps.slice(sortedThinking.length) });
+  }
   return phases;
 }
 
 export function buildInterleavedTranscriptPhases(
   thinking: TimelineThinking[],
   steps: TranscriptAssistantStep[],
-  tools: TimelineTool[]
+  tools: TimelineTool[],
 ): InterleavedTranscriptPhase[] {
   if (steps.length === 0) {
     return thinking.map((t) => ({ thinking: t, steps: [] }));
@@ -127,8 +138,12 @@ export function buildInterleavedTranscriptPhases(
   const sortedThinking = [...thinking].sort((a, b) =>
     a.timestamp.localeCompare(b.timestamp)
   );
-  const stepTs = fillStepTimestamps(assignStepTimestamps(steps, tools), steps);
-  if (!stepTs.some(Boolean)) {
+  const hookAnchored = assignStepTimestamps(steps, tools);
+  const { body, trailing, trailingFrom } = splitTrailingTextOnlySteps(steps, hookAnchored);
+  const bodyHook = hookAnchored.slice(0, body.length);
+  let bodyTs = fillStepTimestamps(bodyHook, body, bodyHook);
+
+  if (!bodyTs.some(Boolean) && trailing.length === 0) {
     return interleaveByIndex(sortedThinking, steps);
   }
 
@@ -136,10 +151,10 @@ export function buildInterleavedTranscriptPhases(
   let si = 0;
 
   const prefix: TranscriptAssistantStep[] = [];
-  while (si < steps.length) {
-    const ts = stepTs[si];
+  while (si < body.length) {
+    const ts = bodyTs[si];
     if (ts && ts < sortedThinking[0].timestamp) {
-      prefix.push(steps[si]);
+      prefix.push(body[si]);
       si += 1;
     } else break;
   }
@@ -150,19 +165,19 @@ export function buildInterleavedTranscriptPhases(
     const tNext = sortedThinking[ti + 1]?.timestamp;
     const chunk: TranscriptAssistantStep[] = [];
 
-    while (si < steps.length) {
-      const ts = stepTs[si];
+    while (si < body.length) {
+      const ts = bodyTs[si];
       if (ts) {
         if (ts < tCur) break;
-        if (tNext && ts >= tNext) break;
-        chunk.push(steps[si]);
+        if (tNext && ts > tNext) break;
+        chunk.push(body[si]);
         si += 1;
         continue;
       }
-      const stepsLeft = steps.length - si;
+      const stepsLeft = body.length - si;
       const thinkLeft = sortedThinking.length - ti;
       if (stepsLeft > thinkLeft) {
-        chunk.push(steps[si]);
+        chunk.push(body[si]);
         si += 1;
       } else break;
     }
@@ -170,9 +185,20 @@ export function buildInterleavedTranscriptPhases(
     phases.push({ thinking: sortedThinking[ti], steps: chunk });
   }
 
-  if (si < steps.length) {
-    phases.push({ steps: steps.slice(si) });
+  if (si < body.length) {
+    phases.push({ steps: body.slice(si) });
   }
+
+  if (trailing.length > 0) {
+    const lastThinkingPhase = [...phases].reverse().find((p) => p.thinking);
+    if (lastThinkingPhase) {
+      lastThinkingPhase.steps.push(...trailing);
+    } else {
+      phases.push({ steps: trailing });
+    }
+  }
+
+  void trailingFrom;
 
   return phases;
 }
