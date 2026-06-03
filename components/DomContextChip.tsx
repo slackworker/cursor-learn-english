@@ -6,32 +6,25 @@ import {
   type DomContextBlock,
 } from "@/lib/parse-dom-context";
 
-/** Cursor-style browser target: hollow window + cyan pointer at bottom-right. */
+const CURSOR_DOM_TARGET_MASK = "url(/cursor-box-ref.png)";
+
+/** Cursor DOM target silhouette (PNG mask → `currentColor`). */
 function BrowserTargetIcon() {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
+    <span
       aria-hidden
-      className="shrink-0"
-    >
-      <rect
-        x="2"
-        y="2.5"
-        width="8"
-        height="6.5"
-        rx="1"
-        stroke="#8b949e"
-        strokeWidth="1.15"
-      />
-      <path
-        fill="#38bdf8"
-        d="M8.15 7.65v5.05h1.05l1.28-1.62 1.98 2.82.95-.67-1.98-2.82 1.92-.72H8.15Z"
-      />
-    </svg>
+      className="inline-block h-3 w-3.5 shrink-0 bg-current"
+      style={{
+        maskImage: CURSOR_DOM_TARGET_MASK,
+        WebkitMaskImage: CURSOR_DOM_TARGET_MASK,
+        maskSize: "100% 100%",
+        WebkitMaskSize: "100% 100%",
+        maskRepeat: "no-repeat",
+        WebkitMaskRepeat: "no-repeat",
+        maskPosition: "center",
+        WebkitMaskPosition: "center",
+      }}
+    />
   );
 }
 
@@ -47,7 +40,7 @@ export function DomContextChip({
 
   return (
     <span
-      className={`inline-flex max-w-full align-middle items-center gap-1 rounded-[5px] bg-[#2d333b] px-1.5 py-px font-mono text-[12px] leading-none text-sky-400 ${className}`}
+      className={`inline-flex max-w-full align-middle items-center gap-1 rounded-[5px] px-1.5 py-px font-mono text-[12px] leading-none [html[data-theme=corporate]_&]:border [html[data-theme=corporate]_&]:border-sky-200/80 [html[data-theme=corporate]_&]:bg-sky-50 [html[data-theme=corporate]_&]:text-sky-600 [html[data-theme=business]_&]:border-transparent [html[data-theme=business]_&]:bg-[#2d333b] [html[data-theme=business]_&]:text-sky-400 ${className}`}
       title={tooltip}
     >
       <BrowserTargetIcon />
