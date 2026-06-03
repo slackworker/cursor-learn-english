@@ -171,7 +171,12 @@ type MergedCacheEntry<T> = {
 
 const mergedCache = new Map<string, MergedCacheEntry<unknown>>();
 
-function mergedSignature(basePath: string, from?: string, to?: string): string {
+/** File mtime/size signature for merged JSONL reads (cache invalidation). */
+export function getMergedReadSignature(
+  basePath: string,
+  from?: string,
+  to?: string
+): string {
   const paths = resolveReadPaths(basePath, from, to);
   const parts: string[] = [];
   for (const p of paths) {
@@ -191,7 +196,7 @@ export function readMergedJsonlLinesCached<T>(
   opts?: { from?: string; to?: string }
 ): ReadJsonlResult<T> {
   const cacheKey = `${basePath}::${opts?.from ?? ""}::${opts?.to ?? ""}`;
-  const signature = mergedSignature(basePath, opts?.from, opts?.to);
+  const signature = getMergedReadSignature(basePath, opts?.from, opts?.to);
   const hit = mergedCache.get(cacheKey) as MergedCacheEntry<T> | undefined;
   if (hit && hit.signature === signature) {
     return hit.result;

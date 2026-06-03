@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { getSessionSummaries } from "@/lib/sessions";
+import { getEventsPath } from "@/lib/events";
+import { getMergedReadSignature } from "@/lib/jsonl-daily";
 import {
   DEFAULT_SESSIONS_LOOKBACK_DAYS,
   normalizeDateRange,
@@ -21,14 +23,32 @@ export async function GET(request: NextRequest) {
   const { sessions, truncated } = getSessionSummaries(from, to);
   const pagedSessions = sessions.slice(offset, offset + limit);
   const hasMore = offset + pagedSessions.length < sessions.length;
-  return Response.json({
-    sessions: pagedSessions,
-    from,
-    to,
-    truncated,
-    hasMore,
-    total: sessions.length,
-    offset,
-    limit,
-  });
+  const etag = `"${getMergedReadSignature(getEventsPath(), from, to)}"`;
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        ETag: etag,
+        "Cache-Control": "private, max-age=30",
+      },
+    });
+  }
+  return Response.json(
+    {
+      sessions: pagedSessions,
+      from,
+      to,
+      truncated,
+      hasMore,
+      total: sessions.length,
+      offset,
+      limit,
+    },
+    {
+      headers: {
+        ETag: etag,
+        "Cache-Control": "private, max-age=30",
+      },
+    }
+  );
 }

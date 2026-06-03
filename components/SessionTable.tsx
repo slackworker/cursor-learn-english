@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 
 type Session = {
   session_id: string;
@@ -13,57 +14,55 @@ type Session = {
   is_open?: boolean;
 };
 
-export function SessionTable() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const PAGE_SIZE = 20;
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+type SessionsResponse = {
+  sessions: Session[];
+  total: number;
+};
 
-  async function loadSessions(nextPage: number) {
-    const url = new URL("/api/sessions", window.location.origin);
-    url.searchParams.set("offset", String((nextPage - 1) * PAGE_SIZE));
-    url.searchParams.set("limit", String(PAGE_SIZE));
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      throw new Error("加载会话失败");
-    }
-    const result = await response.json();
-    const nextSessions = Array.isArray(result.sessions) ? (result.sessions as Session[]) : ([] as Session[]);
-    return {
-      sessions: nextSessions,
-      total: typeof result.total === "number" ? result.total : 0,
-    };
+const PAGE_SIZE = 20;
+
+function sessionsKey(page: number): string {
+  const url = new URL("/api/sessions", typeof window === "undefined" ? "http://localhost" : window.location.origin);
+  url.searchParams.set("offset", String((page - 1) * PAGE_SIZE));
+  url.searchParams.set("limit", String(PAGE_SIZE));
+  return url.pathname + url.search;
+}
+
+function formatMs(ms?: number) {
+  if (ms == null) return "—";
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60000).toFixed(1)}min`;
+}
+
+function formatLocalTime(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value.slice(0, 19).replace("T", " ");
   }
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
-    loadSessions(page)
-      .then((res) => {
-        if (cancelled) return;
-        setSessions(res.sessions);
-        setTotal(res.total);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setSessions([]);
-        setTotal(0);
-        setLoadError("加载失败，请稍后重试。");
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [page]);
+export function SessionTable() {
+  const [page, setPage] = useState(1);
+  const { data, error, isLoading, isValidating } = useSWR<SessionsResponse>(
+    sessionsKey(page)
+  );
 
-  if (loading) {
+  const sessions = data?.sessions ?? [];
+  const total = data?.total ?? 0;
+  const loadError = error ? "加载失败，请稍后重试。" : null;
+  const showInitialLoading = isLoading && sessions.length === 0;
+
+  if (showInitialLoading) {
     return <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">加载中…</div>;
   }
 
@@ -75,35 +74,12 @@ export function SessionTable() {
     );
   }
 
-  if (sessions.length === 0) {
+  if (!loadError && !isValidating && sessions.length === 0) {
     return (
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
         <p className="text-zinc-500 dark:text-zinc-400">暂无会话记录。请确保 Cursor Hooks 已配置 sessionStart / sessionEnd。</p>
       </div>
     );
-  }
-
-  function formatMs(ms?: number) {
-    if (ms == null) return "—";
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    return `${(ms / 60000).toFixed(1)}min`;
-  }
-
-  function formatLocalTime(value?: string) {
-    if (!value) return "—";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return value.slice(0, 19).replace("T", " ");
-    }
-    return new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).format(date);
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -112,7 +88,14 @@ export function SessionTable() {
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+      {isValidating ? (
+        <p className="text-right text-xs text-zinc-400 dark:text-zinc-500">更新中…</p>
+      ) : null}
+      <div
+        className={`overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900 ${
+          isValidating && sessions.length > 0 ? "opacity-80 transition-opacity" : ""
+        }`}
+      >
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
@@ -148,7 +131,7 @@ export function SessionTable() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled={!canPrev}
+            disabled={!canPrev || isValidating}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             className="rounded border border-zinc-300 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600"
           >
@@ -157,7 +140,7 @@ export function SessionTable() {
           <span>第 {page} / {totalPages} 页</span>
           <button
             type="button"
-            disabled={!canNext}
+            disabled={!canNext || isValidating}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             className="rounded border border-zinc-300 px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600"
           >

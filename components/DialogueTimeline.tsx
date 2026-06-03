@@ -15,6 +15,7 @@ import {
   toolUseLabel,
   type TranscriptAssistantStep,
   type TranscriptContentItem,
+  type TranscriptToolUseItem,
 } from "@/lib/transcript-content";
 
 function ThinkingBlock({
@@ -116,6 +117,49 @@ function ResponseBlock({
   );
 }
 
+function summarizeTranscriptToolNames(tools: TranscriptToolUseItem[]): string {
+  const counts = new Map<string, number>();
+  for (const tool of tools) {
+    counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([name, count]) => (count > 1 ? `${name}×${count}` : name))
+    .join(", ");
+}
+
+function TranscriptToolGroupBlock({
+  tools,
+  blockKey,
+}: {
+  tools: TranscriptToolUseItem[];
+  blockKey: string;
+}) {
+  const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
+  return (
+    <details
+      key={blockKey}
+      className="collapse collapse-arrow border border-base-300 bg-base-100"
+    >
+      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+        工具
+        {` · ${countLabel} · ${summarizeTranscriptToolNames(tools)}`}
+      </summary>
+      <div className="collapse-content pt-1">
+        <div className="flex flex-wrap gap-1.5">
+          {tools.map((item, i) => (
+            <TranscriptToolUseChip
+              key={`${blockKey}-${i}`}
+              name={item.name}
+              input={item.input}
+            />
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
 function TranscriptToolUseChip({
   name,
   input,
@@ -176,41 +220,31 @@ function TranscriptStepView({
   step: TranscriptAssistantStep;
   stepIdx: number;
 }) {
-        const toolRun: TranscriptContentItem[] = [];
-        const flushTools = (key: string) => {
-          if (toolRun.length === 0) return null;
-          const batch = toolRun.splice(0, toolRun.length);
-          return (
-            <div key={key} className="flex flex-wrap gap-1.5">
-              {batch.map((item, i) => (
-                <TranscriptContentItemView
-                  key={`${key}-${i}`}
-                  item={item}
-                  itemKey={`${key}-${i}`}
-                />
-              ))}
-            </div>
-          );
-        };
+  const toolRun: TranscriptToolUseItem[] = [];
+  const flushTools = (key: string) => {
+    if (toolRun.length === 0) return null;
+    const batch = toolRun.splice(0, toolRun.length);
+    return <TranscriptToolGroupBlock key={key} blockKey={key} tools={batch} />;
+  };
 
-        const rows: ReactNode[] = [];
-        step.items.forEach((item, i) => {
-          if (item.type === "tool_use") {
-            toolRun.push(item);
-            return;
-          }
-          const toolRow = flushTools(`step-${stepIdx}-tools-before-${i}`);
-          if (toolRow) rows.push(toolRow);
-          rows.push(
-            <TranscriptContentItemView
-              key={`step-${stepIdx}-item-${i}`}
-              item={item}
-              itemKey={`step-${stepIdx}-item-${i}`}
-            />
-          );
-        });
-        const tailTools = flushTools(`step-${stepIdx}-tools-tail`);
-        if (tailTools) rows.push(tailTools);
+  const rows: ReactNode[] = [];
+  step.items.forEach((item, i) => {
+    if (item.type === "tool_use") {
+      toolRun.push(item);
+      return;
+    }
+    const toolRow = flushTools(`step-${stepIdx}-tools-before-${i}`);
+    if (toolRow) rows.push(toolRow);
+    rows.push(
+      <TranscriptContentItemView
+        key={`step-${stepIdx}-item-${i}`}
+        item={item}
+        itemKey={`step-${stepIdx}-item-${i}`}
+      />
+    );
+  });
+  const tailTools = flushTools(`step-${stepIdx}-tools-tail`);
+  if (tailTools) rows.push(tailTools);
 
   return (
     <div

@@ -1,7 +1,7 @@
-import { getEvents, type CursorEvent } from "./events";
+import { getEvents, getEventsPath, type CursorEvent } from "./events";
 import { getSessionTitles, hasSessionTranscript } from "./session-titles";
 import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./thinking";
-import { readMergedJsonlLinesCached } from "./jsonl-daily";
+import { getMergedReadSignature, readMergedJsonlLinesCached } from "./jsonl-daily";
 import { getDialogueRounds, type DialogueRound } from "./dialogue";
 import { getTranscriptTurns, type TranscriptTurn } from "./session-transcript";
 
@@ -59,7 +59,18 @@ function getSessionIdFromEvent(event: CursorEvent): string {
   return (event as { session_id?: string }).session_id ?? event.conversation_id ?? "";
 }
 
-export function getSessionSummaries(from?: string, to?: string): {
+type SummariesCacheEntry = {
+  signature: string;
+  result: { sessions: SessionSummary[]; truncated: boolean };
+};
+
+const summariesCache = new Map<string, SummariesCacheEntry>();
+
+function getSummariesCacheSignature(from?: string, to?: string): string {
+  return getMergedReadSignature(getEventsPath(), from, to);
+}
+
+function buildSessionSummaries(from?: string, to?: string): {
   sessions: SessionSummary[];
   truncated: boolean;
 } {
@@ -105,14 +116,14 @@ export function getSessionSummaries(from?: string, to?: string): {
     })
     .filter((s) => Boolean(s.start ?? s.timestamp))
     .sort((a, b) => (b.start ?? b.timestamp ?? "").localeCompare(a.start ?? a.timestamp ?? ""));
-  const titles = getSessionTitles(sessions.map((s) => s.session_id));
-  const sessionsWithTitle = sessions.map((session) => ({
+
+  const withTranscript = sessions.filter((session) => hasSessionTranscript(session.session_id));
+  const titles = getSessionTitles(withTranscript.map((s) => s.session_id));
+  const sessionsWithTitle = withTranscript.map((session) => ({
     ...session,
     title: titles.get(session.session_id),
   }));
   const filteredSessions = sessionsWithTitle.filter((session) => {
-    // 仅展示当前项目 transcript 可见的会话，避免全局 events 混入其它项目会话。
-    if (!hasSessionTranscript(session.session_id)) return false;
     // 过滤仅打开后立刻关闭、无实际交互痕迹的空会话
     if (session.is_open) return true;
     const hasTitle = Boolean(session.title?.trim());
@@ -121,6 +132,27 @@ export function getSessionSummaries(from?: string, to?: string): {
   });
 
   return { sessions: filteredSessions, truncated };
+}
+
+export function getSessionSummaries(from?: string, to?: string): {
+  sessions: SessionSummary[];
+  truncated: boolean;
+} {
+  const cacheKey = `${from ?? ""}::${to ?? ""}`;
+  const signature = getSummariesCacheSignature(from, to);
+  const hit = summariesCache.get(cacheKey);
+  if (hit && hit.signature === signature) {
+    return hit.result;
+  }
+
+  const result = buildSessionSummaries(from, to);
+  summariesCache.set(cacheKey, { signature, result });
+  return result;
+}
+
+/** Test-only: clear aggregated session summaries cache. */
+export function clearSessionSummariesCache(): void {
+  summariesCache.clear();
 }
 
 export function getSessionDetail(sessionId: string): SessionDetail | null {
