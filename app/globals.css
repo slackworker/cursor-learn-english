@@ -32,26 +32,6 @@ html {
 }
 
 /* ── Layout ── */
-.page-shell {
-  @apply mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10;
-}
-
-.page-header {
-  @apply mb-8;
-}
-
-.page-header-compact {
-  @apply mb-6;
-}
-
-.page-title {
-  @apply text-2xl font-semibold tracking-tight text-base-content sm:text-3xl;
-}
-
-.page-desc {
-  @apply mt-2 max-w-2xl text-sm leading-relaxed text-base-content/55;
-}
-
 .section-title {
   @apply mb-4 text-xs font-semibold uppercase tracking-wider text-base-content/45;
 }

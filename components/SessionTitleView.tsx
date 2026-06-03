@@ -54,7 +54,7 @@ export function SessionTitleView({
 
   const textClass =
     variant === "heading"
-      ? "text-2xl font-semibold"
+      ? "font-semibold text-inherit"
       : "block min-w-0 truncate text-inherit";
 
   if (!hasDom) {
