@@ -105,7 +105,7 @@ function ResponseBlock({
 }) {
   const timeLabel = formatTimelineTime(block.timestamp);
   return (
-    <div key={blockKey} className="border-t border-success/20 pt-3 first:border-t-0 first:pt-0">
+    <div key={blockKey}>
       {(timeLabel || block.data.model) && (
         <div className="mb-1 text-[11px] opacity-60">
           {timeLabel}
@@ -249,7 +249,7 @@ function TranscriptStepView({
   return (
     <div
       key={`step-${stepIdx}`}
-      className="border-t border-success/20 pt-3 first:border-t-0 first:pt-0 space-y-2"
+      className="space-y-2"
     >
       {rows}
     </div>
