@@ -7,7 +7,7 @@ export default function ThinkingPage() {
   return (
     <PageShell
       title="完整对话"
-      description="按整轮对话展示用户问题、助手完整回复、Thinking 与工具调用轨迹。"
+      description="按整轮对话展示用户提示词、助手完整回复、Thinking 与工具调用轨迹。"
     >
       <Suspense fallback={<LoadingState />}>
         <ThinkingList />

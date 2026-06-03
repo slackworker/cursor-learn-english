@@ -72,7 +72,7 @@ function RoundCard({
     <li className="dialogue-item">
       <MessageBubble
         variant="user"
-        label="用户问题"
+        label="用户提示词"
         action={
           isLongPrompt ? (
             <button
@@ -91,7 +91,7 @@ function RoundCard({
       </MessageBubble>
 
       <div className="mt-3">
-        <MessageBubble variant="assistant" label="助手回复与推理过程">
+        <MessageBubble variant="assistant" label="Cursor回复">
           <DialogueTimeline
             round={round}
             emptyMessage="未采集到该轮助手完整回复（请更新 hooks 后重试）。"

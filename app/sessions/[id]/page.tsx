@@ -224,7 +224,7 @@ export default function SessionDetailPage() {
                   <div className="dialogue-item-meta">
                     {formatLocalDateTime(turn.user_timestamp ?? turn.round?.prompt_timestamp)}
                   </div>
-                  <MessageBubble variant="user" label="用户问题">
+                  <MessageBubble variant="user" label="用户提示词">
                     <UserPromptView
                       prompt={
                         turn.user_prompt ||
@@ -235,7 +235,7 @@ export default function SessionDetailPage() {
                     />
                   </MessageBubble>
                   <div className="mt-3">
-                    <MessageBubble variant="assistant" label="助手回复与推理过程">
+                    <MessageBubble variant="assistant" label="Cursor回复">
                       <DialogueTimeline
                         round={turn.round}
                         transcriptSteps={turn.assistant_steps}
