@@ -117,7 +117,7 @@ function ResponseBlock({
         </div>
       )}
       <MarkdownContent className="break-words text-sm">{block.data.text}</MarkdownContent>
-      <div className="absolute right-0 top-0">
+      <div className="absolute right-2 top-0">
         <DialogueTtsPlayButton id={`${blockKey}-tts`} text={block.data.text} />
       </div>
     </div>
@@ -247,7 +247,7 @@ function TranscriptContentItemView({
     return (
       <div key={itemKey} className="relative pr-12">
         <MarkdownContent className="break-words text-sm">{item.text}</MarkdownContent>
-        <div className="absolute right-0 top-0">
+        <div className="absolute right-2 top-0">
           <DialogueTtsPlayButton id={`${itemKey}-tts`} text={item.text} />
         </div>
       </div>
