@@ -81,15 +81,11 @@ thinking-get-hook/
 │   ├── globals.css
 │   ├── api/
 │   │   ├── events/route.ts      # GET events aggregated by day/type
-│   │   ├── stats/route.ts       # GET summary stats
 │   │   ├── thinking/route.ts    # GET thinking corpus (paginated)
 │   │   └── sessions/route.ts    # GET sessions list
-│   ├── daily/page.tsx           # Daily stats page
 │   ├── thinking/page.tsx       # Thinking corpus page
 │   └── sessions/page.tsx       # Sessions list page
 ├── components/
-│   ├── StatCards.tsx            # Stat cards
-│   ├── DailyChart.tsx          # Daily trend chart (ECharts)
 │   ├── ThinkingList.tsx        # Thinking list (Markdown rendered)
 │   └── SessionTable.tsx         # Sessions table
 ├── lib/

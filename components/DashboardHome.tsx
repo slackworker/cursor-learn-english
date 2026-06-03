@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ActiveHoursChart } from "@/components/ActiveHoursChart";
 import { PromptContributionGraph } from "@/components/PromptContributionGraph";
 import { RecentSessions } from "@/components/RecentSessions";
@@ -11,16 +10,11 @@ export function DashboardHome() {
     <div className="space-y-10">
       <section>
         <Surface padding="lg">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="section-title mb-1">过去一年提问</h2>
-              <p className="text-sm text-base-content/55">
-                基于用户提示词语料，颜色越深表示当日提问越多
-              </p>
-            </div>
-            <Link href="/stats" className="text-xs font-medium text-primary hover:underline">
-              查看完整统计 →
-            </Link>
+          <div className="mb-5">
+            <h2 className="section-title mb-1">过去一年提问</h2>
+            <p className="text-sm text-base-content/55">
+              基于用户提示词语料，颜色越深表示当日提问越多
+            </p>
           </div>
           <PromptContributionGraph variant="hero" />
         </Surface>

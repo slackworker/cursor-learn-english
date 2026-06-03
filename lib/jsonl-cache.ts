@@ -11,7 +11,7 @@ const cache = new Map<string, CacheEntry<unknown>>();
 
 /**
  * Read and parse JSONL with an in-process cache keyed by path + mtime + size.
- * Reuses parsed rows when the file has not changed (e.g. stats + events on home).
+ * Reuses parsed rows when the file has not changed (e.g. multiple API routes on home).
  */
 export function readJsonlLinesCached<T>(
   filePath: string,

@@ -153,7 +153,6 @@ thinking-get-hook/
 │   ├── globals.css
 │   ├── api/
 │   │   ├── events/route.ts      # GET 事件聚合（按日/类型）
-│   │   ├── stats/route.ts       # GET 汇总统计
 │   │   ├── thinking/route.ts    # GET Thinking 语料分页
 │   │   ├── vocab/route.ts       # GET 词频统计
 │   │   └── sessions/route.ts    # GET 会话列表
@@ -161,8 +160,6 @@ thinking-get-hook/
 │   ├── vocab/page.tsx           # 词频统计页
 │   └── sessions/page.tsx       # 会话列表页
 ├── components/
-│   ├── StatCards.tsx            # 统计卡片
-│   ├── DailyChart.tsx           # 按日趋势图（ECharts）
 │   ├── ThinkingList.tsx         # Thinking 列表（Markdown 渲染）
 │   ├── VocabStats.tsx           # 词频图表与表格
 │   └── SessionTable.tsx         # 会话表格
