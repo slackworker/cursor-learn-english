@@ -25,16 +25,13 @@ function ThinkingBlock({
   block: Extract<DialogueTimelineBlock, { kind: "thinking" }>;
   blockKey: string;
 }) {
-  const timeLabel = formatTimelineTime(block.timestamp);
   return (
     <details
       key={blockKey}
       className="collapse collapse-arrow border border-base-300 bg-base-100"
     >
       <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
-        Thinking
-        {timeLabel ? ` · ${timeLabel}` : ""}
-        {` · ${block.data.model} · ${block.data.duration_ms}ms`}
+        {`Thinking · ${block.data.model} · ${block.data.duration_ms}ms`}
       </summary>
       <div className="collapse-content pt-1">
         <MarkdownContent className="text-sm">{block.data.text}</MarkdownContent>
