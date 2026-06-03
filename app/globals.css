@@ -122,19 +122,19 @@ html {
 
 .nav-link-icon {
   @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-current;
-  background: var(--accent-soft);
 }
 
 .nav-link-label {
   @apply shrink-0 whitespace-nowrap;
 }
 
-.nav-link-active {
-  @apply bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary;
+/* 激活态：无整块背景，仅图标用 primary 着色 */
+.nav-link.nav-link-active {
+  color: var(--color-base-content);
 }
 
-.nav-link-active .nav-link-icon {
-  @apply text-primary;
+.nav-link.nav-link-active .nav-link-icon {
+  color: color-mix(in oklab, var(--color-primary) 72%, var(--color-base-content));
 }
 
 .theme-toggle {
