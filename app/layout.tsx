@@ -4,6 +4,7 @@ import "./globals.css";
 import ThemeScript from "@/components/ThemeScript";
 import Navbar from "@/components/Navbar";
 import { SwrProvider } from "@/components/SwrProvider";
+import { TtsProvider } from "@/components/TtsProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,8 +33,10 @@ export default function RootLayout({
       >
         <ThemeScript />
         <SwrProvider>
-          <Navbar />
-          {children}
+          <TtsProvider>
+            <Navbar />
+            {children}
+          </TtsProvider>
         </SwrProvider>
       </body>
     </html>

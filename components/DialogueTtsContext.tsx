@@ -1,31 +1,13 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
-import { useTTS } from "@/hooks/useTTS";
+import { type ReactNode } from "react";
+import { useTts } from "@/components/TtsProvider";
+import { getTtsTooltipLabel } from "@/lib/tts-settings";
 import { TtsPlayButton } from "@/components/TtsPlayButton";
 
-type DialogueTtsContextValue = {
-  speakingId: string | null;
-  speak: (id: string, text: string) => void;
-};
-
-const DialogueTtsContext = createContext<DialogueTtsContextValue | null>(null);
-
+/** @deprecated Layout-level TtsProvider is sufficient; kept for minimal diff at call sites. */
 export function DialogueTtsProvider({ children }: { children: ReactNode }) {
-  const { speakingId, speak } = useTTS();
-  return (
-    <DialogueTtsContext.Provider value={{ speakingId, speak }}>
-      {children}
-    </DialogueTtsContext.Provider>
-  );
-}
-
-function useDialogueTts() {
-  const ctx = useContext(DialogueTtsContext);
-  if (!ctx) {
-    throw new Error("DialogueTtsPlayButton must be used within DialogueTtsProvider");
-  }
-  return ctx;
+  return <>{children}</>;
 }
 
 export function DialogueTtsPlayButton({
@@ -37,12 +19,12 @@ export function DialogueTtsPlayButton({
   text: string;
   className?: string;
 }) {
-  const { speakingId, speak } = useDialogueTts();
+  const { speakingId, speak, settings } = useTts();
   const plain = text.trim();
   if (!plain) return null;
 
   return (
-    <div className="tooltip tooltip-left" data-tip="朗读英语">
+    <div className="tooltip tooltip-left" data-tip={getTtsTooltipLabel(settings.lang)}>
       <TtsPlayButton
         playing={speakingId === id}
         onClick={() => speak(id, text)}

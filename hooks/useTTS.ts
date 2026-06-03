@@ -1,11 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { applyTtsSettingsToUtterance, type TtsSettings } from "@/lib/tts-settings";
 import { stripMarkdownForTTS } from "@/lib/tts";
 
-export function useTTS() {
+export const TTS_PREVIEW_ID = "__tts_preview__";
+
+export function useTTS(settings: TtsSettings, voices: SpeechSynthesisVoice[]) {
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const settingsRef = useRef(settings);
+  const voicesRef = useRef(voices);
+
+  settingsRef.current = settings;
+  voicesRef.current = voices;
 
   const stop = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -16,7 +24,7 @@ export function useTTS() {
   }, []);
 
   const speak = useCallback(
-    (id: string, text: string) => {
+    (id: string, text: string, options?: { raw?: boolean }) => {
       if (typeof window === "undefined" || !window.speechSynthesis) return;
 
       if (speakingId === id) {
@@ -26,11 +34,11 @@ export function useTTS() {
 
       window.speechSynthesis.cancel();
 
-      const plain = stripMarkdownForTTS(text);
+      const plain = options?.raw ? text.trim() : stripMarkdownForTTS(text);
       if (!plain) return;
 
       const utter = new SpeechSynthesisUtterance(plain);
-      utter.lang = "en-US";
+      applyTtsSettingsToUtterance(utter, settingsRef.current, voicesRef.current);
       utter.onend = () => setSpeakingId(null);
       utter.onerror = () => setSpeakingId(null);
 

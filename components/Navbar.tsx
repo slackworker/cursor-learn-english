@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTts } from "@/components/TtsProvider";
 
 const NAV_ITEMS = [
   { href: "/", label: "概览" },
@@ -16,6 +17,7 @@ const DARK_THEME = "business";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { openDrawer } = useTts();
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -53,6 +55,17 @@ export default function Navbar() {
               </Link>
             ))}
           </nav>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={openDrawer}
+            aria-label="朗读设置"
+            title="朗读设置"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+              <path d="M12 2a3 3 0 0 0-3 3v7.26a5 5 0 1 0 6 0V5a3 3 0 0 0-3-3Zm1 10.08V5a1 1 0 1 0-2 0v7.08A3 3 0 1 0 13 12.08ZM19 9v1a7 7 0 0 1-14 0V9a1 1 0 0 0-2 0v1a9 9 0 0 0 8 8.94V22a1 1 0 0 0 2 0v-3.06A9 9 0 0 0 21 10V9a1 1 0 0 0-2 0Z" />
+            </svg>
+          </button>
           <button
             type="button"
             className="theme-toggle"
