@@ -1,3 +1,5 @@
+import { formatLocalDateTime } from "./format-datetime";
+
 export type ResponseSegment = {
   text: string;
   timestamp: string;
@@ -246,8 +248,5 @@ export function buildDialogueTimeline(
 
 export function formatTimelineTime(timestamp: string): string {
   if (!timestamp || isSyntheticTimestamp(timestamp)) return "";
-  if (/^\d{4}-\d{2}-\d{2}T/.test(timestamp)) {
-    return timestamp.slice(0, 19).replace("T", " ");
-  }
-  return timestamp;
+  return formatLocalDateTime(timestamp, "");
 }

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import { DialogueTimeline } from "@/components/DialogueTimeline";
+import { formatLocalDateTime } from "@/lib/format-datetime";
 
 type SessionDetail = {
   session_id: string;
@@ -91,16 +92,6 @@ function formatMs(ms?: number) {
   return `${(ms / 60000).toFixed(1)}min`;
 }
 
-function formatDateTime(value?: string) {
-  if (!value) return "—";
-  // 仅对 ISO 8601（如 2026-06-02T10:45:00）做 T 替换；transcript 的
-  // <timestamp>Tuesday, Jun 2, …</timestamp> 含字母 T，不能用 replace("T")
-  if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
-    return value.slice(0, 19).replace("T", " ");
-  }
-  return value;
-}
-
 export default function SessionDetailPage() {
   const params = useParams<{ id: string }>();
   const sessionId = typeof params?.id === "string" ? params.id : "";
@@ -173,11 +164,11 @@ export default function SessionDetailPage() {
       <section className="mt-6 grid gap-3 md:grid-cols-4">
         <div className="card bg-base-200 p-4">
           <p className="text-xs opacity-60">开始时间</p>
-          <p className="mt-1 text-sm">{formatDateTime(session.start)}</p>
+          <p className="mt-1 text-sm">{formatLocalDateTime(session.start)}</p>
         </div>
         <div className="card bg-base-200 p-4">
           <p className="text-xs opacity-60">结束时间</p>
-          <p className="mt-1 text-sm">{formatDateTime(session.timestamp)}</p>
+          <p className="mt-1 text-sm">{formatLocalDateTime(session.timestamp)}</p>
         </div>
         <div className="card bg-base-200 p-4">
           <p className="text-xs opacity-60">会话时长</p>
@@ -199,7 +190,7 @@ export default function SessionDetailPage() {
               {sortedTurns.map((turn) => (
                 <li key={turn.id} className="p-4">
                   <div className="mb-2 text-[11px] opacity-70">
-                    {formatDateTime(turn.user_timestamp ?? turn.round?.prompt_timestamp)}
+                    {formatLocalDateTime(turn.user_timestamp ?? turn.round?.prompt_timestamp)}
                   </div>
                   <div className="rounded-lg border border-info/30 bg-info/10 p-3 mb-3">
                     <div className="mb-1 text-xs font-medium text-info">用户问题</div>
@@ -247,7 +238,7 @@ export default function SessionDetailPage() {
                 {sortedRounds.map((round) => (
                   <li key={round.id} className="rounded border border-base-300 p-2">
                     <div className="font-mono text-xs opacity-60">
-                      {formatDateTime(round.prompt_timestamp)}
+                      {formatLocalDateTime(round.prompt_timestamp)}
                     </div>
                     <div className="mt-1">
                       thinking: {round.thinking.length} · tools: {round.tools.length} · response: {round.response ? "yes" : "no"}

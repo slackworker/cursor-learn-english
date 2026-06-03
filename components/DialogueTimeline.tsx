@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import {
   buildDialogueTimeline,
@@ -131,15 +131,21 @@ function summarizeTranscriptToolNames(tools: TranscriptToolUseItem[]): string {
 function TranscriptToolGroupBlock({
   tools,
   blockKey,
+  nested = false,
 }: {
   tools: TranscriptToolUseItem[];
   blockKey: string;
+  nested?: boolean;
 }) {
   const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
   return (
     <details
       key={blockKey}
-      className="collapse collapse-arrow border border-base-300 bg-base-100"
+      className={
+        nested
+          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/50"
+          : "collapse collapse-arrow border border-base-300 bg-base-100"
+      }
     >
       <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
         工具
@@ -155,6 +161,39 @@ function TranscriptToolGroupBlock({
             />
           ))}
         </div>
+      </div>
+    </details>
+  );
+}
+
+function TranscriptToolRoundsFold({
+  batches,
+  blockKey,
+}: {
+  batches: { tools: TranscriptToolUseItem[]; key: string }[];
+  blockKey: string;
+}) {
+  const allTools = batches.flatMap((batch) => batch.tools);
+  const roundLabel = batches.length === 1 ? "1 轮" : `${batches.length} 轮`;
+  const countLabel = allTools.length === 1 ? "1 次" : `${allTools.length} 次`;
+  return (
+    <details
+      key={blockKey}
+      className="collapse collapse-arrow border border-base-300 bg-base-100"
+    >
+      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+        工具
+        {` · ${roundLabel} · ${countLabel} · ${summarizeTranscriptToolNames(allTools)}`}
+      </summary>
+      <div className="collapse-content space-y-1 pt-1">
+        {batches.map((batch) => (
+          <TranscriptToolGroupBlock
+            key={batch.key}
+            blockKey={batch.key}
+            tools={batch.tools}
+            nested
+          />
+        ))}
       </div>
     </details>
   );
@@ -213,47 +252,81 @@ function TranscriptContentItemView({
   );
 }
 
-function TranscriptStepView({
-  step,
-  stepIdx,
-}: {
-  step: TranscriptAssistantStep;
-  stepIdx: number;
-}) {
+type TranscriptStepRow =
+  | { kind: "content"; key: string; element: ReactNode }
+  | { kind: "tool-batch"; key: string; tools: TranscriptToolUseItem[] };
+
+function buildTranscriptStepRows(
+  step: TranscriptAssistantStep,
+  stepIdx: number
+): TranscriptStepRow[] {
+  const rows: TranscriptStepRow[] = [];
   const toolRun: TranscriptToolUseItem[] = [];
+
   const flushTools = (key: string) => {
-    if (toolRun.length === 0) return null;
+    if (toolRun.length === 0) return;
     const batch = toolRun.splice(0, toolRun.length);
-    return <TranscriptToolGroupBlock key={key} blockKey={key} tools={batch} />;
+    rows.push({ kind: "tool-batch", key, tools: batch });
   };
 
-  const rows: ReactNode[] = [];
   step.items.forEach((item, i) => {
     if (item.type === "tool_use") {
       toolRun.push(item);
       return;
     }
-    const toolRow = flushTools(`step-${stepIdx}-tools-before-${i}`);
-    if (toolRow) rows.push(toolRow);
-    rows.push(
-      <TranscriptContentItemView
-        key={`step-${stepIdx}-item-${i}`}
-        item={item}
-        itemKey={`step-${stepIdx}-item-${i}`}
-      />
-    );
+    flushTools(`step-${stepIdx}-tools-before-${i}`);
+    rows.push({
+      kind: "content",
+      key: `step-${stepIdx}-item-${i}`,
+      element: (
+        <TranscriptContentItemView
+          item={item}
+          itemKey={`step-${stepIdx}-item-${i}`}
+        />
+      ),
+    });
   });
-  const tailTools = flushTools(`step-${stepIdx}-tools-tail`);
-  if (tailTools) rows.push(tailTools);
+  flushTools(`step-${stepIdx}-tools-tail`);
+  return rows;
+}
 
-  return (
-    <div
-      key={`step-${stepIdx}`}
-      className="space-y-2"
-    >
-      {rows}
-    </div>
-  );
+function renderTranscriptRows(rows: TranscriptStepRow[]): ReactNode[] {
+  const result: ReactNode[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    const row = rows[i];
+    if (row.kind === "content") {
+      result.push(<Fragment key={row.key}>{row.element}</Fragment>);
+      i += 1;
+      continue;
+    }
+
+    const batches: { tools: TranscriptToolUseItem[]; key: string }[] = [];
+    while (i < rows.length && rows[i].kind === "tool-batch") {
+      const batchRow = rows[i] as Extract<TranscriptStepRow, { kind: "tool-batch" }>;
+      batches.push({ tools: batchRow.tools, key: batchRow.key });
+      i += 1;
+    }
+
+    if (batches.length === 1) {
+      result.push(
+        <TranscriptToolGroupBlock
+          key={batches[0].key}
+          blockKey={batches[0].key}
+          tools={batches[0].tools}
+        />
+      );
+    } else {
+      result.push(
+        <TranscriptToolRoundsFold
+          key={`${batches[0].key}-fold`}
+          blockKey={`${batches[0].key}-fold`}
+          batches={batches}
+        />
+      );
+    }
+  }
+  return result;
 }
 
 /** Transcript steps interleaved with thinking via postToolUse / afterAgentThought timestamps. */
@@ -283,13 +356,11 @@ function TranscriptStepsTimeline({
               }}
             />
           ) : null}
-          {phase.steps.map((step, stepIdx) => (
-            <TranscriptStepView
-              key={`phase-${phaseIdx}-step-${stepIdx}`}
-              step={step}
-              stepIdx={stepIdx}
-            />
-          ))}
+          {renderTranscriptRows(
+            phase.steps.flatMap((step, stepIdx) =>
+              buildTranscriptStepRows(step, stepIdx)
+            )
+          )}
         </div>
       ))}
     </div>

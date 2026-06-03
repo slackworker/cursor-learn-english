@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
+import { formatLocalDateTime } from "@/lib/format-datetime";
 
 type Session = {
   session_id: string;
@@ -32,23 +33,6 @@ function formatMs(ms?: number) {
   if (ms == null) return "—";
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}min`;
-}
-
-function formatLocalTime(value?: string) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value.slice(0, 19).replace("T", " ");
-  }
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(date);
 }
 
 export function SessionTable() {
@@ -115,7 +99,7 @@ export function SessionTable() {
                   <div className="font-mono text-xs text-zinc-400 dark:text-zinc-500">{s.session_id?.slice(0, 8)}…</div>
                 </td>
                 <td className="p-3 text-zinc-600 dark:text-zinc-400">
-                  {formatLocalTime(s.start ?? s.timestamp)}
+                  {formatLocalDateTime(s.start ?? s.timestamp)}
                 </td>
                 <td className="p-3 text-zinc-600 dark:text-zinc-400">{formatMs(s.duration_ms)}</td>
                 <td className="p-3 text-zinc-600 dark:text-zinc-400">
