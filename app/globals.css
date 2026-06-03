@@ -16,10 +16,6 @@
   --surface-shadow: 0 1px 2px oklch(0% 0 0 / 0.04);
   --nav-bg: oklch(100% 0 0 / 0.85);
   --accent-soft: oklch(55% 0.18 260 / 0.08);
-  --user-bubble-bg: oklch(55% 0.18 260 / 0.06);
-  --user-bubble-border: oklch(55% 0.18 260 / 0.2);
-  --assistant-bubble-bg: oklch(96% 0.006 260);
-  --assistant-bubble-border: oklch(91% 0.01 260);
 }
 
 [data-theme="business"] {
@@ -29,10 +25,6 @@
   --surface-shadow: 0 1px 3px oklch(0% 0 0 / 0.25);
   --nav-bg: oklch(20% 0.015 260 / 0.9);
   --accent-soft: oklch(65% 0.15 260 / 0.12);
-  --user-bubble-bg: oklch(65% 0.15 260 / 0.1);
-  --user-bubble-border: oklch(65% 0.15 260 / 0.25);
-  --assistant-bubble-bg: oklch(22% 0.015 260);
-  --assistant-bubble-border: oklch(30% 0.02 260);
 }
 
 /* ── Layout ── */
@@ -159,41 +151,6 @@
 
 .data-table-link {
   @apply text-primary transition-colors hover:underline;
-}
-
-/* ── Message bubbles ── */
-.message-bubble {
-  @apply rounded-xl p-4;
-}
-
-.message-bubble-user {
-  background: var(--user-bubble-bg);
-  border: 1px solid var(--user-bubble-border);
-}
-
-.message-bubble-assistant {
-  background: var(--assistant-bubble-bg);
-  border: 1px solid var(--assistant-bubble-border);
-}
-
-.message-bubble-header {
-  @apply mb-2.5 flex items-center justify-between gap-2;
-}
-
-.message-bubble-label {
-  @apply text-xs font-semibold uppercase tracking-wide;
-}
-
-.message-bubble-user .message-bubble-label {
-  @apply text-primary;
-}
-
-.message-bubble-assistant .message-bubble-label {
-  @apply text-base-content/50;
-}
-
-.message-bubble-body {
-  @apply text-sm leading-relaxed;
 }
 
 /* ── Dialogue list ── */
