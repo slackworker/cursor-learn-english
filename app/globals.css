@@ -109,7 +109,11 @@ html {
 }
 
 .nav-brand {
-  @apply inline-flex flex-row flex-nowrap items-center gap-2 text-base font-semibold tracking-tight text-base-content transition-colors hover:text-primary sm:text-lg;
+  display: inline-flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  @apply text-base font-semibold tracking-tight text-base-content transition-colors hover:text-primary sm:text-lg;
 }
 
 .nav-link {

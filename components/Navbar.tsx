@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   BookOpen,
   Brain,
-  Languages,
+  GraduationCap,
   LayoutDashboard,
   LineChart,
   MessagesSquare,
@@ -55,9 +55,9 @@ export default function Navbar() {
   return (
     <header className="app-navbar">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link href="/" className="nav-brand">
-          <Languages className={NAV_ICON_CLASS} aria-hidden />
-          <span>Cursor 学英语</span>
+        <Link href="/" className="nav-brand shrink-0">
+          <GraduationCap className={NAV_ICON_CLASS} aria-hidden />
+          <span className="whitespace-nowrap">Cursor 学英语</span>
         </Link>
         <div className="flex items-center gap-2 sm:gap-3">
           <nav className="flex items-center gap-0.5 sm:gap-1">
