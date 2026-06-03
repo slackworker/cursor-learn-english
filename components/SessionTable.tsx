@@ -77,21 +77,25 @@ export function SessionTable() {
           isValidating && sessions.length > 0 ? "opacity-80 transition-opacity" : ""
         }`}
       >
-        <table className="w-full text-left text-sm">
+        <table className="w-full table-fixed text-left text-sm">
+          <colgroup>
+            <col />
+            <col className="w-44" />
+          </colgroup>
           <thead>
             <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
               <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">会话标题</th>
-              <th className="p-3 font-medium text-zinc-700 dark:text-zinc-300">最近活跃</th>
+              <th className="whitespace-nowrap p-3 font-medium text-zinc-700 dark:text-zinc-300">最近活跃</th>
             </tr>
           </thead>
           <tbody>
             {sessions.map((s) => (
               <tr key={s.session_id} className="border-b border-zinc-100 dark:border-zinc-700">
-                <td className="p-3 text-zinc-600 dark:text-zinc-400">
+                <td className="min-w-0 overflow-hidden p-3 text-zinc-600 dark:text-zinc-400">
                   <Link
                     href={`/sessions/${s.session_id}`}
-                    title={s.session_id}
-                    className="block max-w-[28rem] text-blue-600 hover:underline dark:text-blue-400"
+                    title={s.title?.trim() || s.session_id}
+                    className="block min-w-0 overflow-hidden text-blue-600 hover:underline dark:text-blue-400"
                   >
                     <SessionTitleView
                       title={s.title}
@@ -102,7 +106,7 @@ export function SessionTable() {
                     />
                   </Link>
                 </td>
-                <td className="p-3 text-zinc-600 dark:text-zinc-400">
+                <td className="whitespace-nowrap p-3 text-zinc-600 dark:text-zinc-400">
                   {formatLocalDateTime(s.last_activity ?? s.last_reply ?? s.start ?? s.timestamp)}
                 </td>
               </tr>

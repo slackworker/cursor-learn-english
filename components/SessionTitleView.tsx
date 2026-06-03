@@ -53,28 +53,43 @@ export function SessionTitleView({
   }
 
   const textClass =
-    variant === "heading" ? "text-2xl font-semibold" : "truncate text-inherit";
+    variant === "heading"
+      ? "text-2xl font-semibold"
+      : "block min-w-0 truncate text-inherit";
 
   if (!hasDom) {
     return <span className={`${textClass} ${className}`}>{body}</span>;
   }
 
-  const chipSpacing = variant === "heading" ? "mr-2" : "mr-1.5";
+  const chipSpacing = variant === "heading" ? "mr-2" : "shrink-0";
+
+  if (variant === "heading") {
+    return (
+      <span className={`inline max-w-full align-middle leading-relaxed ${className}`}>
+        {domContexts.map((block, i) => (
+          <DomContextChip
+            key={`title-dom-${i}-${block.domPath.slice(0, 24)}`}
+            block={block}
+            className={i < domContexts.length - 1 || hasBody ? "mr-2" : undefined}
+          />
+        ))}
+        {hasBody ? <span>{body}</span> : null}
+      </span>
+    );
+  }
 
   return (
     <span
-      className={`inline max-w-full align-middle leading-relaxed ${textClass} ${className}`}
+      className={`flex min-w-0 items-center gap-1.5 overflow-hidden ${className}`}
     >
       {domContexts.map((block, i) => (
         <DomContextChip
           key={`title-dom-${i}-${block.domPath.slice(0, 24)}`}
           block={block}
-          className={
-            i < domContexts.length - 1 || hasBody ? chipSpacing : undefined
-          }
+          className={chipSpacing}
         />
       ))}
-      {hasBody ? <span className={variant === "inline" ? "truncate" : ""}>{body}</span> : null}
+      {hasBody ? <span className="min-w-0 flex-1 truncate">{body}</span> : null}
     </span>
   );
 }
