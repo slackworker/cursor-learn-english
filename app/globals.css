@@ -8,6 +8,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 /* ── Theme refinements ── */
 [data-theme="corporate"] {
   color-scheme: light;

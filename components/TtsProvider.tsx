@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import { TTS_PREVIEW_ID, useTTS } from "@/hooks/useTTS";
 import { useSpeechVoices } from "@/hooks/useSpeechVoices";
 import { TtsSettingsDrawer } from "@/components/TtsSettingsDrawer";
+import { lockBodyScroll } from "@/lib/body-scroll-lock";
 import {
   DEFAULT_TTS_SETTINGS,
   getTtsPreviewText,
@@ -94,11 +95,10 @@ export function TtsProvider({ children }: { children: ReactNode }) {
       if (e.key === "Escape") closeDrawer();
     };
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlockScroll = lockBodyScroll();
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
+      unlockScroll();
     };
   }, [drawerOpen, closeDrawer]);
 
