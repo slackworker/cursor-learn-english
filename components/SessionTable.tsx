@@ -61,11 +61,13 @@ function writeIncludeSubagents(value: boolean): void {
 }
 
 function readShowPromptSubtitle(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
-    return window.localStorage.getItem(SHOW_PROMPT_SUBTITLE_STORAGE_KEY) === "1";
+    const raw = window.localStorage.getItem(SHOW_PROMPT_SUBTITLE_STORAGE_KEY);
+    if (raw === null) return true;
+    return raw === "1";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -107,7 +109,7 @@ function hasPromptSubtitle(session: Session): boolean {
 export function SessionTable() {
   const [page, setPage] = useState(1);
   const [includeSubagents, setIncludeSubagents] = useState(true);
-  const [showPromptSubtitle, setShowPromptSubtitle] = useState(false);
+  const [showPromptSubtitle, setShowPromptSubtitle] = useState(true);
   const [prefsReady, setPrefsReady] = useState(false);
 
   useEffect(() => {
