@@ -7,6 +7,7 @@ type PaginationProps = {
   onNext: () => void;
   disabled?: boolean;
   summary?: ReactNode;
+  className?: string;
 };
 
 export function Pagination({
@@ -16,10 +17,11 @@ export function Pagination({
   onNext,
   disabled,
   summary,
+  className = "",
 }: PaginationProps) {
   return (
-    <div className="pagination-bar">
-      {summary ? <div className="pagination-summary">{summary}</div> : <span />}
+    <div className={`pagination-bar ${className}`.trim()}>
+      {summary ? <div className="pagination-summary">{summary}</div> : null}
       <div className="pagination-controls">
         <button
           type="button"
