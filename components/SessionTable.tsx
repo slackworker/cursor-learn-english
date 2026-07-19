@@ -233,8 +233,8 @@ export function SessionTable() {
                             {s.is_subagent ? (
                               <span className="badge badge-ghost badge-sm shrink-0 font-normal">
                                 {s.subagent_type
-                                  ? `子代理·${s.subagent_type}`
-                                  : "子代理"}
+                                  ? `Subagent·${s.subagent_type}`
+                                  : "Subagent"}
                               </span>
                             ) : null}
                             <SessionTitleView

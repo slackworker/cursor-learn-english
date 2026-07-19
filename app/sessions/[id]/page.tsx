@@ -219,7 +219,9 @@ export default function SessionDetailPage() {
           <span className="font-mono text-xs">{session.session_id}</span>
           {session.is_subagent ? (
             <span className="badge badge-ghost badge-sm font-normal">
-              {session.subagent_type ? `子代理·${session.subagent_type}` : "子代理"}
+              {session.subagent_type
+                ? `Subagent·${session.subagent_type}`
+                : "Subagent"}
             </span>
           ) : null}
           {session.is_subagent && session.parent_session_id ? (
