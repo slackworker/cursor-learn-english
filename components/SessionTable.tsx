@@ -228,15 +228,15 @@ export function SessionTable() {
                         title={tooltip}
                         className="data-table-link block min-w-0 overflow-hidden"
                       >
-                        <span className="flex min-w-0 items-start gap-2">
-                          {s.is_subagent ? (
-                            <span className="badge badge-ghost badge-sm mt-0.5 shrink-0 font-normal">
-                              {s.subagent_type
-                                ? `子代理·${s.subagent_type}`
-                                : "子代理"}
-                            </span>
-                          ) : null}
-                          <span className="min-w-0 flex-1 overflow-hidden">
+                        <span className="block min-w-0 overflow-hidden">
+                          <span className="flex min-w-0 items-center gap-2">
+                            {s.is_subagent ? (
+                              <span className="badge badge-ghost badge-sm shrink-0 font-normal">
+                                {s.subagent_type
+                                  ? `子代理·${s.subagent_type}`
+                                  : "子代理"}
+                              </span>
+                            ) : null}
                             <SessionTitleView
                               title={s.title}
                               segments={s.title_segments}
@@ -244,18 +244,19 @@ export function SessionTable() {
                               body={s.title_body}
                               fallback={`会话 ${s.session_id?.slice(0, 8)}…`}
                               variant="inline"
+                              className="min-w-0 flex-1 overflow-hidden"
                             />
-                            {subtitle ? (
-                              <SessionTitleView
-                                title={s.prompt_title}
-                                segments={s.prompt_title_segments}
-                                domContexts={s.prompt_title_dom_contexts}
-                                body={s.prompt_title_body}
-                                variant="inline"
-                                className="mt-0.5 text-xs font-normal text-base-content/50"
-                              />
-                            ) : null}
                           </span>
+                          {subtitle ? (
+                            <SessionTitleView
+                              title={s.prompt_title}
+                              segments={s.prompt_title_segments}
+                              domContexts={s.prompt_title_dom_contexts}
+                              body={s.prompt_title_body}
+                              variant="inline"
+                              className="mt-0.5 block min-w-0 overflow-hidden text-xs font-normal text-base-content/50"
+                            />
+                          ) : null}
                         </span>
                       </Link>
                     </td>
