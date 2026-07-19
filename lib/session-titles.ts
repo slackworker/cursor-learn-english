@@ -40,6 +40,41 @@ function clipTitle(value: string, maxLen = DEFAULT_MAX_TITLE_LENGTH): string {
   return `${value.slice(0, maxLen)}…`;
 }
 
+/** Clip rich segments so display matches `plain` (avoids full-prompt headings). */
+export function clipParsedSessionTitle(
+  parsed: ParsedSessionTitle,
+  maxLen = DEFAULT_MAX_TITLE_LENGTH
+): ParsedSessionTitle {
+  let remaining = maxLen;
+  const segments: PromptSegment[] = [];
+  for (const seg of parsed.segments) {
+    if (remaining <= 0) break;
+    if (seg.type === "dom") {
+      segments.push(seg);
+      continue;
+    }
+    const text = seg.text;
+    if (!text) continue;
+    if (text.length <= remaining) {
+      segments.push(seg);
+      remaining -= text.length;
+    } else {
+      segments.push({ type: "text", text: `${text.slice(0, remaining)}…` });
+      remaining = 0;
+    }
+  }
+  const body =
+    parsed.body.length <= maxLen
+      ? parsed.body
+      : `${parsed.body.slice(0, maxLen)}…`;
+  return {
+    plain: clipTitle(parsed.plain || body, maxLen),
+    segments,
+    domContexts: parsed.domContexts,
+    body,
+  };
+}
+
 export function parseSessionTitleFromText(rawText: string): ParsedSessionTitle {
   const userQueryMatch = rawText.match(/<user_query>\s*([\s\S]*?)\s*<\/user_query>/i);
   const base = userQueryMatch?.[1] ?? rawText;

@@ -66,7 +66,9 @@ export function SessionTitleView({
 
   if (variant === "heading") {
     return (
-      <span className={`inline max-w-full align-middle leading-relaxed ${className}`}>
+      <span
+        className={`block max-w-full leading-relaxed line-clamp-2 ${className}`}
+      >
         {segments.map((seg, i) =>
           seg.type === "dom" ? (
             <DomContextChip

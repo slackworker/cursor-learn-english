@@ -20,9 +20,14 @@ import { sessionsSwrOptions } from "@/lib/sessions-swr";
 type SessionDetail = {
   session_id: string;
   title?: string;
+  title_source?: "cursor" | "prompt" | "task";
   title_dom_contexts?: DomContextBlock[];
   title_segments?: PromptSegment[];
   title_body?: string;
+  prompt_title?: string;
+  prompt_title_dom_contexts?: DomContextBlock[];
+  prompt_title_segments?: PromptSegment[];
+  prompt_title_body?: string;
   reason?: string;
   duration_ms?: number;
   timestamp?: string;

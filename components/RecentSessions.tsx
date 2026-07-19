@@ -12,6 +12,7 @@ import { sessionsSwrOptions } from "@/lib/sessions-swr";
 type Session = {
   session_id: string;
   title?: string;
+  title_source?: "cursor" | "prompt" | "task";
   title_dom_contexts?: import("@/lib/parse-dom-context").DomContextBlock[];
   title_segments?: import("@/lib/parse-dom-context").PromptSegment[];
   title_body?: string;

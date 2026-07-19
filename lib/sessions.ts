@@ -1,5 +1,7 @@
 import { getEvents, getEventsPath, type CursorEvent } from "./events";
+import { getCursorConversationTitles } from "./cursor-conversation-titles";
 import {
+  clipParsedSessionTitle,
   getSessionTitles,
   hasSessionTranscript,
   type ParsedSessionTitle,
@@ -15,12 +17,21 @@ import {
   resolveTranscript,
 } from "./agent-transcripts-path";
 
+export type SessionTitleSource = "cursor" | "prompt" | "task";
+
 export type SessionSummary = {
   session_id: string;
+  /** Primary title: Cursor sidebar name, else clipped first prompt / task. */
   title?: string;
+  title_source?: SessionTitleSource;
   title_dom_contexts?: DomContextBlock[];
   title_segments?: PromptSegment[];
   title_body?: string;
+  /** First user prompt (for dual-line list subtitle). */
+  prompt_title?: string;
+  prompt_title_dom_contexts?: DomContextBlock[];
+  prompt_title_segments?: PromptSegment[];
+  prompt_title_body?: string;
   reason?: string;
   duration_ms?: number;
   // sessionEnd / subagentStop timestamp
@@ -144,7 +155,13 @@ function clipTitle(value: string, maxLen = 60): string {
 }
 
 function titleMatchKey(session: SessionSummary): string {
-  return (session.title_body || session.title || "")
+  return (
+    session.prompt_title_body ||
+    session.title_body ||
+    session.prompt_title ||
+    session.title ||
+    ""
+  )
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase()
@@ -232,24 +249,79 @@ function sessionSortKey(session: SessionSummary): string {
   );
 }
 
-/** Prefer transcript title when present; keep existing title/task fallback otherwise. */
-function enrichTitlesFromTranscript(sessions: SessionSummary[]): SessionSummary[] {
-  const ids = sessions
+function promptFieldsFromParsed(parsed: ParsedSessionTitle): {
+  prompt_title: string;
+  prompt_title_dom_contexts?: DomContextBlock[];
+  prompt_title_segments?: PromptSegment[];
+  prompt_title_body?: string;
+} {
+  return {
+    prompt_title: parsed.plain,
+    prompt_title_dom_contexts:
+      parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
+    prompt_title_segments:
+      parsed.segments.length > 0 ? parsed.segments : undefined,
+    prompt_title_body: parsed.body || undefined,
+  };
+}
+
+/**
+ * Title chain: Cursor conversation-search.db → clipped first prompt → task.
+ * Always attaches prompt_* fields when a transcript first-user message exists.
+ */
+function enrichSessionTitles(sessions: SessionSummary[]): SessionSummary[] {
+  if (sessions.length === 0) return sessions;
+  const ids = sessions.map((s) => s.session_id).filter(Boolean);
+  const cursorTitles = getCursorConversationTitles(ids);
+  const transcriptIds = sessions
     .filter((s) => hasSessionTranscript(s.session_id))
     .map((s) => s.session_id);
-  if (ids.length === 0) return sessions;
-  const titles = getSessionTitles(ids);
+  const promptTitles =
+    transcriptIds.length > 0
+      ? getSessionTitles(transcriptIds)
+      : new Map<string, ParsedSessionTitle>();
+
   return sessions.map((session) => {
-    const parsed = titles.get(session.session_id) as ParsedSessionTitle | undefined;
-    if (!parsed?.plain) return session;
-    return {
-      ...session,
-      title: parsed.plain,
-      title_dom_contexts:
-        parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
-      title_segments: parsed.segments.length > 0 ? parsed.segments : undefined,
-      title_body: parsed.body || session.title_body,
-    };
+    const parsed = promptTitles.get(session.session_id);
+    const promptFields = parsed?.plain ? promptFieldsFromParsed(parsed) : {};
+    const cursorTitle = cursorTitles.get(session.session_id)?.trim();
+
+    if (cursorTitle) {
+      return {
+        ...session,
+        ...promptFields,
+        title: cursorTitle,
+        title_source: "cursor" as const,
+        title_dom_contexts: undefined,
+        title_segments: undefined,
+        title_body: undefined,
+      };
+    }
+
+    if (parsed?.plain) {
+      const clipped = clipParsedSessionTitle(parsed);
+      return {
+        ...session,
+        ...promptFields,
+        title: clipped.plain,
+        title_source: "prompt" as const,
+        title_dom_contexts:
+          clipped.domContexts.length > 0 ? clipped.domContexts : undefined,
+        title_segments:
+          clipped.segments.length > 0 ? clipped.segments : undefined,
+        title_body: clipped.body || undefined,
+      };
+    }
+
+    if (session.title?.trim()) {
+      return {
+        ...session,
+        ...promptFields,
+        title_source: session.title_source ?? ("task" as const),
+      };
+    }
+
+    return { ...session, ...promptFields };
   });
 }
 
@@ -265,11 +337,11 @@ function keepListedSession(
   return !session.is_subagent;
 }
 
-/** Attach transcript titles for a page of summaries (avoid full-list file reads). */
+/** Attach Cursor + transcript titles for a page of summaries (avoid full-list file reads). */
 export function enrichSessionPageTitles(
   sessions: SessionSummary[]
 ): SessionSummary[] {
-  return enrichTitlesFromTranscript(sessions);
+  return enrichSessionTitles(sessions);
 }
 
 /**
@@ -386,9 +458,20 @@ function mergeSubagentSummaries(
       parent_session_id: s.parent_session_id ?? prev?.parent_session_id,
       subagent_type: s.subagent_type ?? prev?.subagent_type,
       title: s.title?.trim() ? s.title : prev?.title,
+      title_source: s.title?.trim()
+        ? s.title_source ?? prev?.title_source
+        : prev?.title_source,
       title_body: s.title_body?.trim() ? s.title_body : prev?.title_body,
       title_dom_contexts: s.title_dom_contexts ?? prev?.title_dom_contexts,
       title_segments: s.title_segments ?? prev?.title_segments,
+      prompt_title: s.prompt_title?.trim() ? s.prompt_title : prev?.prompt_title,
+      prompt_title_body: s.prompt_title_body?.trim()
+        ? s.prompt_title_body
+        : prev?.prompt_title_body,
+      prompt_title_dom_contexts:
+        s.prompt_title_dom_contexts ?? prev?.prompt_title_dom_contexts,
+      prompt_title_segments:
+        s.prompt_title_segments ?? prev?.prompt_title_segments,
       start: s.start ?? prev?.start,
       timestamp: s.timestamp ?? prev?.timestamp,
       last_activity: s.last_activity ?? prev?.last_activity,
@@ -421,9 +504,22 @@ function mergeSubagentPair(
     parent_session_id: canonical.parent_session_id ?? hook.parent_session_id,
     subagent_type: canonical.subagent_type ?? hook.subagent_type,
     title: canonical.title?.trim() ? canonical.title : hook.title,
+    title_source: canonical.title?.trim()
+      ? canonical.title_source ?? hook.title_source
+      : hook.title_source,
     title_body: canonical.title_body?.trim() ? canonical.title_body : hook.title_body,
     title_dom_contexts: canonical.title_dom_contexts ?? hook.title_dom_contexts,
     title_segments: canonical.title_segments ?? hook.title_segments,
+    prompt_title: canonical.prompt_title?.trim()
+      ? canonical.prompt_title
+      : hook.prompt_title,
+    prompt_title_body: canonical.prompt_title_body?.trim()
+      ? canonical.prompt_title_body
+      : hook.prompt_title_body,
+    prompt_title_dom_contexts:
+      canonical.prompt_title_dom_contexts ?? hook.prompt_title_dom_contexts,
+    prompt_title_segments:
+      canonical.prompt_title_segments ?? hook.prompt_title_segments,
     start,
     timestamp,
     last_activity,
@@ -673,6 +769,7 @@ function buildSubagentSessionSummaries(events: CursorEvent[]): SessionSummary[] 
         parent_session_id: parentSessionId,
         subagent_type: session.subagent_type,
         title: taskTitle,
+        title_source: taskTitle ? ("task" as const) : undefined,
         title_body: session.task?.trim() || undefined,
       } satisfies SessionSummary;
     })
@@ -938,6 +1035,37 @@ function buildSingleSessionSummary(
   const titles = getSessionTitles([lookupId]);
   const parsed = titles.get(lookupId);
   const taskTitle = task ? clipTitle(task) : undefined;
+  const cursorTitle = getCursorConversationTitles([lookupId])
+    .get(lookupId)
+    ?.trim();
+  const promptFields = parsed?.plain ? promptFieldsFromParsed(parsed) : {};
+
+  let title = cursorTitle || parsed?.plain || taskTitle;
+  let title_source: SessionTitleSource | undefined = cursorTitle
+    ? "cursor"
+    : parsed?.plain
+      ? "prompt"
+      : taskTitle
+        ? "task"
+        : undefined;
+  let title_dom_contexts: DomContextBlock[] | undefined;
+  let title_segments: PromptSegment[] | undefined;
+  let title_body: string | undefined;
+
+  if (cursorTitle) {
+    title = cursorTitle;
+  } else if (parsed?.plain) {
+    const clipped = clipParsedSessionTitle(parsed);
+    title = clipped.plain;
+    title_dom_contexts =
+      clipped.domContexts.length > 0 ? clipped.domContexts : undefined;
+    title_segments =
+      clipped.segments.length > 0 ? clipped.segments : undefined;
+    title_body = clipped.body || undefined;
+  } else if (taskTitle) {
+    title = taskTitle;
+    title_body = task?.trim() || undefined;
+  }
 
   return {
     session_id: lookupId,
@@ -951,12 +1079,12 @@ function buildSingleSessionSummary(
     is_subagent: is_subagent || undefined,
     parent_session_id,
     subagent_type,
-    title: parsed?.plain || taskTitle,
-    title_dom_contexts:
-      parsed && parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
-    title_segments:
-      parsed && parsed.segments.length > 0 ? parsed.segments : undefined,
-    title_body: parsed?.body || task?.trim() || undefined,
+    title,
+    title_source,
+    title_dom_contexts,
+    title_segments,
+    title_body,
+    ...promptFields,
   };
 }
 
