@@ -1,5 +1,5 @@
 import { getEvents } from "./events";
-import { getThinking, getPromptCorpusPath } from "./thinking";
+import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./thinking";
 import { readMergedJsonlLinesCached } from "./jsonl-daily";
 
 type PromptRecord = {
@@ -69,11 +69,31 @@ function parseJsonlLine<T>(line: string): T | null {
   }
 }
 
-function readPrompts(opts?: { from?: string; to?: string }): { items: PromptRecord[]; truncated: boolean } {
-  return readMergedJsonlLinesCached(getPromptCorpusPath(), parseJsonlLine<PromptRecord>, opts);
+function readPrompts(opts?: { from?: string; to?: string }): {
+  items: PromptRecord[];
+  truncated: boolean;
+} {
+  return readMergedJsonlLinesCached(
+    getPromptCorpusPath(),
+    parseJsonlLine<PromptRecord>,
+    opts
+  );
 }
 
-function groupByConversation<T extends { conversation_id: string | null }>(items: T[]) {
+function readThinking(opts?: { from?: string; to?: string }): {
+  items: ThinkingRecord[];
+  truncated: boolean;
+} {
+  return readMergedJsonlLinesCached(
+    getCorpusPath(),
+    parseJsonlLine<ThinkingRecord>,
+    opts
+  );
+}
+
+function groupByConversation<T extends { conversation_id: string | null }>(
+  items: T[]
+) {
   const byConv = new Map<string, T[]>();
   for (const item of items) {
     const cid = item.conversation_id || "";
@@ -85,23 +105,50 @@ function groupByConversation<T extends { conversation_id: string | null }>(items
   return byConv;
 }
 
+function normalizeConversationFilter(
+  conversationId?: string,
+  conversationIds?: string[]
+): Set<string> | null {
+  if (conversationIds && conversationIds.length > 0) {
+    return new Set(conversationIds.filter(Boolean));
+  }
+  if (conversationId) return new Set([conversationId]);
+  return null;
+}
+
 export function getDialogueRounds(params: {
   page?: number;
   pageSize?: number;
   from?: string;
   to?: string;
   conversationId?: string;
+  /** When set, only build rounds for these conversation ids (avoids full-corpus aggregation). */
+  conversationIds?: string[];
 }): { rounds: DialogueRound[]; total: number; truncated: boolean } {
-  const { page = 1, pageSize = 10, from, to, conversationId } = params;
+  const {
+    page = 1,
+    pageSize = 10,
+    from,
+    to,
+    conversationId,
+    conversationIds,
+  } = params;
+  const idFilter = normalizeConversationFilter(conversationId, conversationIds);
 
-  const { items: prompts, truncated: promptsTruncated } = readPrompts({ from, to });
-  const { events, truncated: eventsTruncated } = getEvents(from, to);
-  const { groups: thinkingGroups, truncated: thinkingTruncated } = getThinking({
-    page: 1,
-    pageSize: 100000,
+  let { items: prompts, truncated: promptsTruncated } = readPrompts({ from, to });
+  let { events, truncated: eventsTruncated } = getEvents(from, to);
+  let { items: thinkingItems, truncated: thinkingTruncated } = readThinking({
     from,
     to,
   });
+
+  if (idFilter) {
+    prompts = prompts.filter((p) => idFilter.has(p.conversation_id || ""));
+    events = events.filter((e) => idFilter.has(e.conversation_id || ""));
+    thinkingItems = thinkingItems.filter((t) =>
+      idFilter.has(t.conversation_id || "")
+    );
+  }
 
   const responses = events.filter(
     (e): e is ResponseEvent => e.event_type === "afterAgentResponse"
@@ -113,14 +160,7 @@ export function getDialogueRounds(params: {
 
   const responseByConv = groupByConversation(responses);
   const toolsByConv = groupByConversation(tools);
-
-  const thinkingFlat = thinkingGroups.flatMap((g) =>
-    g.items.map((i) => ({
-      ...i,
-      conversation_id: g.conversation_id,
-    }))
-  );
-  const thinkingByConv = groupByConversation(thinkingFlat);
+  const thinkingByConv = groupByConversation(thinkingItems);
 
   const promptsByConv = new Map<string, PromptRecord[]>();
   for (const p of prompts) {
@@ -147,7 +187,8 @@ export function getDialogueRounds(params: {
     for (let i = 0; i < list.length; i += 1) {
       const prompt = list[i];
       const nextPromptTs = list[i + 1]?.timestamp;
-      const inWindow = (ts: string) => ts >= prompt.timestamp && (!nextPromptTs || ts < nextPromptTs);
+      const inWindow = (ts: string) =>
+        ts >= prompt.timestamp && (!nextPromptTs || ts < nextPromptTs);
 
       const windowResponses = convResponses.filter((r) => inWindow(r.timestamp));
       const responseSegments = windowResponses
@@ -162,14 +203,15 @@ export function getDialogueRounds(params: {
         conversation_id: cid,
         prompt: prompt.prompt,
         prompt_timestamp: prompt.timestamp,
-        response: responseSegments.length > 0 && lastResponse
-          ? {
-              text: responseSegments.join("\n\n"),
-              timestamp: lastResponse.timestamp,
-              model: lastResponse.model ?? null,
-              segment_count: responseSegments.length,
-            }
-          : undefined,
+        response:
+          responseSegments.length > 0 && lastResponse
+            ? {
+                text: responseSegments.join("\n\n"),
+                timestamp: lastResponse.timestamp,
+                model: lastResponse.model ?? null,
+                segment_count: responseSegments.length,
+              }
+            : undefined,
         response_segments:
           windowResponses.length > 0
             ? windowResponses
@@ -198,14 +240,12 @@ export function getDialogueRounds(params: {
     }
   }
 
-  const sorted = rounds.sort((a, b) => b.prompt_timestamp.localeCompare(a.prompt_timestamp));
-
-  const byConversation = conversationId
-    ? sorted.filter((r) => r.conversation_id === conversationId)
-    : sorted;
-  const total = byConversation.length;
+  const sorted = rounds.sort((a, b) =>
+    b.prompt_timestamp.localeCompare(a.prompt_timestamp)
+  );
+  const total = sorted.length;
   const start = (page - 1) * pageSize;
-  const pageItems = byConversation.slice(start, start + pageSize);
+  const pageItems = sorted.slice(start, start + pageSize);
   return {
     rounds: pageItems,
     total,

@@ -124,6 +124,17 @@ function getSubagentSessionId(event: CursorEvent): string {
   );
 }
 
+function subagentIdFromTranscriptPath(transcriptPath: unknown): string {
+  if (typeof transcriptPath !== "string" || !transcriptPath) return "";
+  const normalized = transcriptPath.replace(/\\/g, "/");
+  const marker = "/subagents/";
+  const idx = normalized.lastIndexOf(marker);
+  if (idx < 0) return "";
+  const rest = normalized.slice(idx + marker.length);
+  const file = rest.split("/")[0] || "";
+  return sanitizeSessionId(file.replace(/\.(jsonl|txt)$/i, ""));
+}
+
 function clipTitle(value: string, maxLen = 60): string {
   const trimmed = value.replace(/\s+/g, " ").trim();
   if (!trimmed) return "";
@@ -594,17 +605,9 @@ function buildSubagentSessionSummaries(events: CursorEvent[]): SessionSummary[] 
   for (const e of events) {
     if (e.event_type !== "subagentStop") continue;
     // Prefer transcript UUID when capture/stop path recorded it.
-    const fromPath = (() => {
-      const p = (e as { agent_transcript_path?: string }).agent_transcript_path;
-      if (typeof p !== "string" || !p) return "";
-      const normalized = p.replace(/\\/g, "/");
-      const marker = "/subagents/";
-      const idx = normalized.lastIndexOf(marker);
-      if (idx < 0) return "";
-      const rest = normalized.slice(idx + marker.length);
-      const file = rest.split("/")[0] || "";
-      return sanitizeSessionId(file.replace(/\.(jsonl|txt)$/i, ""));
-    })();
+    const fromPath = subagentIdFromTranscriptPath(
+      (e as { agent_transcript_path?: string }).agent_transcript_path
+    );
     const hookId = getSubagentSessionId(e);
     const id = fromPath || hookId;
     if (!id) continue;
@@ -758,19 +761,214 @@ export function clearSessionSummariesCache(): void {
   latestSubagentAliases = new Map();
 }
 
-export function getSessionDetail(sessionId: string): SessionDetail | null {
-  const lookupId = resolveSessionLookupId(sessionId);
-  // Detail resolves both main and subagent shells (deep links work even if list toggle is off).
-  const { sessions } = getSessionSummaries(undefined, undefined, { includeSubagents: true });
-  const summary = sessions.find((s) => s.session_id === lookupId);
-  if (!summary) return null;
+/**
+ * Resolve detail lookup without rebuilding all session summaries.
+ * Falls back to full summaries only for rare call-* deep links.
+ */
+function resolveDetailLookupId(
+  sessionId: string,
+  events: CursorEvent[]
+): string {
+  const sanitized = sanitizeSessionId(sessionId);
+  if (!sanitized) return sanitized;
+  const warm = latestSubagentAliases.get(sanitized);
+  if (warm) return warm;
+  if (!isHookCallSessionId(sanitized)) return sanitized;
 
-  const aliasIds = new Set<string>([lookupId, sanitizeSessionId(sessionId)]);
-  for (const [hookId, canonical] of latestSubagentAliases) {
-    if (canonical === lookupId) aliasIds.add(hookId);
+  for (const e of events) {
+    if (e.event_type !== "subagentStop") continue;
+    const hookId = getSubagentSessionId(e);
+    const toolCallId = sanitizeSessionId(
+      (e as { tool_call_id?: string | null }).tool_call_id
+    );
+    if (hookId !== sanitized && toolCallId !== sanitized) continue;
+    const fromPath = subagentIdFromTranscriptPath(
+      (e as { agent_transcript_path?: string }).agent_transcript_path
+    );
+    if (fromPath && isUuidSessionId(fromPath)) return fromPath;
   }
 
+  return resolveSessionLookupId(sanitized);
+}
+
+function collectDetailAliasIds(
+  lookupId: string,
+  rawSessionId: string,
+  events: CursorEvent[]
+): Set<string> {
+  const aliasIds = new Set<string>();
+  const add = (id: string | null | undefined) => {
+    const sanitized = sanitizeSessionId(id);
+    if (sanitized) aliasIds.add(sanitized);
+  };
+  add(lookupId);
+  add(rawSessionId);
+  for (const [hookId, canonical] of latestSubagentAliases) {
+    if (canonical === lookupId) add(hookId);
+  }
+  for (const e of events) {
+    if (e.event_type !== "subagentStop") continue;
+    const fromPath = subagentIdFromTranscriptPath(
+      (e as { agent_transcript_path?: string }).agent_transcript_path
+    );
+    if (fromPath !== lookupId) continue;
+    add(getSubagentSessionId(e));
+    add((e as { tool_call_id?: string | null }).tool_call_id);
+  }
+  return aliasIds;
+}
+
+/** Build one session summary from scoped events — no full-list / all-titles scan. */
+function buildSingleSessionSummary(
+  lookupId: string,
+  events: CursorEvent[],
+  prompts: PromptRecord[],
+  aliasIds: Set<string>
+): SessionSummary | null {
+  const resolved = resolveTranscript(lookupId);
+  const scopedEvents = events.filter((e) =>
+    aliasIds.has(getSessionIdFromEvent(e))
+  );
+  const scopedPrompts = prompts.filter((p) =>
+    aliasIds.has(sanitizeSessionId(p.conversation_id))
+  );
+
+  if (
+    scopedEvents.length === 0 &&
+    scopedPrompts.length === 0 &&
+    !resolved
+  ) {
+    return null;
+  }
+
+  const activityMap = buildSessionActivityById(scopedEvents, scopedPrompts);
+  let last_reply: string | undefined;
+  let last_prompt: string | undefined;
+  for (const id of aliasIds) {
+    const activity = activityMap.get(id);
+    if (!activity) continue;
+    last_reply = maxTimestamp(last_reply, activity.last_reply);
+    last_prompt = maxTimestamp(last_prompt, activity.last_prompt);
+  }
+
+  let start: string | undefined;
+  let endTs: string | undefined;
+  let reason: string | undefined;
+  let duration_ms: number | undefined;
+  let subagent_type: string | undefined;
+  let parent_session_id =
+    resolved?.kind === "subagent" ? resolved.parentSessionId : undefined;
+  let task: string | undefined;
+  let is_subagent = resolved?.kind === "subagent";
+
+  for (const e of scopedEvents) {
+    if (e.event_type === "sessionStart") {
+      start = minTimestamp(start, e.timestamp);
+    } else if (e.event_type === "subagentStart") {
+      is_subagent = true;
+      start = minTimestamp(start, e.timestamp);
+      if (typeof e.subagent_type === "string") {
+        subagent_type = e.subagent_type;
+      }
+      if (typeof e.task === "string" && e.task.trim()) {
+        task = e.task;
+      }
+      const parent = sanitizeSessionId(
+        (typeof e.parent_session_id === "string" && e.parent_session_id) ||
+          (typeof e.parent_conversation_id === "string" &&
+            e.parent_conversation_id) ||
+          ""
+      );
+      if (parent) parent_session_id = parent;
+    } else if (e.event_type === "sessionEnd") {
+      endTs = maxTimestamp(endTs, e.timestamp);
+      reason = (e as { reason?: string }).reason ?? reason;
+      const endDuration = (e as { duration_ms?: number }).duration_ms;
+      if (typeof endDuration === "number" && endDuration > 0) {
+        duration_ms = endDuration;
+      }
+    } else if (e.event_type === "subagentStop") {
+      is_subagent = true;
+      endTs = maxTimestamp(endTs, e.timestamp);
+      if (typeof e.status === "string") reason = e.status;
+      if (typeof e.subagent_type === "string") {
+        subagent_type = e.subagent_type;
+      }
+      if (typeof e.task === "string" && e.task.trim()) task = e.task;
+      else if (typeof e.description === "string" && e.description.trim()) {
+        task = e.description;
+      }
+      if (
+        typeof e.duration_ms === "number" &&
+        e.duration_ms > 0
+      ) {
+        duration_ms = e.duration_ms;
+      }
+      const parent = sanitizeSessionId(
+        (typeof e.parent_session_id === "string" && e.parent_session_id) ||
+          (typeof e.parent_conversation_id === "string" &&
+            e.parent_conversation_id) ||
+          ""
+      );
+      if (parent) parent_session_id = parent;
+    }
+  }
+
+  if (!start) {
+    for (const e of scopedEvents) {
+      start = minTimestamp(start, e.timestamp);
+    }
+    for (const p of scopedPrompts) {
+      start = minTimestamp(start, p.timestamp);
+    }
+  }
+
+  const last_activity =
+    last_reply ?? last_prompt ?? endTs ?? start;
+  const hasEnd = Boolean(endTs);
+  const spanMs = spanDurationMs(start, last_activity);
+  const titles = getSessionTitles([lookupId]);
+  const parsed = titles.get(lookupId);
+  const taskTitle = task ? clipTitle(task) : undefined;
+
+  return {
+    session_id: lookupId,
+    start,
+    timestamp: endTs,
+    reason: reason ?? (hasEnd ? reason : "open"),
+    duration_ms: spanMs ?? duration_ms,
+    last_reply,
+    last_activity,
+    is_open: !hasEnd,
+    is_subagent: is_subagent || undefined,
+    parent_session_id,
+    subagent_type,
+    title: parsed?.plain || taskTitle,
+    title_dom_contexts:
+      parsed && parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
+    title_body: parsed?.body || task?.trim() || undefined,
+  };
+}
+
+export function getSessionDetail(sessionId: string): SessionDetail | null {
   const { events, truncated: eventsTruncated } = getEvents();
+  const lookupId = resolveDetailLookupId(sessionId, events);
+  const aliasIds = collectDetailAliasIds(lookupId, sessionId, events);
+
+  const { items: prompts, truncated: promptsTruncated } =
+    readMergedJsonlLinesCached(
+      getPromptCorpusPath(),
+      parseJsonlLine<PromptRecord>
+    );
+
+  const summary = buildSingleSessionSummary(
+    lookupId,
+    events,
+    prompts,
+    aliasIds
+  );
+  if (!summary) return null;
+
   const sessionEvents = events
     .filter((e) => {
       const id = getSessionIdFromEvent(e);
@@ -783,18 +981,15 @@ export function getSessionDetail(sessionId: string): SessionDetail | null {
     event_counts[event.event_type] = (event_counts[event.event_type] ?? 0) + 1;
   }
 
-  const { items: prompts, truncated: promptsTruncated } = readMergedJsonlLinesCached(
-    getPromptCorpusPath(),
-    parseJsonlLine<PromptRecord>
-  );
   const sessionPrompts = prompts
     .filter((p) => aliasIds.has(sanitizeSessionId(p.conversation_id)))
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-  const { items: thinking, truncated: thinkingTruncated } = readMergedJsonlLinesCached(
-    getCorpusPath(),
-    parseJsonlLine<ThinkingRecord>
-  );
+  const { items: thinking, truncated: thinkingTruncated } =
+    readMergedJsonlLinesCached(
+      getCorpusPath(),
+      parseJsonlLine<ThinkingRecord>
+    );
   const sessionThinking = thinking
     .filter((t) => aliasIds.has(sanitizeSessionId(t.conversation_id)))
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
@@ -802,7 +997,7 @@ export function getSessionDetail(sessionId: string): SessionDetail | null {
   const { rounds } = getDialogueRounds({
     page: 1,
     pageSize: 200,
-    conversationId: lookupId,
+    conversationIds: Array.from(aliasIds),
   });
   const transcriptTurns = getTranscriptTurns(lookupId);
   const roundsAsc = [...rounds].sort((a, b) =>
@@ -828,25 +1023,34 @@ export function getSessionDetail(sessionId: string): SessionDetail | null {
     ...summary,
     event_counts: {
       ...event_counts,
-      _truncated_sources: Number(eventsTruncated || promptsTruncated || thinkingTruncated),
+      _truncated_sources: Number(
+        eventsTruncated || promptsTruncated || thinkingTruncated
+      ),
     },
     prompt_count: sessionPrompts.length,
     thinking_count: sessionThinking.length,
-    recent_prompts: sessionPrompts.slice(0, 10).map((p) => ({ prompt: p.prompt, timestamp: p.timestamp })),
+    recent_prompts: sessionPrompts.slice(0, 10).map((p) => ({
+      prompt: p.prompt,
+      timestamp: p.timestamp,
+    })),
     recent_thinking: sessionThinking.slice(0, 10).map((t) => ({
-      text_preview: t.text.length > 180 ? `${t.text.slice(0, 180)}…` : t.text,
+      text_preview:
+        t.text.length > 180 ? `${t.text.slice(0, 180)}…` : t.text,
       timestamp: t.timestamp,
       model: t.model,
     })),
-    timeline: sessionEvents.slice(-80).reverse().map((e) => ({
-      event_type: e.event_type,
-      timestamp: e.timestamp,
-      reason:
-        (e as { reason?: string }).reason ??
-        (typeof e.status === "string" ? e.status : undefined),
-      duration_ms: (e as { duration_ms?: number }).duration_ms,
-      tool_name: (e as { tool_name?: string | null }).tool_name,
-    })),
+    timeline: sessionEvents
+      .slice(-80)
+      .reverse()
+      .map((e) => ({
+        event_type: e.event_type,
+        timestamp: e.timestamp,
+        reason:
+          (e as { reason?: string }).reason ??
+          (typeof e.status === "string" ? e.status : undefined),
+        duration_ms: (e as { duration_ms?: number }).duration_ms,
+        tool_name: (e as { tool_name?: string | null }).tool_name,
+      })),
     dialogue_rounds: rounds,
     transcript_turns: transcriptTurnsWithRounds,
   };

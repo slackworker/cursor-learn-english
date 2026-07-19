@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
-import { readJsonlLines, type ReadJsonlResult } from "./jsonl";
+import { type ReadJsonlResult } from "./jsonl";
+import { clearJsonlCache, readJsonlLinesCached } from "./jsonl-cache";
 
 const DAILY_SUFFIX_RE = /^(.+)-(\d{4}-\d{2}-\d{2})\.jsonl$/;
 
@@ -157,7 +158,8 @@ export function readMergedJsonlLines<T>(
   const allItems: T[] = [];
   let truncated = false;
   for (const filePath of paths) {
-    const result = readJsonlLines(filePath, parse);
+    // Per-file cache: when only today's shard grows, older days stay parsed.
+    const result = readJsonlLinesCached(filePath, parse);
     if (result.truncated) truncated = true;
     allItems.push(...result.items);
   }
@@ -209,4 +211,5 @@ export function readMergedJsonlLinesCached<T>(
 /** Test-only: clear merged-jsonl cache. */
 export function clearMergedJsonlCache(): void {
   mergedCache.clear();
+  clearJsonlCache();
 }
