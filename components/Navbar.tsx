@@ -15,6 +15,7 @@ import {
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTts } from "@/components/TtsProvider";
+import { ServerStatusBadge } from "@/components/ServerStatus";
 
 const NAV_ICON_CLASS = "h-4 w-4 shrink-0";
 
@@ -72,6 +73,7 @@ export default function Navbar() {
               </Link>
             ))}
           </nav>
+          <ServerStatusBadge />
           <button
             type="button"
             className="theme-toggle"

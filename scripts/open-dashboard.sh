@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # WSL 侧：确保仪表盘在跑。由 Windows 桌面 .cmd 调用。
-# PORT 默认 13180；IDLE_MINUTES 默认 45（无页面访问则自动停服）。
+# PORT 默认 13180；IDLE_MINUTES 默认 10（无页面访问则自动停服）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${PORT:-13180}"
-IDLE_MINUTES="${IDLE_MINUTES:-45}"
+IDLE_MINUTES="${IDLE_MINUTES:-10}"
 NODE_BIN="${NODE_BIN:-${HOME}/.nvm/versions/node/current/bin}"
 export PATH="$NODE_BIN:$PATH"
 

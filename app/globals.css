@@ -117,6 +117,45 @@ html {
   color: color-mix(in oklab, var(--color-primary) 72%, var(--color-base-content));
 }
 
+/* ── Server status ── */
+.server-status-badge {
+  @apply inline-flex items-center gap-1.5 px-1.5 py-1 text-xs font-medium text-base-content/55;
+}
+
+.server-status-dot {
+  @apply h-2 w-2 shrink-0 rounded-sm;
+}
+
+.server-status-dot-on {
+  background: var(--color-success, oklch(65% 0.15 145));
+}
+
+.server-status-dot-off {
+  background: var(--color-error, oklch(60% 0.2 25));
+  animation: server-status-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes server-status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.server-offline-banner {
+  @apply flex flex-wrap items-center justify-center gap-3 border-b px-4 py-2.5 text-sm;
+  border-color: color-mix(in oklab, var(--color-error, oklch(60% 0.2 25)) 35%, var(--surface-border));
+  background: color-mix(in oklab, var(--color-error, oklch(60% 0.2 25)) 12%, var(--nav-bg));
+  color: var(--color-base-content);
+}
+
+.server-offline-banner-text {
+  @apply m-0 text-center text-sm leading-snug;
+}
+
 .prompt-contrib {
   line-height: 0;
 }

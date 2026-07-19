@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${1:-${PORT:-13180}}"
-IDLE_MINUTES="${2:-${IDLE_MINUTES:-45}}"
+IDLE_MINUTES="${2:-${IDLE_MINUTES:-10}}"
 LAST_ACCESS="$ROOT/.local/dashboard-last-access"
 PID_FILE="$ROOT/.local/dashboard.pid"
 LOG_FILE="$ROOT/.local/dashboard.log"

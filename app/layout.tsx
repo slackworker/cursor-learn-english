@@ -5,7 +5,7 @@ import ThemeScript from "@/components/ThemeScript";
 import Navbar from "@/components/Navbar";
 import { SwrProvider } from "@/components/SwrProvider";
 import { TtsProvider } from "@/components/TtsProvider";
-import DashboardHeartbeat from "@/components/DashboardHeartbeat";
+import { ServerStatusProvider, ServerOfflineBanner } from "@/components/ServerStatus";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,12 +33,14 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-screen bg-[var(--page-bg)] text-base-content`}
       >
         <ThemeScript />
-        <DashboardHeartbeat />
         <SwrProvider>
-          <TtsProvider>
-            <Navbar />
-            {children}
-          </TtsProvider>
+          <ServerStatusProvider>
+            <TtsProvider>
+              <Navbar />
+              <ServerOfflineBanner />
+              {children}
+            </TtsProvider>
+          </ServerStatusProvider>
         </SwrProvider>
       </body>
     </html>
