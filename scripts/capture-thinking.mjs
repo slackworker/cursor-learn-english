@@ -1,16 +1,11 @@
 import fs from 'fs';
-import os from 'os';
 import { appendJsonlLine } from './jsonl-daily.mjs';
-
-function pathSep() {
-  return os.platform() === 'win32' ? '\\' : '/';
-}
+import { defaultThinkingCorpusPath } from './default-paths.mjs';
 
 function getCorpusPath() {
   if (process.env.CORPUS_JSONL_PATH) return process.env.CORPUS_JSONL_PATH;
   if (process.env.THINKING_CORPUS_PATH) return process.env.THINKING_CORPUS_PATH;
-  const home = os.platform() === 'win32' ? process.env.USERPROFILE : process.env.HOME;
-  return `${home || os.homedir()}${pathSep()}thinking-corpus.jsonl`;
+  return defaultThinkingCorpusPath();
 }
 
 

@@ -15,7 +15,7 @@ export const DEFAULT_TTS_SETTINGS: TtsSettings = {
   pitch: 1,
 };
 
-export const TTS_SETTINGS_STORAGE_KEY = "cursor-dashboard-tts-settings";
+export const TTS_SETTINGS_STORAGE_KEY = "cursor-learn-english-tts-settings";
 
 export const TTS_LANG_OPTIONS: { value: string; label: string }[] = [
   { value: "en-US", label: "英语（美国）" },

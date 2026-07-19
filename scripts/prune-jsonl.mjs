@@ -2,21 +2,19 @@
 /**
  * Manually prune expired daily JSONL shards (same rules as capture hooks).
  * Usage: node scripts/prune-jsonl.mjs [corpus-base-path ...]
- * With no args, prunes default ~/thinking-corpus.jsonl, ~/prompt-corpus.jsonl, ~/cursor-events.jsonl
+ * With no args, prunes defaults under ~/projects/cursor-learn-english/data/
  */
-import os from 'os';
-import path from 'path';
 import { pruneExpiredDailyFiles } from './jsonl-daily.mjs';
-
-function homeJsonl(name) {
-  const home = os.homedir();
-  return path.join(home, name);
-}
+import {
+  defaultEventsPath,
+  defaultPromptCorpusPath,
+  defaultThinkingCorpusPath,
+} from './default-paths.mjs';
 
 const defaults = [
-  homeJsonl('thinking-corpus.jsonl'),
-  homeJsonl('prompt-corpus.jsonl'),
-  homeJsonl('cursor-events.jsonl'),
+  defaultThinkingCorpusPath(),
+  defaultPromptCorpusPath(),
+  defaultEventsPath(),
 ];
 
 const targets = process.argv.length > 2 ? process.argv.slice(2) : defaults;

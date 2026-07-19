@@ -1,6 +1,4 @@
 import fs from "fs";
-import os from "os";
-import path from "path";
 import {
   parseUserPromptWithDomContext,
   type DomContextBlock,
@@ -10,6 +8,7 @@ import {
   stripCursorRedacted,
   type TranscriptAssistantStep,
 } from "./transcript-content";
+import { resolveTranscriptPath } from "./agent-transcripts-path";
 
 export type { DomContextBlock } from "./parse-dom-context";
 
@@ -39,19 +38,6 @@ type TranscriptRecord = {
     }>;
   };
 };
-
-function getDefaultTranscriptRoot(): string {
-  const homeDir = os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir();
-  return path.join(homeDir, ".cursor", "projects", "home-slackworker-projects-cursor-dashboard", "agent-transcripts");
-}
-
-function getTranscriptRoot(): string {
-  return process.env.AGENT_TRANSCRIPTS_PATH || process.env.CURSOR_AGENT_TRANSCRIPTS_PATH || getDefaultTranscriptRoot();
-}
-
-function getTranscriptPath(sessionId: string): string {
-  return path.join(getTranscriptRoot(), sessionId, `${sessionId}.jsonl`);
-}
 
 /** Join text blocks only (legacy segments); strips Cursor [REDACTED] placeholders. */
 function collectText(record: TranscriptRecord): string {
@@ -114,8 +100,8 @@ function extractUserTimestamp(raw: string): string | undefined {
 }
 
 export function getTranscriptTurns(sessionId: string): TranscriptTurn[] {
-  const transcriptPath = getTranscriptPath(sessionId);
-  if (!fs.existsSync(transcriptPath)) return [];
+  const transcriptPath = resolveTranscriptPath(sessionId);
+  if (!transcriptPath) return [];
   const content = fs.readFileSync(transcriptPath, "utf8");
   if (!content.trim()) return [];
 

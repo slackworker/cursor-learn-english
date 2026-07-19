@@ -1,0 +1,91 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
+
+function getHomeDir(): string {
+  return os.platform() === "win32"
+    ? process.env.USERPROFILE || os.homedir()
+    : process.env.HOME || os.homedir();
+}
+
+/** 显式指定单根目录时优先（兼容旧配置） */
+function getConfiguredTranscriptRoot(): string | null {
+  return (
+    process.env.AGENT_TRANSCRIPTS_PATH ||
+    process.env.CURSOR_AGENT_TRANSCRIPTS_PATH ||
+    null
+  );
+}
+
+function listTranscriptRoots(): string[] {
+  const configured = getConfiguredTranscriptRoot();
+  if (configured) return [configured];
+
+  const projectsRoot = path.join(getHomeDir(), ".cursor", "projects");
+  if (!fs.existsSync(projectsRoot)) return [];
+
+  const roots: string[] = [];
+  try {
+    for (const name of fs.readdirSync(projectsRoot)) {
+      const candidate = path.join(projectsRoot, name, "agent-transcripts");
+      try {
+        if (fs.statSync(candidate).isDirectory()) roots.push(candidate);
+      } catch {
+        // skip
+      }
+    }
+  } catch {
+    return [];
+  }
+  return roots;
+}
+
+let cachedRoots: string[] | null = null;
+let cachedRootsAt = 0;
+const ROOTS_TTL_MS = 60_000;
+
+function getTranscriptRoots(): string[] {
+  const now = Date.now();
+  if (cachedRoots && now - cachedRootsAt < ROOTS_TTL_MS) return cachedRoots;
+  cachedRoots = listTranscriptRoots();
+  cachedRootsAt = now;
+  return cachedRoots;
+}
+
+/** sessionId → transcript jsonl 绝对路径（仅缓存命中；未命中不缓存，以便文件稍后出现时能再次查找） */
+const pathCache = new Map<string, string>();
+
+/**
+ * 在所有 Cursor 项目的 agent-transcripts 中查找会话文件。
+ * 会话发生在哪个工作区，transcript 就落在对应 projects/<slug>/ 下；
+ * 不能写死某一个项目目录（例如改名后的 cursor-learn-english）。
+ */
+export function resolveTranscriptPath(sessionId: string): string | null {
+  if (!sessionId) return null;
+  const cached = pathCache.get(sessionId);
+  if (cached) return cached;
+
+  for (const root of getTranscriptRoots()) {
+    const transcriptPath = path.join(root, sessionId, `${sessionId}.jsonl`);
+    try {
+      if (fs.existsSync(transcriptPath) && fs.statSync(transcriptPath).size > 0) {
+        pathCache.set(sessionId, transcriptPath);
+        return transcriptPath;
+      }
+    } catch {
+      // continue
+    }
+  }
+  return null;
+}
+
+export function hasSessionTranscript(sessionId: string): boolean {
+  return resolveTranscriptPath(sessionId) != null;
+}
+
+/** 测试或路径变更后可调用 */
+export function clearTranscriptPathCache(): void {
+  pathCache.clear();
+  cachedRoots = null;
+  cachedRootsAt = 0;
+}

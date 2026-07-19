@@ -13,3 +13,7 @@ next-env.d.ts
 .env*.local
 .env.production
 .env.production.local
+
+# Hooks / 仪表盘采集数据（本地 jsonl，不入库）
+/data/*.jsonl
+/data/.*-jsonl-prune

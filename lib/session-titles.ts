@@ -1,11 +1,14 @@
 import fs from "fs";
-import os from "os";
-import path from "path";
 import {
   domContextChipLabel,
   parseUserPromptWithDomContext,
   type DomContextBlock,
 } from "./parse-dom-context";
+import {
+  resolveTranscriptPath,
+} from "./agent-transcripts-path";
+
+export { hasSessionTranscript } from "./agent-transcripts-path";
 
 const DEFAULT_MAX_TITLE_LENGTH = 60;
 
@@ -15,15 +18,6 @@ export type ParsedSessionTitle = {
   domContexts: DomContextBlock[];
   body: string;
 };
-
-function getDefaultTranscriptRoot(): string {
-  const homeDir = os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir();
-  return path.join(homeDir, ".cursor", "projects", "home-slackworker-projects-cursor-dashboard", "agent-transcripts");
-}
-
-function getTranscriptRoot(): string {
-  return process.env.AGENT_TRANSCRIPTS_PATH || process.env.CURSOR_AGENT_TRANSCRIPTS_PATH || getDefaultTranscriptRoot();
-}
 
 function safeTrim(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -54,9 +48,8 @@ export function parseSessionTitleFromText(rawText: string): ParsedSessionTitle {
 }
 
 function readTranscriptTitleParts(sessionId: string): ParsedSessionTitle | null {
-  const root = getTranscriptRoot();
-  const transcriptPath = path.join(root, sessionId, `${sessionId}.jsonl`);
-  if (!fs.existsSync(transcriptPath)) return null;
+  const transcriptPath = resolveTranscriptPath(sessionId);
+  if (!transcriptPath) return null;
   const content = fs.readFileSync(transcriptPath, "utf8");
   if (!content.trim()) return null;
   const lines = content.split("\n");
@@ -81,18 +74,6 @@ function readTranscriptTitleParts(sessionId: string): ParsedSessionTitle | null 
     }
   }
   return null;
-}
-
-export function hasSessionTranscript(sessionId: string): boolean {
-  if (!sessionId) return false;
-  const root = getTranscriptRoot();
-  const transcriptPath = path.join(root, sessionId, `${sessionId}.jsonl`);
-  if (!fs.existsSync(transcriptPath)) return false;
-  try {
-    return fs.statSync(transcriptPath).size > 0;
-  } catch {
-    return false;
-  }
 }
 
 export function getSessionTitles(sessionIds: string[]): Map<string, ParsedSessionTitle> {

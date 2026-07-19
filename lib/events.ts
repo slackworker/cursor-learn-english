@@ -1,17 +1,11 @@
-import path from "path";
-import os from "os";
 import { readMergedJsonlLinesCached } from "./jsonl-daily";
-
-const defaultEventsPath = path.join(
-  os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir(),
-  "cursor-events.jsonl"
-);
+import { defaultEventsPath } from "./default-paths";
 
 export function getEventsPath(): string {
   return (
     process.env.EVENTS_JSONL_PATH ||
     process.env.CURSOR_EVENTS_PATH ||
-    defaultEventsPath
+    defaultEventsPath()
   );
 }
 

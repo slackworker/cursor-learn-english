@@ -1,22 +1,19 @@
-import path from "path";
-import os from "os";
 import { readMergedJsonlLinesCached } from "./jsonl-daily";
-
-const homeDir = os.platform() === "win32" ? process.env.USERPROFILE || os.homedir() : process.env.HOME || os.homedir();
-
-const defaultCorpusPath = path.join(homeDir, "thinking-corpus.jsonl");
-const defaultPromptCorpusPath = path.join(homeDir, "prompt-corpus.jsonl");
+import {
+  defaultPromptCorpusPath,
+  defaultThinkingCorpusPath,
+} from "./default-paths";
 
 export function getCorpusPath(): string {
   return (
     process.env.CORPUS_JSONL_PATH ||
     process.env.THINKING_CORPUS_PATH ||
-    defaultCorpusPath
+    defaultThinkingCorpusPath()
   );
 }
 
 export function getPromptCorpusPath(): string {
-  return process.env.PROMPT_CORPUS_PATH || defaultPromptCorpusPath;
+  return process.env.PROMPT_CORPUS_PATH || defaultPromptCorpusPath();
 }
 
 export type ThinkingRecord = {

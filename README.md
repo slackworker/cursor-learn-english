@@ -66,9 +66,9 @@
 
 | 文件                        | 来源                     | 说明                                                   |
 | ------------------------- | ---------------------- | ---------------------------------------------------- |
-| `~/thinking-corpus.jsonl` | `capture-thinking.mjs` | 每行一条 Thinking 记录（text、timestamp、model、duration_ms 等） |
-| `~/prompt-corpus.jsonl`   | `capture-prompt.mjs`   | 每行一条用户提问（prompt、timestamp、conversation_id） |
-| `~/cursor-events.jsonl`   | `capture-event.mjs`    | 每行一条事件（event_type、timestamp、conversation_id 及事件字段）   |
+| `~/projects/cursor-learn-english/data/thinking-corpus.jsonl` | `capture-thinking.mjs` | 每行一条 Thinking 记录（text、timestamp、model、duration_ms 等） |
+| `~/projects/cursor-learn-english/data/prompt-corpus.jsonl`   | `capture-prompt.mjs`   | 每行一条用户提问（prompt、timestamp、conversation_id） |
+| `~/projects/cursor-learn-english/data/cursor-events.jsonl`   | `capture-event.mjs`    | 每行一条事件（event_type、timestamp、conversation_id 及事件字段）   |
 
 
 可通过环境变量覆盖路径（Hooks 与 Web 使用**同一套变量名**，见下表）。Web 端在项目根目录复制 [`.env.local.example`](.env.local.example) 为 `.env.local` 后按需取消注释；Hooks 脚本从进程环境读取，可在 shell 配置中 `export`，或确保与 `.env.local` 指向相同绝对路径。
@@ -77,9 +77,9 @@
 
 | 数据 | 默认文件 | 变量（优先级从高到低） | 读/写方 |
 |------|----------|------------------------|---------|
-| 事件 | `~/cursor-events.jsonl` | `EVENTS_JSONL_PATH` → `CURSOR_EVENTS_PATH` | `capture-event.mjs`、Web API |
-| Thinking 语料 | `~/thinking-corpus.jsonl` | `CORPUS_JSONL_PATH` → `THINKING_CORPUS_PATH` | `capture-thinking.mjs`、Web API |
-| 用户提问 | `~/prompt-corpus.jsonl` | `PROMPT_CORPUS_PATH` | `capture-prompt.mjs`、Web API |
+| 事件 | `~/projects/cursor-learn-english/data/cursor-events.jsonl` | `EVENTS_JSONL_PATH` → `CURSOR_EVENTS_PATH` | `capture-event.mjs`、Web API |
+| Thinking 语料 | `~/projects/cursor-learn-english/data/thinking-corpus.jsonl` | `CORPUS_JSONL_PATH` → `THINKING_CORPUS_PATH` | `capture-thinking.mjs`、Web API |
+| 用户提问 | `~/projects/cursor-learn-english/data/prompt-corpus.jsonl` | `PROMPT_CORPUS_PATH` | `capture-prompt.mjs`、Web API |
 | 关键词（可选） | — | `KEYWORD_JSONL_PATH` | 仅 Web `/api/keyword`；未配置时返回 503 |
 
 #### Thinking 语料：`CORPUS_*` ↔ `THINKING_*` 对照
@@ -102,7 +102,7 @@
 
 #### 按日切分、保留与清理（#5 中期）
 
-默认开启按日写入：在配置的**基路径**旁生成 `*-YYYY-MM-DD.jsonl` 分片（例如 `~/thinking-corpus-2026-06-02.jsonl`），避免单文件无限增大。读侧会合并**旧版单文件**（若仍存在）与所有分片。
+默认开启按日写入：在配置的**基路径**旁生成 `*-YYYY-MM-DD.jsonl` 分片（例如 `data/thinking-corpus-2026-06-02.jsonl`），避免单文件无限增大。读侧会合并**旧版单文件**（若仍存在）与所有分片。可用环境变量 `CURSOR_DASHBOARD_DATA_DIR` 覆盖整个数据目录。
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
@@ -117,12 +117,12 @@
 node scripts/prune-jsonl.mjs
 ```
 
-旧版 `~/thinking-corpus.jsonl` 等单文件不会被 TTL 删除，可在确认分片已包含历史数据后自行归档或删除。
+旧版家目录下的 `~/thinking-corpus.jsonl` 等单文件不会被 TTL 删除，可在确认分片已包含历史数据后自行归档或删除。
 
 ### 4. 依赖与运行
 
 - 脚本需 **Node.js**（无 npm 依赖）。
-- Web 端：在项目根目录执行 `npm install` 后 `npm run dev`，浏览器打开仪表盘。路径覆盖见上文对照表，亦可复制 `.env.local.example` → `.env.local`。Thinking 页「我的问题」依赖 `~/prompt-corpus.jsonl`（或 `PROMPT_CORPUS_PATH`），需确保 `beforeSubmitPrompt` 已挂载 `capture-prompt.mjs`。
+- Web 端：在项目根目录执行 `npm install` 后 `npm run dev`，浏览器打开仪表盘。路径覆盖见上文对照表，亦可复制 `.env.local.example` → `.env.local`。Thinking 页「我的问题」依赖 `data/prompt-corpus.jsonl`（或 `PROMPT_CORPUS_PATH`），需确保 `beforeSubmitPrompt` 已挂载 `capture-prompt.mjs`。
 - 可选关键词页：设置 `KEYWORD_JSONL_PATH` 指向外部 keyword JSONL；未配置时 `/api/keyword` 返回 503 而非 500。
 
 更多事件字段说明见 [hooks.md](hooks.md)。

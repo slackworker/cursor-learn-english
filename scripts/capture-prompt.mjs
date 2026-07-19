@@ -1,13 +1,12 @@
 import fs from 'fs';
-import os from 'os';
 import { appendJsonlLine } from './jsonl-daily.mjs';
+import { defaultPromptCorpusPath } from './default-paths.mjs';
 
 const MAX_PROMPT_LEN = 6000;
 
 function getPromptCorpusPath() {
   if (process.env.PROMPT_CORPUS_PATH) return process.env.PROMPT_CORPUS_PATH;
-  const home = os.platform() === 'win32' ? process.env.USERPROFILE : process.env.HOME;
-  return `${home || os.homedir()}${os.platform() === 'win32' ? '\\' : '/'}prompt-corpus.jsonl`;
+  return defaultPromptCorpusPath();
 }
 
 try {
