@@ -3,8 +3,18 @@
   "tasks": [
     {
       "label": "新用户一键配置",
+      "detail": "npm install + 安装 Hooks。改 scripts/*.mjs 后请改用「更新 Cursor Hooks」。",
       "type": "shell",
       "command": "npm install && bash scripts/setup-cursor-hooks.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "更新 Cursor Hooks（改脚本后必跑）",
+      "detail": "把仓库 scripts/*.mjs 与 hooks.json 同步到 ~/.cursor/。只改仓库不跑此任务则采集仍用旧副本。",
+      "type": "shell",
+      "command": "bash scripts/setup-cursor-hooks.sh",
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": [],
       "presentation": { "reveal": "always" }

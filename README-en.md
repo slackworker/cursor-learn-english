@@ -25,6 +25,17 @@ Set up config and scripts in your home Cursor directory (you can copy from this 
 
 User-level hooks run with **working directory** `~/.cursor/`, so use `./scripts/xxx.mjs` in `hooks.json`.
 
+> **Important: after changing capture scripts in this repo, reinstall into `~/.cursor/`**
+>
+> Cursor runs the **copies** under `~/.cursor/scripts/*.mjs`, not the files in this repo’s `scripts/` folder.
+> Whenever you edit `scripts/capture-*.mjs`, `thinking-dedupe.mjs`, `jsonl-daily.mjs`, `default-paths.mjs`, or `hooks/hooks.json`, run again:
+>
+> ```bash
+> bash scripts/setup-cursor-hooks.sh
+> ```
+>
+> If you only change the repo and skip reinstall, fixes (e.g. thinking dedupe) will not take effect.
+
 ### 2. hooks.json example
 
 ```json

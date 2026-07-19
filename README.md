@@ -35,6 +35,17 @@
 
 用户级 Hooks 的**工作目录**为 `~/.cursor/`，因此 `hooks.json` 中的命令使用 `./scripts/xxx.mjs` 即可。
 
+> **重要：改了仓库里的采集脚本，必须重新安装到 `~/.cursor/`**
+>
+> Cursor 实际执行的是 `~/.cursor/scripts/*.mjs` 的**副本**，不是本仓库 `scripts/` 下的源文件。  
+> 修改 `scripts/capture-*.mjs`、`thinking-dedupe.mjs`、`jsonl-daily.mjs`、`default-paths.mjs` 或 `hooks/hooks.json` 后，请立刻再跑一次：
+>
+> ```bash
+> bash scripts/setup-cursor-hooks.sh
+> ```
+>
+> 也可在 Cursor 里用任务 **「新用户一键配置」**（会再次复制脚本）。只改仓库、不重装时，去重/路径等修复**不会生效**，语料里还可能继续出现重复 Thinking。
+
 ### 2. hooks.json 配置示例
 
 ```json
@@ -133,11 +144,12 @@ node scripts/prune-jsonl.mjs
 
 | 任务 | 说明 |
 |------|------|
-| **新用户一键配置** | 执行 `npm install` 并将 Hooks 脚本与 `hooks.json` 复制到 `~/.cursor/`，首次使用跑一次即可。 |
+| **新用户一键配置** | 执行 `npm install`，并将 Hooks 脚本与 `hooks.json` 复制到 `~/.cursor/`（首次使用）。 |
+| **更新 Cursor Hooks（改脚本后必跑）** | 仅同步 `scripts/*.mjs` 与 `hooks.json` 到 `~/.cursor/`。**改采集脚本后务必再跑**，否则 Cursor 仍用旧副本。 |
 | **本地访问：启动 dev（仅本机）** | 启动开发服务，仅本机浏览器访问 http://localhost:3000 。 |
 | **WSL/宿主机访问：启动 dev** | 启动开发服务并监听 `0.0.0.0`，宿主机浏览器也可访问 http://localhost:3000 。 |
 
-也可手动执行：`bash scripts/setup-cursor-hooks.sh`
+也可手动执行：`bash scripts/setup-cursor-hooks.sh`（改采集脚本后务必再执行，见上文「重要」说明）。
 
 ---
 
