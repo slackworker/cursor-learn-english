@@ -159,11 +159,11 @@ function sessionSortKey(session: SessionSummary): string {
   );
 }
 
-/** Attach titles from transcripts; drops sessions with no transcript file. */
-function attachTitlesRequiringTranscript(sessions: SessionSummary[]): SessionSummary[] {
-  const withTranscript = sessions.filter((session) => hasSessionTranscript(session.session_id));
-  const titles = getSessionTitles(withTranscript.map((s) => s.session_id));
-  return withTranscript.map((session) => {
+/** Attach titles from transcripts (caller already filtered to sessions with files). */
+function attachTitles(sessions: SessionSummary[]): SessionSummary[] {
+  if (sessions.length === 0) return sessions;
+  const titles = getSessionTitles(sessions.map((s) => s.session_id));
+  return sessions.map((session) => {
     const parsed = titles.get(session.session_id) as ParsedSessionTitle | undefined;
     if (parsed?.plain) {
       return {
@@ -198,10 +198,28 @@ function enrichTitlesFromTranscript(sessions: SessionSummary[]): SessionSummary[
   });
 }
 
+function keepListedSession(
+  session: SessionSummary,
+  contentById: Map<string, boolean>
+): boolean {
+  if (session.is_open) return true;
+  if (session.title?.trim()) return true;
+  return contentById.get(session.session_id) === true;
+}
+
+/**
+ * Build shells from sessionStart/End, then split by transcript path.
+ * Cursor often emits sessionEnd for Task subagents; those live under
+ * parent/subagents/<id>.jsonl and must not appear as normal main sessions.
+ */
 function buildMainSessionSummaries(
   events: CursorEvent[],
   prompts: PromptRecord[]
-): SessionSummary[] {
+): {
+  main: SessionSummary[];
+  /** sessionStart/End ids whose transcript resolves under subagents/ */
+  subagentsFromTranscript: SessionSummary[];
+} {
   const activityById = buildSessionActivityById(events, prompts);
   const sessionEvents = events.filter((e) => SESSION_EVENT_TYPES.has(e.event_type));
   const sessionEnds = sessionEvents.filter((e) => e.event_type === "sessionEnd");
@@ -260,13 +278,59 @@ function buildMainSessionSummaries(
     })
     .filter((s) => Boolean(s.start ?? s.timestamp));
 
-  const sessionsWithTitle = attachTitlesRequiringTranscript(sessions);
-  return sessionsWithTitle.filter((session) => {
-    if (session.is_open) return true;
-    const hasTitle = Boolean(session.title?.trim());
-    if (hasTitle) return true;
-    return sessionHasContentEvent.get(session.session_id) === true;
-  });
+  const mainRaw: SessionSummary[] = [];
+  const subRaw: SessionSummary[] = [];
+  for (const session of sessions) {
+    const resolved = resolveTranscript(session.session_id);
+    // No transcript → drop (same as prior hasSessionTranscript gate for main list).
+    if (!resolved) continue;
+    if (resolved.kind === "subagent") {
+      subRaw.push({
+        ...session,
+        is_subagent: true,
+        parent_session_id: resolved.parentSessionId,
+      });
+    } else {
+      mainRaw.push(session);
+    }
+  }
+
+  return {
+    main: attachTitles(mainRaw).filter((s) => keepListedSession(s, sessionHasContentEvent)),
+    subagentsFromTranscript: enrichTitlesFromTranscript(subRaw).filter((s) =>
+      keepListedSession(s, sessionHasContentEvent)
+    ),
+  };
+}
+
+function mergeSubagentSummaries(
+  fromEvents: SessionSummary[],
+  fromTranscript: SessionSummary[]
+): SessionSummary[] {
+  const byId = new Map<string, SessionSummary>();
+  for (const s of fromTranscript) {
+    byId.set(s.session_id, s);
+  }
+  for (const s of fromEvents) {
+    const prev = byId.get(s.session_id);
+    byId.set(s.session_id, {
+      ...prev,
+      ...s,
+      is_subagent: true,
+      parent_session_id: s.parent_session_id ?? prev?.parent_session_id,
+      subagent_type: s.subagent_type ?? prev?.subagent_type,
+      title: s.title?.trim() ? s.title : prev?.title,
+      title_body: s.title_body?.trim() ? s.title_body : prev?.title_body,
+      title_dom_contexts: s.title_dom_contexts ?? prev?.title_dom_contexts,
+      start: s.start ?? prev?.start,
+      timestamp: s.timestamp ?? prev?.timestamp,
+      last_activity: s.last_activity ?? prev?.last_activity,
+      duration_ms: s.duration_ms ?? prev?.duration_ms,
+      reason: s.reason ?? prev?.reason,
+      is_open: s.is_open ?? prev?.is_open,
+    });
+  }
+  return Array.from(byId.values());
 }
 
 function buildSubagentSessionSummaries(events: CursorEvent[]): SessionSummary[] {
@@ -367,12 +431,7 @@ function buildSubagentSessionSummaries(events: CursorEvent[]): SessionSummary[] 
 
   // Subagents are listed from Start/Stop lifecycle; transcript is optional enrichment.
   const withTitles = enrichTitlesFromTranscript(sessions);
-
-  return withTitles.filter((session) => {
-    if (session.is_open) return true;
-    if (session.title?.trim()) return true;
-    return contentById.get(session.session_id) === true;
-  });
+  return withTitles.filter((session) => keepListedSession(session, contentById));
 }
 
 function buildSessionSummaries(
@@ -391,11 +450,15 @@ function buildSessionSummaries(
     { from, to }
   );
 
-  const main = buildMainSessionSummaries(events, prompts);
+  const { main, subagentsFromTranscript } = buildMainSessionSummaries(events, prompts);
   const sessions = includeSubagents
-    ? [...main, ...buildSubagentSessionSummaries(events)].sort((a, b) =>
-        sessionSortKey(b).localeCompare(sessionSortKey(a))
-      )
+    ? [
+        ...main,
+        ...mergeSubagentSummaries(
+          buildSubagentSessionSummaries(events),
+          subagentsFromTranscript
+        ),
+      ].sort((a, b) => sessionSortKey(b).localeCompare(sessionSortKey(a)))
     : main.sort((a, b) => sessionSortKey(b).localeCompare(sessionSortKey(a)));
 
   return { sessions, truncated: truncated || promptsTruncated };

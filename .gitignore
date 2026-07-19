@@ -17,3 +17,6 @@ next-env.d.ts
 # Hooks / 仪表盘采集数据（本地 jsonl，不入库）
 /data/*.jsonl
 /data/.*-jsonl-prune
+
+# orphan-cleanup 脚本备份（体积大，仅本地保留）
+/data/.orphan-cleanup-backup-*/
