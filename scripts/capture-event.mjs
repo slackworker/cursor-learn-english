@@ -15,6 +15,31 @@ function trimText(s, max = MAX_TEXT_LEN) {
   return s.length <= max ? s : s.slice(0, max) + '…';
 }
 
+/** Extract subagent id from .../subagents/<id>.jsonl (or .txt) paths. */
+function subagentIdFromTranscriptPath(transcriptPath) {
+  if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
+  const normalized = transcriptPath.replace(/\\/g, '/');
+  const marker = '/subagents/';
+  const idx = normalized.lastIndexOf(marker);
+  if (idx < 0) return null;
+  const rest = normalized.slice(idx + marker.length);
+  const file = rest.split('/')[0] || '';
+  const id = file.replace(/\.(jsonl|txt)$/i, '');
+  return id || null;
+}
+
+/** Parent session id from .../<parent>/subagents/<id>.jsonl */
+function parentIdFromTranscriptPath(transcriptPath) {
+  if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
+  const normalized = transcriptPath.replace(/\\/g, '/');
+  const marker = '/subagents/';
+  const idx = normalized.lastIndexOf(marker);
+  if (idx < 0) return null;
+  const before = normalized.slice(0, idx);
+  const parts = before.split('/').filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : null;
+}
+
 function buildPayload(eventType, input) {
   const base = {
     event_type: eventType,
@@ -84,6 +109,50 @@ function buildPayload(eventType, input) {
         file_path: input.file_path ?? null,
         edits_count: Array.isArray(input.edits) ? input.edits.length : 0,
       };
+    case 'subagentStart': {
+      const subagentId = input.subagent_id ?? null;
+      return {
+        ...base,
+        // Prefer subagent_id as the conversation key (matches thinking/transcript ids).
+        conversation_id: subagentId ?? input.conversation_id ?? null,
+        session_id: subagentId,
+        subagent_id: subagentId,
+        parent_session_id: input.parent_conversation_id ?? null,
+        subagent_type: input.subagent_type ?? null,
+        task: trimText(input.task || '', 2000),
+        tool_call_id: input.tool_call_id ?? null,
+        subagent_model: input.subagent_model ?? null,
+        is_parallel_worker: input.is_parallel_worker ?? null,
+        git_branch: input.git_branch ?? null,
+        model: input.subagent_model ?? input.model ?? null,
+      };
+    }
+    case 'subagentStop': {
+      const fromPath = subagentIdFromTranscriptPath(input.agent_transcript_path);
+      const subagentId = input.subagent_id ?? fromPath ?? input.conversation_id ?? null;
+      const parentFromPath = parentIdFromTranscriptPath(input.agent_transcript_path);
+      return {
+        ...base,
+        conversation_id: subagentId,
+        session_id: subagentId,
+        subagent_id: subagentId,
+        parent_session_id:
+          input.parent_conversation_id ?? parentFromPath ?? null,
+        subagent_type: input.subagent_type ?? null,
+        status: input.status ?? null,
+        task: trimText(input.task || '', 2000),
+        description: trimText(input.description || '', 500),
+        summary: trimText(input.summary || '', 2000),
+        duration_ms: input.duration_ms ?? 0,
+        message_count: input.message_count ?? null,
+        tool_call_count: input.tool_call_count ?? null,
+        loop_count: input.loop_count ?? 0,
+        modified_files: Array.isArray(input.modified_files)
+          ? input.modified_files.slice(0, 50)
+          : null,
+        agent_transcript_path: input.agent_transcript_path ?? null,
+      };
+    }
     default:
       return base;
   }

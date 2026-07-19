@@ -28,6 +28,9 @@ type SessionDetail = {
   start?: string;
   last_activity?: string;
   is_open?: boolean;
+  is_subagent?: boolean;
+  parent_session_id?: string;
+  subagent_type?: string;
   prompt_count: number;
   thinking_count: number;
   event_counts: Record<string, number>;
@@ -193,7 +196,22 @@ export default function SessionDetailPage() {
         />
       }
       description={
-        <span className="font-mono text-xs">{session.session_id}</span>
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-xs">{session.session_id}</span>
+          {session.is_subagent ? (
+            <span className="badge badge-ghost badge-sm font-normal">
+              {session.subagent_type ? `子代理·${session.subagent_type}` : "子代理"}
+            </span>
+          ) : null}
+          {session.is_subagent && session.parent_session_id ? (
+            <Link
+              href={`/sessions/${session.parent_session_id}`}
+              className="text-xs text-base-content/60 underline-offset-2 hover:underline"
+            >
+              父会话 {session.parent_session_id.slice(0, 8)}…
+            </Link>
+          ) : null}
+        </span>
       }
     >
       <div className="flex flex-wrap items-center justify-between gap-2">

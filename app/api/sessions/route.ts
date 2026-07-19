@@ -7,6 +7,11 @@ import {
   normalizeDateRange,
 } from "@/lib/api-limits";
 
+function parseBoolParam(value: string | null): boolean {
+  if (!value) return false;
+  return value === "1" || value.toLowerCase() === "true";
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const { from, to } = normalizeDateRange(
@@ -20,10 +25,11 @@ export async function GET(request: NextRequest) {
   const limit = Number.isFinite(limitParam) && limitParam > 0
     ? Math.min(limitParam, 100)
     : 20;
-  const { sessions, truncated } = getSessionSummaries(from, to);
+  const includeSubagents = parseBoolParam(searchParams.get("includeSubagents"));
+  const { sessions, truncated } = getSessionSummaries(from, to, { includeSubagents });
   const pagedSessions = sessions.slice(offset, offset + limit);
   const hasMore = offset + pagedSessions.length < sessions.length;
-  const etag = `"${getMergedReadSignature(getEventsPath(), from, to)}"`;
+  const etag = `"${getMergedReadSignature(getEventsPath(), from, to)}:sub${includeSubagents ? 1 : 0}"`;
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, {
       status: 304,
@@ -43,6 +49,7 @@ export async function GET(request: NextRequest) {
       total: sessions.length,
       offset,
       limit,
+      includeSubagents,
     },
     {
       headers: {

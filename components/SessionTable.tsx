@@ -20,6 +20,9 @@ type Session = {
   start?: string;
   last_reply?: string;
   last_activity?: string;
+  is_subagent?: boolean;
+  parent_session_id?: string;
+  subagent_type?: string;
 };
 
 type SessionsResponse = {
@@ -29,17 +32,19 @@ type SessionsResponse = {
 
 const PAGE_SIZE = 20;
 
-function sessionsKey(page: number): string {
+function sessionsKey(page: number, includeSubagents: boolean): string {
   const url = new URL("/api/sessions", typeof window === "undefined" ? "http://localhost" : window.location.origin);
   url.searchParams.set("offset", String((page - 1) * PAGE_SIZE));
   url.searchParams.set("limit", String(PAGE_SIZE));
+  if (includeSubagents) url.searchParams.set("includeSubagents", "1");
   return url.pathname + url.search;
 }
 
 export function SessionTable() {
   const [page, setPage] = useState(1);
+  const [includeSubagents, setIncludeSubagents] = useState(false);
   const { data, error, isLoading, isValidating, mutate } = useSWR<SessionsResponse>(
-    sessionsKey(page),
+    sessionsKey(page, includeSubagents),
     sessionsSwrOptions
   );
 
@@ -66,12 +71,26 @@ export function SessionTable() {
   if (!loadError && !isValidating && sessions.length === 0) {
     return (
       <div className="space-y-3">
-        <EmptyState>
-          暂无会话。请确保 Cursor Hooks 已配置 sessionStart / sessionEnd。
-        </EmptyState>
-        <div className="flex justify-center">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <label className="label cursor-pointer gap-2 p-0">
+            <span className="text-sm text-base-content/60">加载子代理会话</span>
+            <input
+              type="checkbox"
+              className="toggle toggle-sm toggle-primary"
+              checked={includeSubagents}
+              onChange={(e) => {
+                setIncludeSubagents(e.target.checked);
+                setPage(1);
+              }}
+            />
+          </label>
           <RefreshButton onRefresh={() => void mutate()} isValidating={isValidating} />
         </div>
+        <EmptyState>
+          {includeSubagents
+            ? "暂无会话（含子代理）。请确保已配置 sessionStart/End 与 subagentStart/Stop。"
+            : "暂无会话。请确保 Cursor Hooks 已配置 sessionStart / sessionEnd。"}
+        </EmptyState>
       </div>
     );
   }
@@ -80,7 +99,19 @@ export function SessionTable() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <label className="label cursor-pointer gap-2 p-0">
+          <span className="text-sm text-base-content/60">加载子代理会话</span>
+          <input
+            type="checkbox"
+            className="toggle toggle-sm toggle-primary"
+            checked={includeSubagents}
+            onChange={(e) => {
+              setIncludeSubagents(e.target.checked);
+              setPage(1);
+            }}
+          />
+        </label>
         {isValidating ? (
           <p className="text-xs text-base-content/40">更新中…</p>
         ) : null}
@@ -109,13 +140,22 @@ export function SessionTable() {
                     title={s.title?.trim() || s.session_id}
                     className="data-table-link block min-w-0 overflow-hidden"
                   >
-                    <SessionTitleView
-                      title={s.title}
-                      domContexts={s.title_dom_contexts}
-                      body={s.title_body}
-                      fallback={`会话 ${s.session_id?.slice(0, 8)}…`}
-                      variant="inline"
-                    />
+                    <span className="flex min-w-0 items-center gap-2">
+                      {s.is_subagent ? (
+                        <span className="badge badge-ghost badge-sm shrink-0 font-normal">
+                          {s.subagent_type ? `子代理·${s.subagent_type}` : "子代理"}
+                        </span>
+                      ) : null}
+                      <span className="min-w-0 flex-1 overflow-hidden">
+                        <SessionTitleView
+                          title={s.title}
+                          domContexts={s.title_dom_contexts}
+                          body={s.title_body}
+                          fallback={`会话 ${s.session_id?.slice(0, 8)}…`}
+                          variant="inline"
+                        />
+                      </span>
+                    </span>
                   </Link>
                 </td>
                 <td className="whitespace-nowrap text-center tabular-nums">

@@ -14,6 +14,8 @@
     "postToolUseFailure": [{ "command": "node ./scripts/capture-event.mjs" }],
     "sessionStart": [{ "command": "node ./scripts/capture-event.mjs" }],
     "sessionEnd": [{ "command": "node ./scripts/capture-event.mjs" }],
+    "subagentStart": [{ "command": "node ./scripts/capture-event.mjs" }],
+    "subagentStop": [{ "command": "node ./scripts/capture-event.mjs" }],
     "stop": [{ "command": "node ./scripts/capture-event.mjs" }],
     "preCompact": [{ "command": "node ./scripts/capture-event.mjs" }],
     "afterFileEdit": [{ "command": "node ./scripts/capture-event.mjs" }]

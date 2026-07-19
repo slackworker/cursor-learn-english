@@ -52,8 +52,78 @@ function getTranscriptRoots(): string[] {
   return cachedRoots;
 }
 
-/** sessionId → transcript jsonl 绝对路径（仅缓存命中；未命中不缓存，以便文件稍后出现时能再次查找） */
-const pathCache = new Map<string, string>();
+export type TranscriptKind = "main" | "subagent";
+
+export type ResolvedTranscript = {
+  path: string;
+  kind: TranscriptKind;
+  /** Present when kind is subagent (parent session folder name). */
+  parentSessionId?: string;
+};
+
+/** sessionId → resolved transcript（仅缓存命中；未命中不缓存，以便文件稍后出现时能再次查找） */
+const pathCache = new Map<string, ResolvedTranscript>();
+
+function tryMainTranscript(root: string, sessionId: string): ResolvedTranscript | null {
+  const transcriptPath = path.join(root, sessionId, `${sessionId}.jsonl`);
+  try {
+    if (fs.existsSync(transcriptPath) && fs.statSync(transcriptPath).size > 0) {
+      return { path: transcriptPath, kind: "main" };
+    }
+  } catch {
+    // continue
+  }
+  return null;
+}
+
+function trySubagentTranscript(root: string, sessionId: string): ResolvedTranscript | null {
+  try {
+    for (const parentName of fs.readdirSync(root)) {
+      const subPath = path.join(root, parentName, "subagents", `${sessionId}.jsonl`);
+      try {
+        if (fs.existsSync(subPath) && fs.statSync(subPath).size > 0) {
+          return {
+            path: subPath,
+            kind: "subagent",
+            parentSessionId: parentName,
+          };
+        }
+      } catch {
+        // continue
+      }
+    }
+  } catch {
+    // continue
+  }
+  return null;
+}
+
+/**
+ * 在所有 Cursor 项目的 agent-transcripts 中查找会话文件。
+ * 主会话：`<sessionId>/<sessionId>.jsonl`
+ * 子代理：`<parentSessionId>/subagents/<sessionId>.jsonl`
+ */
+export function resolveTranscript(sessionId: string): ResolvedTranscript | null {
+  if (!sessionId) return null;
+  const cached = pathCache.get(sessionId);
+  if (cached) return cached;
+
+  for (const root of getTranscriptRoots()) {
+    const main = tryMainTranscript(root, sessionId);
+    if (main) {
+      pathCache.set(sessionId, main);
+      return main;
+    }
+  }
+  for (const root of getTranscriptRoots()) {
+    const sub = trySubagentTranscript(root, sessionId);
+    if (sub) {
+      pathCache.set(sessionId, sub);
+      return sub;
+    }
+  }
+  return null;
+}
 
 /**
  * 在所有 Cursor 项目的 agent-transcripts 中查找会话文件。
@@ -61,22 +131,7 @@ const pathCache = new Map<string, string>();
  * 不能写死某一个项目目录（例如改名后的 cursor-learn-english）。
  */
 export function resolveTranscriptPath(sessionId: string): string | null {
-  if (!sessionId) return null;
-  const cached = pathCache.get(sessionId);
-  if (cached) return cached;
-
-  for (const root of getTranscriptRoots()) {
-    const transcriptPath = path.join(root, sessionId, `${sessionId}.jsonl`);
-    try {
-      if (fs.existsSync(transcriptPath) && fs.statSync(transcriptPath).size > 0) {
-        pathCache.set(sessionId, transcriptPath);
-        return transcriptPath;
-      }
-    } catch {
-      // continue
-    }
-  }
-  return null;
+  return resolveTranscript(sessionId)?.path ?? null;
 }
 
 export function hasSessionTranscript(sessionId: string): boolean {
