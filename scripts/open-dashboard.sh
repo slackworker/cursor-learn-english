@@ -75,10 +75,41 @@ start_idle_watchdog() {
   disown || true
 }
 
+stop_server() {
+  if [[ -f "$PID_FILE" ]]; then
+    old=$(cat "$PID_FILE" 2>/dev/null || true)
+    if [[ -n "${old:-}" ]] && kill -0 "$old" 2>/dev/null; then
+      echo "[dashboard] stopping pid $old" >&2
+      kill "$old" 2>/dev/null || true
+      for _ in $(seq 1 20); do
+        kill -0 "$old" 2>/dev/null || break
+        sleep 0.25
+      done
+      kill -9 "$old" 2>/dev/null || true
+    fi
+    rm -f "$PID_FILE"
+  fi
+  # 兜底：按端口回收残留 next-server
+  if port_listening; then
+    pids=$(ss -tlnp 2>/dev/null | grep -E ":${PORT}\\b" | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true)
+    for p in $pids; do
+      echo "[dashboard] killing listener pid $p" >&2
+      kill "$p" 2>/dev/null || true
+    done
+    sleep 0.5
+  fi
+}
+
 touch_access
 
 if port_listening; then
-  echo "[dashboard] already on :$PORT" >&2
+  if needs_rebuild; then
+    echo "[dashboard] source newer than build; restarting…" >&2
+    stop_server
+    start_server
+  else
+    echo "[dashboard] already on :$PORT" >&2
+  fi
 else
   start_server
 fi

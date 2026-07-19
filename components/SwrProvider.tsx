@@ -9,7 +9,7 @@ export function SwrProvider({ children }: { children: React.ReactNode }) {
       value={{
         fetcher: fetchJson,
         revalidateOnFocus: false,
-        dedupingInterval: 30_000,
+        dedupingInterval: 5_000,
         keepPreviousData: true,
       }}
     >

@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       status: 304,
       headers: {
         ETag: etag,
-        "Cache-Control": "private, max-age=30",
+        "Cache-Control": "private, no-cache",
       },
     });
   }
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     {
       headers: {
         ETag: etag,
-        "Cache-Control": "private, max-age=30",
+        "Cache-Control": "private, no-cache",
       },
     }
   );

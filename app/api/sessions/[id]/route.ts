@@ -10,5 +10,12 @@ export async function GET(
   if (!detail) {
     return Response.json({ error: "Session not found" }, { status: 404 });
   }
-  return Response.json({ session: detail });
+  return Response.json(
+    { session: detail },
+    {
+      headers: {
+        "Cache-Control": "private, no-cache",
+      },
+    }
+  );
 }

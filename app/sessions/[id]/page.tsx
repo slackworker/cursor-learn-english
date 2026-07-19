@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { DialogueTimeline } from "@/components/DialogueTimeline";
+import { RefreshButton } from "@/components/RefreshButton";
 import { SessionTitleView } from "@/components/SessionTitleView";
 import { UserPromptView } from "@/components/UserPromptView";
 import { LoadingState } from "@/components/ui/EmptyState";
@@ -13,6 +14,8 @@ import { Surface } from "@/components/ui/Surface";
 import type { DomContextBlock } from "@/lib/parse-dom-context";
 import { formatLocalDateTime } from "@/lib/format-datetime";
 import { formatDurationMs } from "@/lib/format-duration";
+import { fetchJson } from "@/lib/fetch-json";
+import { sessionsSwrOptions } from "@/lib/sessions-swr";
 
 type SessionDetail = {
   session_id: string;
@@ -103,41 +106,34 @@ type SessionDetail = {
   }>;
 };
 
+type SessionDetailResponse = {
+  session?: SessionDetail;
+};
+
+async function fetchSessionDetail(url: string): Promise<SessionDetail> {
+  const data = await fetchJson<SessionDetailResponse>(url);
+  if (!data.session) {
+    throw new Error("会话不存在");
+  }
+  return data.session;
+}
+
 export default function SessionDetailPage() {
   const params = useParams<{ id: string }>();
   const sessionId = typeof params?.id === "string" ? params.id : "";
-  const [session, setSession] = useState<SessionDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: session,
+    error,
+    isLoading,
+    isValidating,
+    mutate,
+  } = useSWR<SessionDetail>(
+    sessionId ? `/api/sessions/${sessionId}` : null,
+    fetchSessionDetail,
+    sessionsSwrOptions
+  );
 
-  useEffect(() => {
-    let canceled = false;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        if (!sessionId) throw new Error("会话 ID 无效");
-        const res = await fetch(`/api/sessions/${sessionId}`);
-        if (!res.ok) {
-          throw new Error(res.status === 404 ? "会话不存在" : "加载失败");
-        }
-        const data = (await res.json()) as { session?: SessionDetail };
-        if (!canceled) setSession(data.session ?? null);
-      } catch (e) {
-        if (!canceled) setError(e instanceof Error ? e.message : "加载失败");
-      } finally {
-        if (!canceled) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      canceled = true;
-    };
-  }, [sessionId]);
-
-  if (loading) {
+  if (isLoading && !session) {
     return (
       <PageShell title="会话详情">
         <LoadingState />
@@ -145,13 +141,30 @@ export default function SessionDetailPage() {
     );
   }
 
-  if (error || !session) {
+  if ((error || !session) && !isValidating) {
+    const message =
+      error instanceof Error
+        ? error.message === "Request failed: 404"
+          ? "会话不存在"
+          : error.message
+        : "会话不存在";
     return (
       <PageShell title="会话详情">
-        <p className="text-sm text-base-content/60">{error ?? "会话不存在"}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-base-content/60">{message}</p>
+          <RefreshButton onRefresh={() => void mutate()} isValidating={isValidating} />
+        </div>
         <Link href="/sessions" className="back-link mt-4">
           ← 返回会话列表
         </Link>
+      </PageShell>
+    );
+  }
+
+  if (!session) {
+    return (
+      <PageShell title="会话详情">
+        <LoadingState />
       </PageShell>
     );
   }
@@ -183,9 +196,17 @@ export default function SessionDetailPage() {
         <span className="font-mono text-xs">{session.session_id}</span>
       }
     >
-      <Link href="/sessions" className="back-link">
-        ← 返回会话列表
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href="/sessions" className="back-link">
+          ← 返回会话列表
+        </Link>
+        <div className="flex items-center gap-2">
+          {isValidating ? (
+            <span className="text-xs text-base-content/40">更新中…</span>
+          ) : null}
+          <RefreshButton onRefresh={() => void mutate()} isValidating={isValidating} />
+        </div>
+      </div>
 
       <section className="meta-grid mt-2">
         {[

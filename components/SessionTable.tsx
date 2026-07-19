@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
+import { RefreshButton } from "@/components/RefreshButton";
 import { SessionTitleView } from "@/components/SessionTitleView";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { formatLocalDateTime } from "@/lib/format-datetime";
+import { sessionsSwrOptions } from "@/lib/sessions-swr";
 import type { DomContextBlock } from "@/lib/parse-dom-context";
 
 type Session = {
@@ -36,8 +38,9 @@ function sessionsKey(page: number): string {
 
 export function SessionTable() {
   const [page, setPage] = useState(1);
-  const { data, error, isLoading, isValidating } = useSWR<SessionsResponse>(
-    sessionsKey(page)
+  const { data, error, isLoading, isValidating, mutate } = useSWR<SessionsResponse>(
+    sessionsKey(page),
+    sessionsSwrOptions
   );
 
   const sessions = data?.sessions ?? [];
@@ -50,14 +53,26 @@ export function SessionTable() {
   }
 
   if (loadError && sessions.length === 0) {
-    return <EmptyState>{loadError}</EmptyState>;
+    return (
+      <div className="space-y-3">
+        <EmptyState>{loadError}</EmptyState>
+        <div className="flex justify-center">
+          <RefreshButton onRefresh={() => void mutate()} isValidating={isValidating} />
+        </div>
+      </div>
+    );
   }
 
   if (!loadError && !isValidating && sessions.length === 0) {
     return (
-      <EmptyState>
-        暂无会话。请确保 Cursor Hooks 已配置 sessionStart / sessionEnd。
-      </EmptyState>
+      <div className="space-y-3">
+        <EmptyState>
+          暂无会话。请确保 Cursor Hooks 已配置 sessionStart / sessionEnd。
+        </EmptyState>
+        <div className="flex justify-center">
+          <RefreshButton onRefresh={() => void mutate()} isValidating={isValidating} />
+        </div>
+      </div>
     );
   }
 
@@ -65,9 +80,12 @@ export function SessionTable() {
 
   return (
     <div className="space-y-3">
-      {isValidating ? (
-        <p className="text-right text-xs text-base-content/40">更新中…</p>
-      ) : null}
+      <div className="flex items-center justify-end gap-2">
+        {isValidating ? (
+          <p className="text-xs text-base-content/40">更新中…</p>
+        ) : null}
+        <RefreshButton onRefresh={() => void mutate()} isValidating={isValidating} />
+      </div>
       <div
         className={`data-table-wrap ${isValidating && sessions.length > 0 ? "opacity-80 transition-opacity" : ""}`}
       >
