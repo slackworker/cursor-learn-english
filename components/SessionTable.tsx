@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { RefreshButton } from "@/components/RefreshButton";
 import { SessionTitleView } from "@/components/SessionTitleView";
@@ -31,6 +31,24 @@ type SessionsResponse = {
 };
 
 const PAGE_SIZE = 20;
+const INCLUDE_SUBAGENTS_STORAGE_KEY = "sessions_include_subagents";
+
+function readIncludeSubagents(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(INCLUDE_SUBAGENTS_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeIncludeSubagents(value: boolean): void {
+  try {
+    window.localStorage.setItem(INCLUDE_SUBAGENTS_STORAGE_KEY, value ? "1" : "0");
+  } catch {
+    // ignore quota / private mode
+  }
+}
 
 function sessionsKey(page: number, includeSubagents: boolean): string {
   const url = new URL("/api/sessions", typeof window === "undefined" ? "http://localhost" : window.location.origin);
@@ -43,15 +61,22 @@ function sessionsKey(page: number, includeSubagents: boolean): string {
 export function SessionTable() {
   const [page, setPage] = useState(1);
   const [includeSubagents, setIncludeSubagents] = useState(false);
+  const [prefsReady, setPrefsReady] = useState(false);
+
+  useEffect(() => {
+    setIncludeSubagents(readIncludeSubagents());
+    setPrefsReady(true);
+  }, []);
+
   const { data, error, isLoading, isValidating, mutate } = useSWR<SessionsResponse>(
-    sessionsKey(page, includeSubagents),
+    prefsReady ? sessionsKey(page, includeSubagents) : null,
     sessionsSwrOptions
   );
 
   const sessions = data?.sessions ?? [];
   const total = data?.total ?? 0;
   const loadError = error ? "加载失败，请稍后重试。" : null;
-  const showInitialLoading = isLoading && sessions.length === 0;
+  const showInitialLoading = (!prefsReady || isLoading) && sessions.length === 0;
 
   if (showInitialLoading) {
     return <LoadingState />;
@@ -79,7 +104,9 @@ export function SessionTable() {
               className="toggle toggle-sm toggle-primary"
               checked={includeSubagents}
               onChange={(e) => {
-                setIncludeSubagents(e.target.checked);
+                const next = e.target.checked;
+                writeIncludeSubagents(next);
+                setIncludeSubagents(next);
                 setPage(1);
               }}
             />
@@ -107,7 +134,9 @@ export function SessionTable() {
             className="toggle toggle-sm toggle-primary"
             checked={includeSubagents}
             onChange={(e) => {
-              setIncludeSubagents(e.target.checked);
+              const next = e.target.checked;
+              writeIncludeSubagents(next);
+              setIncludeSubagents(next);
               setPage(1);
             }}
           />
