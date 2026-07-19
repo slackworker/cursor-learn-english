@@ -5,7 +5,14 @@ export type DomContextBlock = {
   htmlElement: string;
 };
 
+/** Ordered pieces of a user prompt: plain text and DOM picker chips. */
+export type PromptSegment =
+  | { type: "text"; text: string }
+  | { type: "dom"; block: DomContextBlock };
+
 export type ParsedUserPrompt = {
+  /** Preserves Cursor's inline chip order (text ↔ DOM). */
+  segments: PromptSegment[];
   domContexts: DomContextBlock[];
   body: string;
 };
@@ -105,65 +112,100 @@ function extractBracketDomBlocks(text: string): {
   return { blocks, remainder };
 }
 
-function extractInlineDomBlocks(text: string): {
-  blocks: DomContextBlock[];
-  bodyParts: string[];
-} {
-  const blocks: DomContextBlock[] = [];
-  const bodyParts: string[] = [];
+function extractInlineDomSegments(text: string): PromptSegment[] {
+  const segments: PromptSegment[] = [];
   let cursor = 0;
   let m: RegExpExecArray | null;
 
   INLINE_BLOCK_HEADER.lastIndex = 0;
   while ((m = INLINE_BLOCK_HEADER.exec(text))) {
     const before = text.slice(cursor, m.index).trim();
-    if (before) bodyParts.push(before);
+    if (before) segments.push({ type: "text", text: before });
 
     const afterHeader = text.slice(m.index + m[0].length);
     const { html, trailingText, consumed } = sliceHtmlElementValue(afterHeader);
-    blocks.push({
-      domPath: m[1].trim(),
-      position: m[2].trim(),
-      reactComponent: m[3].trim(),
-      htmlElement: html,
+    segments.push({
+      type: "dom",
+      block: {
+        domPath: m[1].trim(),
+        position: m[2].trim(),
+        reactComponent: m[3].trim(),
+        htmlElement: html,
+      },
     });
-    if (trailingText) bodyParts.push(trailingText);
+    if (trailingText) segments.push({ type: "text", text: trailingText });
     cursor = m.index + m[0].length + consumed;
     INLINE_BLOCK_HEADER.lastIndex = cursor;
   }
 
   const tail = text.slice(cursor).trim();
-  if (tail) bodyParts.push(tail);
-  return { blocks, bodyParts };
+  if (tail) segments.push({ type: "text", text: tail });
+  return segments;
+}
+
+function finalizeParsed(segments: PromptSegment[]): ParsedUserPrompt {
+  const domContexts = segments
+    .filter((s): s is Extract<PromptSegment, { type: "dom" }> => s.type === "dom")
+    .map((s) => s.block);
+  const body = segments
+    .filter((s): s is Extract<PromptSegment, { type: "text" }> => s.type === "text")
+    .map((s) => s.text)
+    .join(" ")
+    .trim();
+  return {
+    segments,
+    domContexts,
+    body: body || (domContexts.length > 0 ? "" : ""),
+  };
+}
+
+/** Legacy fallback when only chips + body are available (chips first). */
+export function segmentsFromDomAndBody(
+  domContexts: DomContextBlock[],
+  body: string
+): PromptSegment[] {
+  const segments: PromptSegment[] = domContexts.map((block) => ({
+    type: "dom" as const,
+    block,
+  }));
+  const trimmed = body.trim();
+  if (trimmed) segments.push({ type: "text", text: trimmed });
+  return segments;
 }
 
 /** Split Cursor browser DOM picker metadata from the user's actual question text. */
 export function parseUserPromptWithDomContext(raw: string): ParsedUserPrompt {
   const trimmed = raw.trim();
-  if (!trimmed) return { domContexts: [], body: "" };
+  if (!trimmed) return { segments: [], domContexts: [], body: "" };
 
   const { blocks: bracketBlocks, remainder: afterBrackets } =
     extractBracketDomBlocks(trimmed);
 
   if (bracketBlocks.length > 0 && !/\bDOM Path:/.test(afterBrackets)) {
-    return {
-      domContexts: bracketBlocks,
-      body: afterBrackets.trim(),
-    };
+    const segments: PromptSegment[] = [
+      ...bracketBlocks.map((block) => ({ type: "dom" as const, block })),
+      ...(afterBrackets.trim()
+        ? [{ type: "text" as const, text: afterBrackets.trim() }]
+        : []),
+    ];
+    return finalizeParsed(segments);
   }
 
   if (!/\bDOM Path:/.test(trimmed)) {
-    return { domContexts: [], body: trimmed };
+    return finalizeParsed([{ type: "text", text: trimmed }]);
   }
 
-  const { blocks: inlineBlocks, bodyParts } = extractInlineDomBlocks(trimmed);
-  const allBlocks = [...bracketBlocks, ...inlineBlocks];
-  const body = bodyParts.join("\n\n").trim();
+  const inlineSegments = extractInlineDomSegments(trimmed);
+  if (bracketBlocks.length === 0) {
+    return finalizeParsed(
+      inlineSegments.length > 0 ? inlineSegments : [{ type: "text", text: trimmed }]
+    );
+  }
 
-  return {
-    domContexts: allBlocks,
-    body: body || (allBlocks.length > 0 ? "" : trimmed),
-  };
+  return finalizeParsed([
+    ...bracketBlocks.map((block) => ({ type: "dom" as const, block })),
+    ...inlineSegments,
+  ]);
 }
 
 /** Short label for chip: tag name only (matches Cursor DOM picker badge). */

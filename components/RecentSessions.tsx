@@ -13,6 +13,7 @@ type Session = {
   session_id: string;
   title?: string;
   title_dom_contexts?: import("@/lib/parse-dom-context").DomContextBlock[];
+  title_segments?: import("@/lib/parse-dom-context").PromptSegment[];
   title_body?: string;
   last_activity?: string;
   last_reply?: string;
@@ -84,6 +85,7 @@ export function RecentSessions({ limit = 5 }: { limit?: number }) {
               <div className="min-w-0 overflow-hidden text-sm font-medium text-base-content">
                 <SessionTitleView
                   title={s.title}
+                  segments={s.title_segments}
                   domContexts={s.title_dom_contexts}
                   body={s.title_body}
                   fallback={`会话 ${s.session_id?.slice(0, 8)}…`}

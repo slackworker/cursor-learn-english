@@ -47,13 +47,32 @@ type DialogueRound = {
 function RoundCard({ round }: { round: DialogueRound }) {
   const [showFullPrompt, setShowFullPrompt] = useState(false);
   const prompt = round.prompt ?? "";
-  const { domContexts, body } = useMemo(
+  const { segments, body } = useMemo(
     () => parseUserPromptWithDomContext(prompt),
     [prompt]
   );
   const isLongPrompt = body.length > 200;
-  const bodyDisplay =
-    showFullPrompt || !isLongPrompt ? body : `${body.slice(0, 200)}...`;
+  const displaySegments = useMemo(() => {
+    if (showFullPrompt || !isLongPrompt) return segments;
+    let remaining = 200;
+    const out: typeof segments = [];
+    for (const seg of segments) {
+      if (seg.type === "dom") {
+        out.push(seg);
+        continue;
+      }
+      if (remaining <= 0) break;
+      if (seg.text.length <= remaining) {
+        out.push(seg);
+        remaining -= seg.text.length;
+      } else {
+        out.push({ type: "text", text: `${seg.text.slice(0, remaining)}...` });
+        remaining = 0;
+        break;
+      }
+    }
+    return out;
+  }, [segments, showFullPrompt, isLongPrompt]);
   return (
     <li className="dialogue-item">
       <MessageBubble
@@ -72,8 +91,8 @@ function RoundCard({ round }: { round: DialogueRound }) {
         }
       >
         <UserPromptView
-          prompt={bodyDisplay}
-          domContexts={domContexts.length > 0 ? domContexts : undefined}
+          prompt={body}
+          segments={displaySegments}
         />
       </MessageBubble>
 

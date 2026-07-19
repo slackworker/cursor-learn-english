@@ -4,7 +4,7 @@ import {
   hasSessionTranscript,
   type ParsedSessionTitle,
 } from "./session-titles";
-import type { DomContextBlock } from "./parse-dom-context";
+import type { DomContextBlock, PromptSegment } from "./parse-dom-context";
 import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./thinking";
 import { getMergedReadSignature, readMergedJsonlLinesCached } from "./jsonl-daily";
 import { getDialogueRounds, type DialogueRound } from "./dialogue";
@@ -19,6 +19,7 @@ export type SessionSummary = {
   session_id: string;
   title?: string;
   title_dom_contexts?: DomContextBlock[];
+  title_segments?: PromptSegment[];
   title_body?: string;
   reason?: string;
   duration_ms?: number;
@@ -237,6 +238,7 @@ function attachTitles(sessions: SessionSummary[]): SessionSummary[] {
         title: parsed.plain,
         title_dom_contexts:
           parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
+        title_segments: parsed.segments.length > 0 ? parsed.segments : undefined,
         title_body: parsed.body || undefined,
       };
     }
@@ -259,6 +261,7 @@ function enrichTitlesFromTranscript(sessions: SessionSummary[]): SessionSummary[
       title: parsed.plain,
       title_dom_contexts:
         parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
+      title_segments: parsed.segments.length > 0 ? parsed.segments : undefined,
       title_body: parsed.body || session.title_body,
     };
   });
@@ -388,6 +391,7 @@ function mergeSubagentSummaries(
       title: s.title?.trim() ? s.title : prev?.title,
       title_body: s.title_body?.trim() ? s.title_body : prev?.title_body,
       title_dom_contexts: s.title_dom_contexts ?? prev?.title_dom_contexts,
+      title_segments: s.title_segments ?? prev?.title_segments,
       start: s.start ?? prev?.start,
       timestamp: s.timestamp ?? prev?.timestamp,
       last_activity: s.last_activity ?? prev?.last_activity,
@@ -422,6 +426,7 @@ function mergeSubagentPair(
     title: canonical.title?.trim() ? canonical.title : hook.title,
     title_body: canonical.title_body?.trim() ? canonical.title_body : hook.title_body,
     title_dom_contexts: canonical.title_dom_contexts ?? hook.title_dom_contexts,
+    title_segments: canonical.title_segments ?? hook.title_segments,
     start,
     timestamp,
     last_activity,
@@ -946,6 +951,8 @@ function buildSingleSessionSummary(
     title: parsed?.plain || taskTitle,
     title_dom_contexts:
       parsed && parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
+    title_segments:
+      parsed && parsed.segments.length > 0 ? parsed.segments : undefined,
     title_body: parsed?.body || task?.trim() || undefined,
   };
 }

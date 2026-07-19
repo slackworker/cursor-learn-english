@@ -4,11 +4,14 @@ import { useMemo } from "react";
 import { DomContextChip } from "@/components/DomContextChip";
 import {
   parseUserPromptWithDomContext,
+  segmentsFromDomAndBody,
   type DomContextBlock,
+  type PromptSegment,
 } from "@/lib/parse-dom-context";
 
 export function SessionTitleView({
   title,
+  segments: segmentsProp,
   domContexts: domContextsProp,
   body: bodyProp,
   fallback,
@@ -16,64 +19,65 @@ export function SessionTitleView({
   className = "",
 }: {
   title?: string;
+  segments?: PromptSegment[];
   domContexts?: DomContextBlock[];
   body?: string;
   fallback?: string;
   variant?: "heading" | "inline";
   className?: string;
 }) {
-  const { domContexts, body, useFallback } = useMemo(() => {
+  const { segments, useFallback } = useMemo(() => {
+    if (segmentsProp && segmentsProp.length > 0) {
+      return { segments: segmentsProp, useFallback: false };
+    }
     if (domContextsProp && domContextsProp.length > 0) {
       return {
-        domContexts: domContextsProp,
-        body: bodyProp ?? "",
+        segments: segmentsFromDomAndBody(domContextsProp, bodyProp ?? ""),
         useFallback: false,
       };
     }
     const raw = title?.trim();
     if (!raw) {
-      return { domContexts: [], body: "", useFallback: Boolean(fallback) };
+      return { segments: [] as PromptSegment[], useFallback: Boolean(fallback) };
     }
     const parsed = parseUserPromptWithDomContext(raw);
-    if (parsed.domContexts.length > 0) {
-      return { domContexts: parsed.domContexts, body: parsed.body, useFallback: false };
+    if (parsed.segments.length > 0) {
+      return { segments: parsed.segments, useFallback: false };
     }
-    return { domContexts: [], body: raw, useFallback: false };
-  }, [title, domContextsProp, bodyProp, fallback]);
+    return {
+      segments: [{ type: "text" as const, text: raw }],
+      useFallback: false,
+    };
+  }, [title, segmentsProp, domContextsProp, bodyProp, fallback]);
 
   if (useFallback && fallback) {
     return <span className={className}>{fallback}</span>;
   }
 
-  const hasBody = body.trim().length > 0;
-  const hasDom = domContexts.length > 0;
+  const hasContent = segments.some(
+    (s) => s.type === "dom" || (s.type === "text" && s.text.trim().length > 0)
+  );
 
-  if (!hasDom && !hasBody) {
+  if (!hasContent) {
     return fallback ? <span className={className}>{fallback}</span> : null;
   }
 
-  const textClass =
-    variant === "heading"
-      ? "font-semibold text-inherit"
-      : "block min-w-0 truncate text-inherit";
-
-  if (!hasDom) {
-    return <span className={`${textClass} ${className}`}>{body}</span>;
-  }
-
-  const chipSpacing = variant === "heading" ? "mr-2" : "shrink-0";
+  const chipClass = variant === "heading" ? "mr-1.5" : "shrink-0";
 
   if (variant === "heading") {
     return (
       <span className={`inline max-w-full align-middle leading-relaxed ${className}`}>
-        {domContexts.map((block, i) => (
-          <DomContextChip
-            key={`title-dom-${i}-${block.domPath.slice(0, 24)}`}
-            block={block}
-            className={i < domContexts.length - 1 || hasBody ? "mr-2" : undefined}
-          />
-        ))}
-        {hasBody ? <span>{body}</span> : null}
+        {segments.map((seg, i) =>
+          seg.type === "dom" ? (
+            <DomContextChip
+              key={`title-dom-${i}-${seg.block.domPath.slice(0, 24)}`}
+              block={seg.block}
+              className={chipClass}
+            />
+          ) : (
+            <span key={`title-text-${i}`}>{seg.text}</span>
+          )
+        )}
       </span>
     );
   }
@@ -82,14 +86,30 @@ export function SessionTitleView({
     <span
       className={`flex min-w-0 items-center gap-1.5 overflow-hidden ${className}`}
     >
-      {domContexts.map((block, i) => (
-        <DomContextChip
-          key={`title-dom-${i}-${block.domPath.slice(0, 24)}`}
-          block={block}
-          className={chipSpacing}
-        />
-      ))}
-      {hasBody ? <span className="min-w-0 flex-1 truncate">{body}</span> : null}
+      {segments.map((seg, i) => {
+        if (seg.type === "dom") {
+          return (
+            <DomContextChip
+              key={`title-dom-${i}-${seg.block.domPath.slice(0, 24)}`}
+              block={seg.block}
+              className={chipClass}
+            />
+          );
+        }
+        const hasLaterText = segments
+          .slice(i + 1)
+          .some((s) => s.type === "text" && s.text.trim().length > 0);
+        return (
+          <span
+            key={`title-text-${i}`}
+            className={
+              hasLaterText ? "shrink-0" : "min-w-0 flex-1 truncate"
+            }
+          >
+            {seg.text}
+          </span>
+        );
+      })}
     </span>
   );
 }

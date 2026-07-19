@@ -11,7 +11,7 @@ import { LoadingState } from "@/components/ui/EmptyState";
 import { MessageBubble } from "@/components/ui/MessageBubble";
 import { PageShell } from "@/components/ui/PageShell";
 import { Surface } from "@/components/ui/Surface";
-import type { DomContextBlock } from "@/lib/parse-dom-context";
+import type { DomContextBlock, PromptSegment } from "@/lib/parse-dom-context";
 import { formatLocalDateTime } from "@/lib/format-datetime";
 import { formatDurationMs } from "@/lib/format-duration";
 import { fetchJson } from "@/lib/fetch-json";
@@ -21,6 +21,7 @@ type SessionDetail = {
   session_id: string;
   title?: string;
   title_dom_contexts?: DomContextBlock[];
+  title_segments?: PromptSegment[];
   title_body?: string;
   reason?: string;
   duration_ms?: number;
@@ -78,6 +79,18 @@ type SessionDetail = {
       reactComponent: string;
       htmlElement: string;
     }>;
+    user_prompt_segments?: Array<
+      | { type: "text"; text: string }
+      | {
+          type: "dom";
+          block: {
+            domPath: string;
+            position: string;
+            reactComponent: string;
+            htmlElement: string;
+          };
+        }
+    >;
     user_timestamp?: string;
     assistant_text?: string;
     assistant_segments?: string[];
@@ -189,6 +202,7 @@ export default function SessionDetailPage() {
       title={
         <SessionTitleView
           title={session.title}
+          segments={session.title_segments}
           domContexts={session.title_dom_contexts}
           body={session.title_body}
           fallback={`会话 ${session.session_id.slice(0, 8)}…`}
@@ -267,6 +281,7 @@ export default function SessionDetailPage() {
                         turn.round?.prompt ||
                         turn.user_text
                       }
+                      segments={turn.user_prompt_segments}
                       domContexts={turn.user_dom_contexts}
                     />
                   </MessageBubble>

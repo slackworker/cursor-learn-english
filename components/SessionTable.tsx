@@ -10,12 +10,13 @@ import { PageShell } from "@/components/ui/PageShell";
 import { Pagination } from "@/components/ui/Pagination";
 import { formatLocalDateTime } from "@/lib/format-datetime";
 import { sessionsSwrOptions } from "@/lib/sessions-swr";
-import type { DomContextBlock } from "@/lib/parse-dom-context";
+import type { DomContextBlock, PromptSegment } from "@/lib/parse-dom-context";
 
 type Session = {
   session_id: string;
   title?: string;
   title_dom_contexts?: DomContextBlock[];
+  title_segments?: PromptSegment[];
   title_body?: string;
   timestamp?: string;
   start?: string;
@@ -168,6 +169,7 @@ export function SessionTable() {
                         <span className="min-w-0 flex-1 overflow-hidden">
                           <SessionTitleView
                             title={s.title}
+                            segments={s.title_segments}
                             domContexts={s.title_dom_contexts}
                             body={s.title_body}
                             fallback={`会话 ${s.session_id?.slice(0, 8)}…`}

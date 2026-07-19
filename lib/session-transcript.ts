@@ -2,6 +2,7 @@ import fs from "fs";
 import {
   parseUserPromptWithDomContext,
   type DomContextBlock,
+  type PromptSegment,
 } from "./parse-dom-context";
 import {
   parseAssistantContent,
@@ -10,7 +11,7 @@ import {
 } from "./transcript-content";
 import { resolveTranscriptPath } from "./agent-transcripts-path";
 
-export type { DomContextBlock } from "./parse-dom-context";
+export type { DomContextBlock, PromptSegment } from "./parse-dom-context";
 
 export type { TranscriptAssistantStep, TranscriptContentItem } from "./transcript-content";
 
@@ -20,6 +21,8 @@ export type TranscriptTurn = {
   user_prompt: string;
   /** Cursor browser DOM picker blocks stripped from user_prompt. */
   user_dom_contexts?: DomContextBlock[];
+  /** Ordered text ↔ DOM chip segments (matches Cursor inline order). */
+  user_prompt_segments?: PromptSegment[];
   user_timestamp?: string;
   assistant_text?: string;
   assistant_segments?: string[];
@@ -83,13 +86,23 @@ function normalizePromptBody(text: string): string {
 }
 
 /** Extract displayable user prompt from transcript text; preserve Markdown newlines. */
-function extractUserPrompt(raw: string): { prompt: string; domContexts: DomContextBlock[] } {
+function extractUserPrompt(raw: string): {
+  prompt: string;
+  domContexts: DomContextBlock[];
+  segments: PromptSegment[];
+} {
   const userQueryMatch = raw.match(/<user_query>\s*([\s\S]*?)\s*<\/user_query>/i);
   const base = stripCursorMetaBlocks((userQueryMatch?.[1] ?? raw).trim());
-  const { domContexts, body } = parseUserPromptWithDomContext(base);
+  const { segments, domContexts, body } = parseUserPromptWithDomContext(base);
   return {
-    prompt: normalizePromptBody(body),
+    prompt: normalizePromptBody(
+      segments
+        .filter((s): s is Extract<PromptSegment, { type: "text" }> => s.type === "text")
+        .map((s) => s.text)
+        .join("\n\n") || body
+    ),
     domContexts,
+    segments,
   };
 }
 
@@ -117,12 +130,13 @@ export function getTranscriptTurns(sessionId: string): TranscriptTurn[] {
     if (!pendingUser) return;
     const assistantSegments = pendingUser.assistant_parts.filter(Boolean);
     const assistantText = assistantSegments.join("\n\n").trim();
-    const { prompt, domContexts } = extractUserPrompt(pendingUser.user_text);
+    const { prompt, domContexts, segments } = extractUserPrompt(pendingUser.user_text);
     turns.push({
       id: pendingUser.id,
       user_text: pendingUser.user_text,
       user_prompt: prompt,
       user_dom_contexts: domContexts.length > 0 ? domContexts : undefined,
+      user_prompt_segments: segments.length > 0 ? segments : undefined,
       user_timestamp: extractUserTimestamp(pendingUser.user_text),
       assistant_text: assistantText || undefined,
       assistant_segments: assistantSegments.length > 0 ? assistantSegments : undefined,

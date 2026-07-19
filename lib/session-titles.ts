@@ -3,6 +3,7 @@ import {
   domContextChipLabel,
   parseUserPromptWithDomContext,
   type DomContextBlock,
+  type PromptSegment,
 } from "./parse-dom-context";
 import {
   resolveTranscriptPath,
@@ -15,6 +16,7 @@ const DEFAULT_MAX_TITLE_LENGTH = 60;
 export type ParsedSessionTitle = {
   /** Plain text for search, filters, and legacy clients. */
   plain: string;
+  segments: PromptSegment[];
   domContexts: DomContextBlock[];
   body: string;
 };
@@ -31,7 +33,7 @@ function clipTitle(value: string, maxLen = DEFAULT_MAX_TITLE_LENGTH): string {
 export function parseSessionTitleFromText(rawText: string): ParsedSessionTitle {
   const userQueryMatch = rawText.match(/<user_query>\s*([\s\S]*?)\s*<\/user_query>/i);
   const base = userQueryMatch?.[1] ?? rawText;
-  const { domContexts, body } = parseUserPromptWithDomContext(base);
+  const { segments, domContexts, body } = parseUserPromptWithDomContext(base);
   const displayBody = body.trim();
   const chipFallback = domContexts
     .map((block) => domContextChipLabel(block.htmlElement))
@@ -42,6 +44,7 @@ export function parseSessionTitleFromText(rawText: string): ParsedSessionTitle {
     safeTrim(base.replace(/<[^>]+>/g, " "));
   return {
     plain: clipTitle(plainSource),
+    segments,
     domContexts,
     body: displayBody,
   };
