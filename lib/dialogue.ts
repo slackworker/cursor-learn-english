@@ -1,6 +1,8 @@
 import { getEvents } from "./events";
 import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./thinking";
 import { readMergedJsonlLinesCached } from "./jsonl-daily";
+import type { DomContextBlock, PromptSegment } from "./parse-dom-context";
+import { resolveSessionDisplayTitles } from "./resolve-session-titles";
 
 type PromptRecord = {
   conversation_id: string;
@@ -42,6 +44,11 @@ export type ResponseSegment = {
 export type DialogueRound = {
   id: string;
   conversation_id: string;
+  /** Short session display title when available. */
+  session_title?: string;
+  session_title_dom_contexts?: DomContextBlock[];
+  session_title_segments?: PromptSegment[];
+  session_title_body?: string;
   prompt: string;
   prompt_timestamp: string;
   response?: {
@@ -246,8 +253,24 @@ export function getDialogueRounds(params: {
   const total = sorted.length;
   const start = (page - 1) * pageSize;
   const pageItems = sorted.slice(start, start + pageSize);
+
+  const titleMap = resolveSessionDisplayTitles(
+    pageItems.map((r) => r.conversation_id)
+  );
+  const enriched = pageItems.map((round) => {
+    const resolved = titleMap.get(round.conversation_id);
+    if (!resolved) return round;
+    return {
+      ...round,
+      session_title: resolved.title,
+      session_title_dom_contexts: resolved.title_dom_contexts,
+      session_title_segments: resolved.title_segments,
+      session_title_body: resolved.title_body,
+    };
+  });
+
   return {
-    rounds: pageItems,
+    rounds: enriched,
     total,
     truncated: promptsTruncated || eventsTruncated || thinkingTruncated,
   };

@@ -16,6 +16,7 @@ import {
   listSubagentIdsForParent,
   resolveTranscript,
 } from "./agent-transcripts-path";
+import { resolveSessionDisplayTitles } from "./resolve-session-titles";
 
 export type SessionTitleSource = "cursor" | "prompt" | "task";
 
@@ -46,6 +47,11 @@ export type SessionSummary = {
   /** Task-tool subagent session (from subagentStart/Stop). */
   is_subagent?: boolean;
   parent_session_id?: string;
+  /** Short display title for parent_session_id (detail views). */
+  parent_session_title?: string;
+  parent_session_title_dom_contexts?: DomContextBlock[];
+  parent_session_title_segments?: PromptSegment[];
+  parent_session_title_body?: string;
   subagent_type?: string;
 };
 
@@ -1157,8 +1163,17 @@ export function getSessionDetail(sessionId: string): SessionDetail | null {
     return { ...turn, round: fallbackRound };
   });
 
+  const parentId = summary.parent_session_id;
+  const parentTitle = parentId
+    ? resolveSessionDisplayTitles([parentId]).get(parentId)
+    : undefined;
+
   return {
     ...summary,
+    parent_session_title: parentTitle?.title,
+    parent_session_title_dom_contexts: parentTitle?.title_dom_contexts,
+    parent_session_title_segments: parentTitle?.title_segments,
+    parent_session_title_body: parentTitle?.title_body,
     event_counts: {
       ...event_counts,
       _truncated_sources: Number(

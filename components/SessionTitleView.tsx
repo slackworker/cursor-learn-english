@@ -23,7 +23,8 @@ export function SessionTitleView({
   domContexts?: DomContextBlock[];
   body?: string;
   fallback?: string;
-  variant?: "heading" | "inline";
+  /** inline truncates; wrap shows the full short title; heading allows 2 lines. */
+  variant?: "heading" | "inline" | "wrap";
   className?: string;
 }) {
   const { segments, useFallback } = useMemo(() => {
@@ -75,6 +76,24 @@ export function SessionTitleView({
               key={`title-dom-${i}-${seg.block.domPath.slice(0, 24)}`}
               block={seg.block}
               className={chipClass}
+            />
+          ) : (
+            <span key={`title-text-${i}`}>{seg.text}</span>
+          )
+        )}
+      </span>
+    );
+  }
+
+  if (variant === "wrap") {
+    return (
+      <span className={`inline break-words ${className}`}>
+        {segments.map((seg, i) =>
+          seg.type === "dom" ? (
+            <DomContextChip
+              key={`title-dom-${i}-${seg.block.domPath.slice(0, 24)}`}
+              block={seg.block}
+              className={`${chipClass} mr-1 align-baseline`}
             />
           ) : (
             <span key={`title-text-${i}`}>{seg.text}</span>

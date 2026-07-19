@@ -36,6 +36,10 @@ type SessionDetail = {
   is_open?: boolean;
   is_subagent?: boolean;
   parent_session_id?: string;
+  parent_session_title?: string;
+  parent_session_title_dom_contexts?: DomContextBlock[];
+  parent_session_title_segments?: PromptSegment[];
+  parent_session_title_body?: string;
   subagent_type?: string;
   prompt_count: number;
   thinking_count: number;
@@ -227,9 +231,23 @@ export default function SessionDetailPage() {
           {session.is_subagent && session.parent_session_id ? (
             <Link
               href={`/sessions/${encodeURIComponent(session.parent_session_id)}`}
-              className="text-xs text-base-content/60 underline-offset-2 hover:underline"
+              title={
+                session.parent_session_title
+                  ? `${session.parent_session_title} (${session.parent_session_id})`
+                  : session.parent_session_id
+              }
+              className="inline-flex min-w-0 max-w-full flex-wrap items-baseline gap-1 text-xs text-base-content/60 underline-offset-2 hover:underline"
             >
-              父会话 {session.parent_session_id.slice(0, 8)}…
+              <span className="shrink-0">父会话</span>
+              <SessionTitleView
+                title={session.parent_session_title}
+                segments={session.parent_session_title_segments}
+                domContexts={session.parent_session_title_dom_contexts}
+                body={session.parent_session_title_body}
+                fallback={`会话 ${session.parent_session_id.slice(0, 8)}…`}
+                variant="wrap"
+                className="min-w-0 font-normal text-base-content/70"
+              />
             </Link>
           ) : null}
         </span>

@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { DialogueTimeline } from "@/components/DialogueTimeline";
+import { SessionTitleView } from "@/components/SessionTitleView";
 import { UserPromptView } from "@/components/UserPromptView";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { MessageBubble } from "@/components/ui/MessageBubble";
 import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
-import { parseUserPromptWithDomContext } from "@/lib/parse-dom-context";
+import {
+  parseUserPromptWithDomContext,
+  type DomContextBlock,
+  type PromptSegment,
+} from "@/lib/parse-dom-context";
 
 type ThinkingRecord = {
   text: string;
@@ -28,6 +34,10 @@ type ToolRecord = {
 type DialogueRound = {
   id: string;
   conversation_id: string;
+  session_title?: string;
+  session_title_dom_contexts?: DomContextBlock[];
+  session_title_segments?: PromptSegment[];
+  session_title_body?: string;
   prompt: string;
   prompt_timestamp: string;
   response?: {
@@ -73,6 +83,7 @@ function RoundCard({ round }: { round: DialogueRound }) {
     }
     return out;
   }, [segments, showFullPrompt, isLongPrompt]);
+  const sessionFallback = `会话 ${round.conversation_id.slice(0, 8)}…`;
   return (
     <li className="dialogue-item">
       <MessageBubble
@@ -106,7 +117,26 @@ function RoundCard({ round }: { round: DialogueRound }) {
       </div>
 
       <div className="dialogue-item-meta mt-3">
-        会话 {round.conversation_id}
+        <Link
+          href={`/sessions/${encodeURIComponent(round.conversation_id)}`}
+          title={
+            round.session_title
+              ? `${round.session_title} (${round.conversation_id})`
+              : round.conversation_id
+          }
+          className="inline-flex min-w-0 max-w-full flex-wrap items-baseline gap-1 font-sans text-base-content/55 underline-offset-2 hover:underline"
+        >
+          <span className="shrink-0">会话</span>
+          <SessionTitleView
+            title={round.session_title}
+            segments={round.session_title_segments}
+            domContexts={round.session_title_dom_contexts}
+            body={round.session_title_body}
+            fallback={sessionFallback}
+            variant="wrap"
+            className="min-w-0 font-normal"
+          />
+        </Link>
       </div>
     </li>
   );
