@@ -12,7 +12,8 @@ export function isDailySplitEnabled() {
 export function getRetentionDays() {
   const n = Number(process.env.JSONL_RETENTION_DAYS);
   if (Number.isFinite(n) && n >= 0) return n;
-  return 90;
+  // Default 0: do not auto-delete daily shards (set e.g. 90 to re-enable TTL).
+  return 0;
 }
 
 function stemFromBasePath(basePath) {

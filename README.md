@@ -120,7 +120,7 @@
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `JSONL_DAILY_SPLIT` | 开启 | 设为 `0` 或 `false` 时采集仍只追加到基路径单文件 |
-| `JSONL_RETENTION_DAYS` | `90` | 自动删除早于该天数的**分片**；`0` 表示不自动删 |
+| `JSONL_RETENTION_DAYS` | `0`（不自动删） | 自动删除早于该天数的**分片**；设为正数（如 `90`）可恢复 TTL |
 | `MAX_JSONL_BYTES` | `52428800`（50MB） | 单分片超过此大小时 API 只读尾部（见 `lib/jsonl.ts`） |
 | `MAX_JSONL_TAIL_LINES` | `100000` | 尾部截断时最多保留行数 |
 

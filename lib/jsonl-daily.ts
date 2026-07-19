@@ -12,11 +12,11 @@ export function isDailySplitEnabled(): boolean {
   return true;
 }
 
-/** 0 disables TTL pruning. Default 90 days. */
+/** 0 disables TTL pruning. Default 0 (no auto-delete); set e.g. 90 to re-enable. */
 export function getRetentionDays(): number {
   const n = Number(process.env.JSONL_RETENTION_DAYS);
   if (Number.isFinite(n) && n >= 0) return n;
-  return 90;
+  return 0;
 }
 
 export function stemFromBasePath(basePath: string): { dir: string; stem: string } {
