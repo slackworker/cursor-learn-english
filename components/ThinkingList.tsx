@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MarkdownContent } from "@/components/MarkdownContent";
+import { useEffect, useMemo, useState } from "react";
 import { DialogueTimeline } from "@/components/DialogueTimeline";
+import { UserPromptView } from "@/components/UserPromptView";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { MessageBubble } from "@/components/ui/MessageBubble";
 import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
+import { parseUserPromptWithDomContext } from "@/lib/parse-dom-context";
 
 type ThinkingRecord = {
   text: string;
@@ -46,9 +47,13 @@ type DialogueRound = {
 function RoundCard({ round }: { round: DialogueRound }) {
   const [showFullPrompt, setShowFullPrompt] = useState(false);
   const prompt = round.prompt ?? "";
-  const isLongPrompt = prompt.length > 200;
-  const promptDisplay =
-    showFullPrompt || !isLongPrompt ? prompt : `${prompt.slice(0, 200)}...`;
+  const { domContexts, body } = useMemo(
+    () => parseUserPromptWithDomContext(prompt),
+    [prompt]
+  );
+  const isLongPrompt = body.length > 200;
+  const bodyDisplay =
+    showFullPrompt || !isLongPrompt ? body : `${body.slice(0, 200)}...`;
   return (
     <li className="dialogue-item">
       <MessageBubble
@@ -66,9 +71,10 @@ function RoundCard({ round }: { round: DialogueRound }) {
           ) : undefined
         }
       >
-        <MarkdownContent className="whitespace-pre-wrap break-words">
-          {promptDisplay}
-        </MarkdownContent>
+        <UserPromptView
+          prompt={bodyDisplay}
+          domContexts={domContexts.length > 0 ? domContexts : undefined}
+        />
       </MessageBubble>
 
       <div className="mt-3">

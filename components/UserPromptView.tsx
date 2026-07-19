@@ -21,10 +21,15 @@ export function UserPromptView({
   className?: string;
 }) {
   const { domContexts, body } = useMemo(() => {
+    const parsed = parseUserPromptWithDomContext(prompt);
     if (domContextsProp && domContextsProp.length > 0) {
-      return { domContexts: domContextsProp, body: prompt };
+      return {
+        domContexts: domContextsProp,
+        // Prefer stripped body when prompt still embeds raw DOM picker blocks.
+        body: parsed.domContexts.length > 0 ? parsed.body : prompt,
+      };
     }
-    return parseUserPromptWithDomContext(prompt);
+    return parsed;
   }, [prompt, domContextsProp]);
 
   const hasBody = body.trim().length > 0;
