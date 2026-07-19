@@ -50,7 +50,8 @@ start_server() {
   fi
   touch_access
   echo "[dashboard] starting on :$PORT" >&2
-  nohup env PORT="$PORT" HOSTNAME=127.0.0.1 npm run start >>"$LOG_FILE" 2>&1 &
+  # setsid：从 wsl.exe 一次性会话脱离，否则脚本一结束 Windows 会杀掉 next-server
+  setsid env PORT="$PORT" HOSTNAME=127.0.0.1 npm run start >>"$LOG_FILE" 2>&1 < /dev/null &
   echo $! >"$PID_FILE"
   for _ in $(seq 1 90); do
     if port_listening; then
@@ -70,9 +71,8 @@ start_idle_watchdog() {
     fi
     rm -f "$WATCHDOG_MARKER"
   fi
-  nohup bash "$ROOT/scripts/dashboard-idle-watchdog.sh" "$PORT" "$IDLE_MINUTES" \
-    >>"$LOG_FILE" 2>&1 &
-  disown || true
+  setsid bash "$ROOT/scripts/dashboard-idle-watchdog.sh" "$PORT" "$IDLE_MINUTES" \
+    >>"$LOG_FILE" 2>&1 < /dev/null &
 }
 
 stop_server() {
