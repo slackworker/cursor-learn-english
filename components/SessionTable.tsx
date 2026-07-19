@@ -162,7 +162,7 @@ export function SessionTable() {
               <tr key={s.session_id}>
                 <td className="min-w-0 overflow-hidden">
                   <Link
-                    href={`/sessions/${s.session_id}`}
+                    href={`/sessions/${encodeURIComponent(s.session_id)}`}
                     title={s.title?.trim() || s.session_id}
                     className="data-table-link block min-w-0 overflow-hidden"
                   >

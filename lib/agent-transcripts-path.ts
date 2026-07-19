@@ -138,6 +138,25 @@ export function hasSessionTranscript(sessionId: string): boolean {
   return resolveTranscriptPath(sessionId) != null;
 }
 
+/** List subagent conversation ids under `<parent>/subagents/*.jsonl`. */
+export function listSubagentIdsForParent(parentSessionId: string): string[] {
+  if (!parentSessionId) return [];
+  const ids = new Set<string>();
+  for (const root of getTranscriptRoots()) {
+    const dir = path.join(root, parentSessionId, "subagents");
+    try {
+      for (const name of fs.readdirSync(dir)) {
+        if (!/\.jsonl$/i.test(name)) continue;
+        const id = name.replace(/\.jsonl$/i, "");
+        if (id) ids.add(id);
+      }
+    } catch {
+      // skip missing parent /subagents dirs
+    }
+  }
+  return Array.from(ids);
+}
+
 /** 测试或路径变更后可调用 */
 export function clearTranscriptPathCache(): void {
   pathCache.clear();

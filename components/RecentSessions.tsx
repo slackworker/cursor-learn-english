@@ -78,7 +78,7 @@ export function RecentSessions({ limit = 5 }: { limit?: number }) {
         {sessions.map((s) => (
           <li key={s.session_id}>
             <Link
-              href={`/sessions/${s.session_id}`}
+              href={`/sessions/${encodeURIComponent(s.session_id)}`}
               className="block px-4 py-3 transition-colors hover:bg-base-200/40 sm:px-5"
             >
               <div className="min-w-0 overflow-hidden text-sm font-medium text-base-content">

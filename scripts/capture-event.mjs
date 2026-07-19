@@ -15,6 +15,13 @@ function trimText(s, max = MAX_TEXT_LEN) {
   return s.length <= max ? s : s.slice(0, max) + '…';
 }
 
+/** Strip whitespace/newlines from Cursor hook ids (tool_call_id sometimes embeds \\n). */
+function sanitizeId(value) {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/\s+/g, '').trim();
+  return cleaned || null;
+}
+
 /** Extract subagent id from .../subagents/<id>.jsonl (or .txt) paths. */
 function subagentIdFromTranscriptPath(transcriptPath) {
   if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
@@ -44,7 +51,7 @@ function buildPayload(eventType, input) {
   const base = {
     event_type: eventType,
     timestamp: new Date().toISOString(),
-    conversation_id: input.conversation_id ?? null,
+    conversation_id: sanitizeId(input.conversation_id),
     model: input.model ?? null,
   };
   switch (eventType) {
@@ -82,14 +89,17 @@ function buildPayload(eventType, input) {
     case 'sessionStart':
       return {
         ...base,
-        session_id: input.session_id ?? input.conversation_id ?? null,
+        conversation_id: sanitizeId(input.conversation_id) ?? base.conversation_id,
+        session_id:
+          sanitizeId(input.session_id) ?? sanitizeId(input.conversation_id) ?? null,
         composer_mode: input.composer_mode ?? null,
         is_background_agent: input.is_background_agent ?? null,
       };
     case 'sessionEnd':
       return {
         ...base,
-        session_id: input.session_id ?? null,
+        conversation_id: sanitizeId(input.conversation_id) ?? base.conversation_id,
+        session_id: sanitizeId(input.session_id) ?? sanitizeId(input.conversation_id) ?? null,
         reason: input.reason ?? null,
         duration_ms: input.duration_ms ?? 0,
         is_background_agent: input.is_background_agent ?? null,
@@ -110,17 +120,19 @@ function buildPayload(eventType, input) {
         edits_count: Array.isArray(input.edits) ? input.edits.length : 0,
       };
     case 'subagentStart': {
-      const subagentId = input.subagent_id ?? null;
+      // Hook subagent_id is often a tool_call_id (call-…), not the transcript UUID.
+      const hookId =
+        sanitizeId(input.subagent_id) ?? sanitizeId(input.tool_call_id) ?? null;
+      const parentId = sanitizeId(input.parent_conversation_id);
       return {
         ...base,
-        // Prefer subagent_id as the conversation key (matches thinking/transcript ids).
-        conversation_id: subagentId ?? input.conversation_id ?? null,
-        session_id: subagentId,
-        subagent_id: subagentId,
-        parent_session_id: input.parent_conversation_id ?? null,
+        conversation_id: hookId ?? sanitizeId(input.conversation_id),
+        session_id: hookId,
+        subagent_id: hookId,
+        parent_session_id: parentId,
         subagent_type: input.subagent_type ?? null,
         task: trimText(input.task || '', 2000),
-        tool_call_id: input.tool_call_id ?? null,
+        tool_call_id: sanitizeId(input.tool_call_id) ?? hookId,
         subagent_model: input.subagent_model ?? null,
         is_parallel_worker: input.is_parallel_worker ?? null,
         git_branch: input.git_branch ?? null,
@@ -128,16 +140,23 @@ function buildPayload(eventType, input) {
       };
     }
     case 'subagentStop': {
-      const fromPath = subagentIdFromTranscriptPath(input.agent_transcript_path);
-      const subagentId = input.subagent_id ?? fromPath ?? input.conversation_id ?? null;
-      const parentFromPath = parentIdFromTranscriptPath(input.agent_transcript_path);
+      const fromPath = sanitizeId(
+        subagentIdFromTranscriptPath(input.agent_transcript_path)
+      );
+      const hookId =
+        sanitizeId(input.subagent_id) ?? sanitizeId(input.tool_call_id) ?? null;
+      // Prefer transcript UUID when present; call-* is kept as tool_call_id.
+      const canonicalId = fromPath ?? hookId ?? sanitizeId(input.conversation_id);
+      const parentFromPath = sanitizeId(
+        parentIdFromTranscriptPath(input.agent_transcript_path)
+      );
       return {
         ...base,
-        conversation_id: subagentId,
-        session_id: subagentId,
-        subagent_id: subagentId,
+        conversation_id: canonicalId,
+        session_id: canonicalId,
+        subagent_id: hookId ?? canonicalId,
         parent_session_id:
-          input.parent_conversation_id ?? parentFromPath ?? null,
+          sanitizeId(input.parent_conversation_id) ?? parentFromPath,
         subagent_type: input.subagent_type ?? null,
         status: input.status ?? null,
         task: trimText(input.task || '', 2000),
@@ -151,6 +170,7 @@ function buildPayload(eventType, input) {
           ? input.modified_files.slice(0, 50)
           : null,
         agent_transcript_path: input.agent_transcript_path ?? null,
+        tool_call_id: sanitizeId(input.tool_call_id) ?? hookId,
       };
     }
     default:

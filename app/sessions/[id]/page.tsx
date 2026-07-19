@@ -205,7 +205,7 @@ export default function SessionDetailPage() {
           ) : null}
           {session.is_subagent && session.parent_session_id ? (
             <Link
-              href={`/sessions/${session.parent_session_id}`}
+              href={`/sessions/${encodeURIComponent(session.parent_session_id)}`}
               className="text-xs text-base-content/60 underline-offset-2 hover:underline"
             >
               父会话 {session.parent_session_id.slice(0, 8)}…
