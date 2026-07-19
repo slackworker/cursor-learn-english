@@ -15,7 +15,9 @@ try {
   const input = JSON.parse(raw || '{}');
 
   const text = input.text ?? '';
-  if (typeof text !== 'string' || text.length < 20) {
+  // Keep short thoughts (e.g. Cursor "Thought briefly") for 1:1 session display.
+  // Revisit a min-length threshold only if noise becomes a problem.
+  if (typeof text !== 'string' || text.trim().length === 0) {
     process.exit(0);
   }
 
