@@ -64,7 +64,9 @@ function ThinkingBlock({
       }
     >
       <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
-        {`Thinking · ${block.data.model} · ${block.data.duration_ms}ms`}
+        {!nested && block.data.duration_ms < 100
+          ? "Thought briefly"
+          : `Thinking · ${block.data.model} · ${block.data.duration_ms}ms`}
       </summary>
       <div className="collapse-content relative pt-1 pr-12">
         <MarkdownContent className="text-sm">{block.data.text}</MarkdownContent>
@@ -443,13 +445,17 @@ function TranscriptStepsTimeline({
   steps,
   thinking,
   tools,
+  replyAfterTimestamp,
 }: {
   steps: TranscriptAssistantStep[];
   thinking: TimelineRoundInput["thinking"];
   tools: TimelineRoundInput["tools"];
+  replyAfterTimestamp?: string;
 }) {
-  const phases = buildInterleavedTranscriptPhases(thinking, steps, tools);
-  const { process, finalSteps } = splitProcessAndFinalUnits(
+  const phases = buildInterleavedTranscriptPhases(thinking, steps, tools, {
+    replyAfterTimestamp,
+  });
+  const { process, final } = splitProcessAndFinalUnits(
     flattenPhasesToUnits(phases)
   );
 
@@ -460,13 +466,7 @@ function TranscriptStepsTimeline({
       </ProcessFold>
     ) : null;
 
-  const finalNodes = finalSteps.flatMap(({ step, stepKey }) =>
-    renderTranscriptRows(buildTranscriptStepRows(step, stepKey), false).map(
-      (node, nodeIdx) => (
-        <Fragment key={`${stepKey}-${nodeIdx}`}>{node}</Fragment>
-      )
-    )
-  );
+  const finalNodes = renderProcessUnits(final, false);
 
   if (!processNodes && finalNodes.length === 0) {
     return null;
@@ -493,12 +493,16 @@ export function DialogueTimeline({
   emptyMessage?: string;
 }) {
   if (transcriptSteps && transcriptSteps.length > 0) {
+    const replyAfterTimestamp =
+      round?.response_segments?.at(-1)?.timestamp ??
+      round?.response?.timestamp;
     return (
       <DialogueTtsProvider>
         <TranscriptStepsTimeline
           steps={transcriptSteps}
           thinking={round?.thinking ?? []}
           tools={round?.tools ?? []}
+          replyAfterTimestamp={replyAfterTimestamp}
         />
       </DialogueTtsProvider>
     );

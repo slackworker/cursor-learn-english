@@ -1,4 +1,5 @@
 import type { TimelineThinking, TimelineTool } from "./dialogue-timeline";
+import { findProcessFinalSplitIndex } from "./process-fold";
 import type { TranscriptAssistantStep } from "./transcript-content";
 
 /** One thinking block plus transcript steps that follow it in Cursor order. */
@@ -12,55 +13,35 @@ export type ProcessTimelineUnit =
   | { kind: "thinking"; thinking: TimelineThinking }
   | { kind: "step"; step: TranscriptAssistantStep; stepKey: string };
 
+function stepHasToolUse(step: TranscriptAssistantStep): boolean {
+  return step.items.some((item) => item.type === "tool_use");
+}
+
+function unitFoldKind(unit: ProcessTimelineUnit): "thinking" | "tool" | "response" {
+  if (unit.kind === "thinking") return "thinking";
+  return stepHasToolUse(unit.step) ? "tool" : "response";
+}
+
 /**
  * Cursor folds interim narration + tools under one “process” section;
  * only content after the last tool_use stays expanded as the formal reply.
+ * Post-reply thinking stays in `final` (not folded back into process).
  */
 export function splitProcessAndFinalUnits(
   units: ProcessTimelineUnit[]
 ): {
   process: ProcessTimelineUnit[];
+  final: ProcessTimelineUnit[];
+  /** @deprecated use `final` — kept for call sites that only need steps */
   finalSteps: { step: TranscriptAssistantStep; stepKey: string }[];
 } {
   if (units.length === 0) {
-    return { process: [], finalSteps: [] };
+    return { process: [], final: [], finalSteps: [] };
   }
 
-  const hasProcessMarker = units.some(
-    (u) =>
-      u.kind === "thinking" ||
-      (u.kind === "step" &&
-        u.step.items.some((item) => item.type === "tool_use"))
-  );
-
-  if (!hasProcessMarker) {
-    return {
-      process: [],
-      finalSteps: units
-        .filter((u): u is Extract<ProcessTimelineUnit, { kind: "step" }> => u.kind === "step")
-        .map((u) => ({ step: u.step, stepKey: u.stepKey })),
-    };
-  }
-
-  let lastToolUnitIdx = -1;
-  for (let i = 0; i < units.length; i += 1) {
-    const u = units[i];
-    if (u.kind === "thinking") {
-      lastToolUnitIdx = i;
-      continue;
-    }
-    if (u.step.items.some((item) => item.type === "tool_use")) {
-      lastToolUnitIdx = i;
-    }
-  }
-
-  if (lastToolUnitIdx < 0) {
-    return { process: units, finalSteps: [] };
-  }
-
-  const process = units.slice(0, lastToolUnitIdx + 1);
-  const after = units.slice(lastToolUnitIdx + 1);
-  const finalSteps: { step: TranscriptAssistantStep; stepKey: string }[] = [];
+  const end = findProcessFinalSplitIndex(units.map(unitFoldKind));
+  let process = units.slice(0, end);
+  let final = units.slice(end);
 
   // If the last process unit mixes tools then trailing text, peel text after last tool_use.
   const last = process[process.length - 1];
@@ -74,29 +55,31 @@ export function splitProcessAndFinalUnits(
       const head = items.slice(0, lastToolItemIdx + 1);
       const tail = items.slice(lastToolItemIdx + 1);
       if (tail.every((item) => item.type === "text")) {
-        process[process.length - 1] = {
-          kind: "step",
-          stepKey: last.stepKey,
-          step: { items: head },
-        };
-        finalSteps.push({
-          stepKey: `${last.stepKey}-final`,
-          step: { items: tail },
-        });
+        process = [
+          ...process.slice(0, -1),
+          {
+            kind: "step",
+            stepKey: last.stepKey,
+            step: { items: head },
+          },
+        ];
+        final = [
+          {
+            kind: "step",
+            stepKey: `${last.stepKey}-final`,
+            step: { items: tail },
+          },
+          ...final,
+        ];
       }
     }
   }
 
-  for (const u of after) {
-    if (u.kind === "step") {
-      finalSteps.push({ step: u.step, stepKey: u.stepKey });
-    } else {
-      // Orphan thinking after tools is still process material.
-      process.push(u);
-    }
-  }
+  const finalSteps = final
+    .filter((u): u is Extract<ProcessTimelineUnit, { kind: "step" }> => u.kind === "step")
+    .map((u) => ({ step: u.step, stepKey: u.stepKey }));
 
-  return { process, finalSteps };
+  return { process, final, finalSteps };
 }
 
 export function flattenPhasesToUnits(
@@ -216,7 +199,8 @@ function fillStepTimestamps(
 
 /**
  * Cursor order per turn: (thinking → step)*, then optional tail steps
- * (e.g. final reply). Matches interleaveByThinkingPhases in dialogue-timeline.
+ * (e.g. final reply), then thinking that landed after the formal reply.
+ * Matches interleaveByThinkingPhases in dialogue-timeline.
  */
 function interleaveByIndex(
   sortedThinking: TimelineThinking[],
@@ -238,6 +222,7 @@ export function buildInterleavedTranscriptPhases(
   thinking: TimelineThinking[],
   steps: TranscriptAssistantStep[],
   tools: TimelineTool[],
+  options?: { replyAfterTimestamp?: string }
 ): InterleavedTranscriptPhase[] {
   if (steps.length === 0) {
     return thinking.map((t) => ({ thinking: t, steps: [] }));
@@ -246,20 +231,38 @@ export function buildInterleavedTranscriptPhases(
     return [{ steps }];
   }
 
-  const sortedThinking = [...thinking].sort((a, b) =>
+  const replyTs = options?.replyAfterTimestamp;
+  const sortedAll = [...thinking].sort((a, b) =>
     a.timestamp.localeCompare(b.timestamp)
   );
+  const sortedThinking = replyTs
+    ? sortedAll.filter((t) => t.timestamp <= replyTs)
+    : sortedAll;
+  const postReplyThinking = replyTs
+    ? sortedAll.filter((t) => t.timestamp > replyTs)
+    : [];
+
   const hookAnchored = assignStepTimestamps(steps, tools);
   const { body, trailing, trailingFrom } = splitTrailingTextOnlySteps(steps, hookAnchored);
   const bodyHook = hookAnchored.slice(0, body.length);
   let bodyTs = fillStepTimestamps(bodyHook, body, bodyHook);
 
   if (!bodyTs.some(Boolean) && trailing.length === 0) {
-    return interleaveByIndex(sortedThinking, steps);
+    const phases = interleaveByIndex(sortedThinking, steps);
+    for (const t of postReplyThinking) phases.push({ thinking: t, steps: [] });
+    return phases;
   }
 
   const phases: InterleavedTranscriptPhase[] = [];
   let si = 0;
+
+  if (sortedThinking.length === 0) {
+    if (body.length > 0) phases.push({ steps: body });
+    if (trailing.length > 0) phases.push({ steps: trailing });
+    for (const t of postReplyThinking) phases.push({ thinking: t, steps: [] });
+    void trailingFrom;
+    return phases;
+  }
 
   const prefix: TranscriptAssistantStep[] = [];
   while (si < body.length) {
@@ -301,12 +304,10 @@ export function buildInterleavedTranscriptPhases(
   }
 
   if (trailing.length > 0) {
-    const lastThinkingPhase = [...phases].reverse().find((p) => p.thinking);
-    if (lastThinkingPhase) {
-      lastThinkingPhase.steps.push(...trailing);
-    } else {
-      phases.push({ steps: trailing });
-    }
+    phases.push({ steps: trailing });
+  }
+  for (const t of postReplyThinking) {
+    phases.push({ thinking: t, steps: [] });
   }
 
   void trailingFrom;

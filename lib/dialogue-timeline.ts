@@ -1,4 +1,5 @@
 import { formatLocalDateTime } from "./format-datetime";
+import { findProcessFinalSplitIndex } from "./process-fold";
 
 export type ResponseSegment = {
   text: string;
@@ -253,24 +254,28 @@ export function formatTimelineTime(timestamp: string): string {
 
 /**
  * Cursor-style split: interim thinking/tools/narration stay in process;
- * only response blocks after the last thinking/tool stay as the formal reply.
+ * the first response after the last tool is the formal reply. Post-reply
+ * thinking (e.g. aborted-shell "Thought briefly") stays after that reply.
  */
 export function splitTimelineProcessAndFinal(blocks: DialogueTimelineBlock[]): {
   process: DialogueTimelineBlock[];
   final: DialogueTimelineBlock[];
 } {
-  let lastProcessIdx = -1;
-  for (let i = 0; i < blocks.length; i += 1) {
-    const kind = blocks[i].kind;
-    if (kind === "thinking" || kind === "tool" || kind === "tool-group") {
-      lastProcessIdx = i;
-    }
-  }
-  if (lastProcessIdx < 0) {
+  const kinds = blocks.map((block) => {
+    if (block.kind === "thinking") return "thinking" as const;
+    if (block.kind === "tool" || block.kind === "tool-group") return "tool" as const;
+    if (block.kind === "response") return "response" as const;
+    return "other" as const;
+  });
+  const end = findProcessFinalSplitIndex(kinds);
+  if (end <= 0) {
     return { process: [], final: blocks };
   }
+  if (end >= blocks.length) {
+    return { process: blocks, final: [] };
+  }
   return {
-    process: blocks.slice(0, lastProcessIdx + 1),
-    final: blocks.slice(lastProcessIdx + 1),
+    process: blocks.slice(0, end),
+    final: blocks.slice(end),
   };
 }
