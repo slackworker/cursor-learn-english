@@ -219,9 +219,6 @@ export default function SessionDetailPage() {
           ← 返回会话列表
         </Link>
         <div className="flex items-center gap-2">
-          {isValidating ? (
-            <span className="text-xs text-base-content/40">更新中…</span>
-          ) : null}
           <RefreshButton onRefresh={() => void mutate()} isValidating={isValidating} />
         </div>
       </div>

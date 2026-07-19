@@ -112,9 +112,6 @@ export function SessionTable() {
             }}
           />
         </label>
-        {isValidating ? (
-          <p className="text-xs text-base-content/40">更新中…</p>
-        ) : null}
         <RefreshButton onRefresh={() => void mutate()} isValidating={isValidating} />
       </div>
       <div

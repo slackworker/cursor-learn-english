@@ -17,10 +17,11 @@ export function RefreshButton({
       className={`btn btn-ghost btn-xs gap-1 ${className}`.trim()}
       onClick={() => onRefresh()}
       disabled={isValidating}
+      aria-busy={isValidating}
       aria-label="刷新"
       title="刷新"
     >
-      {isValidating ? "刷新中…" : "刷新"}
+      刷新
     </button>
   );
 }
