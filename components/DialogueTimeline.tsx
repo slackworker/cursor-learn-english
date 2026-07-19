@@ -9,11 +9,17 @@ import { MarkdownContent } from "@/components/MarkdownContent";
 import {
   buildDialogueTimeline,
   formatTimelineTime,
+  splitTimelineProcessAndFinal,
   summarizeToolNames,
   type DialogueTimelineBlock,
 } from "@/lib/dialogue-timeline";
 import type { TimelineRoundInput, TimelineTool } from "@/lib/dialogue-timeline";
-import { buildInterleavedTranscriptPhases } from "@/lib/interleave-transcript";
+import {
+  buildInterleavedTranscriptPhases,
+  flattenPhasesToUnits,
+  splitProcessAndFinalUnits,
+  type ProcessTimelineUnit,
+} from "@/lib/interleave-transcript";
 import {
   isFileEditTool,
   toolUseLabel,
@@ -22,17 +28,40 @@ import {
   type TranscriptToolUseItem,
 } from "@/lib/transcript-content";
 
+function ProcessFold({
+  summary,
+  children,
+}: {
+  summary: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="collapse collapse-arrow border border-base-300 bg-base-100">
+      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+        {summary}
+      </summary>
+      <div className="collapse-content space-y-2 pt-1">{children}</div>
+    </details>
+  );
+}
+
 function ThinkingBlock({
   block,
   blockKey,
+  nested = false,
 }: {
   block: Extract<DialogueTimelineBlock, { kind: "thinking" }>;
   blockKey: string;
+  nested?: boolean;
 }) {
   return (
     <details
       key={blockKey}
-      className="collapse collapse-arrow border border-base-300 bg-base-100"
+      className={
+        nested
+          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/50"
+          : "collapse collapse-arrow border border-base-300 bg-base-100"
+      }
     >
       <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
         {`Thinking · ${block.data.model} · ${block.data.duration_ms}ms`}
@@ -70,9 +99,11 @@ function formatToolLine(tool: TimelineTool): string {
 function ToolGroupBlock({
   block,
   blockKey,
+  nested = false,
 }: {
   block: Extract<DialogueTimelineBlock, { kind: "tool-group" }>;
   blockKey: string;
+  nested?: boolean;
 }) {
   const { tools } = block;
   const timeRange = formatToolTimeRange(block.timestamp, block.endTimestamp);
@@ -80,7 +111,11 @@ function ToolGroupBlock({
   return (
     <details
       key={blockKey}
-      className="collapse collapse-arrow border border-base-300 bg-base-100"
+      className={
+        nested
+          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/50"
+          : "collapse collapse-arrow border border-base-300 bg-base-100"
+      }
     >
       <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
         工具
@@ -176,9 +211,11 @@ function TranscriptToolGroupBlock({
 function TranscriptToolRoundsFold({
   batches,
   blockKey,
+  nested = false,
 }: {
   batches: { tools: TranscriptToolUseItem[]; key: string }[];
   blockKey: string;
+  nested?: boolean;
 }) {
   const allTools = batches.flatMap((batch) => batch.tools);
   const roundLabel = batches.length === 1 ? "1 轮" : `${batches.length} 轮`;
@@ -186,7 +223,11 @@ function TranscriptToolRoundsFold({
   return (
     <details
       key={blockKey}
-      className="collapse collapse-arrow border border-base-300 bg-base-100"
+      className={
+        nested
+          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/50"
+          : "collapse collapse-arrow border border-base-300 bg-base-100"
+      }
     >
       <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
         工具
@@ -268,10 +309,11 @@ type TranscriptStepRow =
 
 function buildTranscriptStepRows(
   step: TranscriptAssistantStep,
-  stepIdx: number
+  stepKey: string | number
 ): TranscriptStepRow[] {
   const rows: TranscriptStepRow[] = [];
   const toolRun: TranscriptToolUseItem[] = [];
+  const prefix = String(stepKey);
 
   const flushTools = (key: string) => {
     if (toolRun.length === 0) return;
@@ -284,23 +326,26 @@ function buildTranscriptStepRows(
       toolRun.push(item);
       return;
     }
-    flushTools(`step-${stepIdx}-tools-before-${i}`);
+    flushTools(`${prefix}-tools-before-${i}`);
     rows.push({
       kind: "content",
-      key: `step-${stepIdx}-item-${i}`,
+      key: `${prefix}-item-${i}`,
       element: (
         <TranscriptContentItemView
           item={item}
-          itemKey={`step-${stepIdx}-item-${i}`}
+          itemKey={`${prefix}-item-${i}`}
         />
       ),
     });
   });
-  flushTools(`step-${stepIdx}-tools-tail`);
+  flushTools(`${prefix}-tools-tail`);
   return rows;
 }
 
-function renderTranscriptRows(rows: TranscriptStepRow[]): ReactNode[] {
+function renderTranscriptRows(
+  rows: TranscriptStepRow[],
+  nested = false
+): ReactNode[] {
   const result: ReactNode[] = [];
   let i = 0;
   while (i < rows.length) {
@@ -324,6 +369,7 @@ function renderTranscriptRows(rows: TranscriptStepRow[]): ReactNode[] {
           key={batches[0].key}
           blockKey={batches[0].key}
           tools={batches[0].tools}
+          nested={nested}
         />
       );
     } else {
@@ -332,11 +378,64 @@ function renderTranscriptRows(rows: TranscriptStepRow[]): ReactNode[] {
           key={`${batches[0].key}-fold`}
           blockKey={`${batches[0].key}-fold`}
           batches={batches}
+          nested={nested}
         />
       );
     }
   }
   return result;
+}
+
+function collectProcessTools(units: ProcessTimelineUnit[]): TranscriptToolUseItem[] {
+  const tools: TranscriptToolUseItem[] = [];
+  for (const unit of units) {
+    if (unit.kind !== "step") continue;
+    for (const item of unit.step.items) {
+      if (item.type === "tool_use") tools.push(item);
+    }
+  }
+  return tools;
+}
+
+function processFoldSummary(units: ProcessTimelineUnit[]): string {
+  const thinkingCount = units.filter((u) => u.kind === "thinking").length;
+  const tools = collectProcessTools(units);
+  const parts = ["过程"];
+  if (thinkingCount > 0) {
+    parts.push(thinkingCount === 1 ? "Thinking×1" : `Thinking×${thinkingCount}`);
+  }
+  if (tools.length > 0) {
+    const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
+    parts.push(`工具 · ${countLabel} · ${summarizeTranscriptToolNames(tools)}`);
+  }
+  return parts.join(" · ");
+}
+
+function renderProcessUnits(
+  units: ProcessTimelineUnit[],
+  nested: boolean
+): ReactNode[] {
+  return units.flatMap((unit) => {
+    if (unit.kind === "thinking") {
+      const blockKey = `process-think-${unit.thinking.timestamp}`;
+      return [
+        <ThinkingBlock
+          key={blockKey}
+          blockKey={blockKey}
+          nested={nested}
+          block={{
+            kind: "thinking",
+            timestamp: unit.thinking.timestamp,
+            data: unit.thinking,
+          }}
+        />,
+      ];
+    }
+    return renderTranscriptRows(
+      buildTranscriptStepRows(unit.step, unit.stepKey),
+      nested
+    );
+  });
 }
 
 /** Transcript steps interleaved with thinking via postToolUse / afterAgentThought timestamps. */
@@ -350,29 +449,33 @@ function TranscriptStepsTimeline({
   tools: TimelineRoundInput["tools"];
 }) {
   const phases = buildInterleavedTranscriptPhases(thinking, steps, tools);
+  const { process, finalSteps } = splitProcessAndFinalUnits(
+    flattenPhasesToUnits(phases)
+  );
+
+  const processNodes =
+    process.length > 0 ? (
+      <ProcessFold summary={processFoldSummary(process)}>
+        {renderProcessUnits(process, true)}
+      </ProcessFold>
+    ) : null;
+
+  const finalNodes = finalSteps.flatMap(({ step, stepKey }) =>
+    renderTranscriptRows(buildTranscriptStepRows(step, stepKey), false).map(
+      (node, nodeIdx) => (
+        <Fragment key={`${stepKey}-${nodeIdx}`}>{node}</Fragment>
+      )
+    )
+  );
+
+  if (!processNodes && finalNodes.length === 0) {
+    return null;
+  }
 
   return (
     <div className="space-y-2">
-      {phases.map((phase, phaseIdx) => (
-        <div key={`phase-${phaseIdx}`} className="space-y-2">
-          {phase.thinking ? (
-            <ThinkingBlock
-              key={`phase-${phaseIdx}-think-${phase.thinking.timestamp}`}
-              blockKey={`phase-${phaseIdx}-think`}
-              block={{
-                kind: "thinking",
-                timestamp: phase.thinking.timestamp,
-                data: phase.thinking,
-              }}
-            />
-          ) : null}
-          {renderTranscriptRows(
-            phase.steps.flatMap((step, stepIdx) =>
-              buildTranscriptStepRows(step, stepIdx)
-            )
-          )}
-        </div>
-      ))}
+      {processNodes}
+      {finalNodes}
     </div>
   );
 }
@@ -410,22 +513,69 @@ export function DialogueTimeline({
     return <p className="text-sm opacity-60">{emptyMessage}</p>;
   }
 
+  const { process, final } = splitTimelineProcessAndFinal(blocks);
+
+  const renderBlock = (
+    block: DialogueTimelineBlock,
+    idx: number,
+    nested: boolean
+  ) => {
+    const blockKey = `${block.kind}-${block.timestamp}-${idx}`;
+    if (block.kind === "thinking") {
+      return (
+        <ThinkingBlock
+          key={blockKey}
+          block={block}
+          blockKey={blockKey}
+          nested={nested}
+        />
+      );
+    }
+    if (block.kind === "tool-group") {
+      return (
+        <ToolGroupBlock
+          key={blockKey}
+          block={block}
+          blockKey={blockKey}
+          nested={nested}
+        />
+      );
+    }
+    if (block.kind === "response") {
+      return <ResponseBlock key={blockKey} block={block} blockKey={blockKey} />;
+    }
+    return null;
+  };
+
+  const processSummary = (() => {
+    const parts = ["过程"];
+    const thinkingCount = process.filter((b) => b.kind === "thinking").length;
+    const toolBlocks = process.filter(
+      (b): b is Extract<DialogueTimelineBlock, { kind: "tool-group" }> =>
+        b.kind === "tool-group"
+    );
+    const allTools = toolBlocks.flatMap((b) => b.tools);
+    if (thinkingCount > 0) {
+      parts.push(
+        thinkingCount === 1 ? "Thinking×1" : `Thinking×${thinkingCount}`
+      );
+    }
+    if (allTools.length > 0) {
+      const countLabel = allTools.length === 1 ? "1 次" : `${allTools.length} 次`;
+      parts.push(`工具 · ${countLabel} · ${summarizeToolNames(allTools)}`);
+    }
+    return parts.join(" · ");
+  })();
+
   return (
     <DialogueTtsProvider>
       <div className="space-y-2">
-        {blocks.map((block, idx) => {
-          const blockKey = `${block.kind}-${block.timestamp}-${idx}`;
-          if (block.kind === "thinking") {
-            return <ThinkingBlock key={blockKey} block={block} blockKey={blockKey} />;
-          }
-          if (block.kind === "tool-group") {
-            return <ToolGroupBlock key={blockKey} block={block} blockKey={blockKey} />;
-          }
-          if (block.kind === "response") {
-            return <ResponseBlock key={blockKey} block={block} blockKey={blockKey} />;
-          }
-          return null;
-        })}
+        {process.length > 0 ? (
+          <ProcessFold summary={processSummary}>
+            {process.map((block, idx) => renderBlock(block, idx, true))}
+          </ProcessFold>
+        ) : null}
+        {final.map((block, idx) => renderBlock(block, idx, false))}
       </div>
     </DialogueTtsProvider>
   );

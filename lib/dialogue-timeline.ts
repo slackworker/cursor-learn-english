@@ -250,3 +250,27 @@ export function formatTimelineTime(timestamp: string): string {
   if (!timestamp || isSyntheticTimestamp(timestamp)) return "";
   return formatLocalDateTime(timestamp, "");
 }
+
+/**
+ * Cursor-style split: interim thinking/tools/narration stay in process;
+ * only response blocks after the last thinking/tool stay as the formal reply.
+ */
+export function splitTimelineProcessAndFinal(blocks: DialogueTimelineBlock[]): {
+  process: DialogueTimelineBlock[];
+  final: DialogueTimelineBlock[];
+} {
+  let lastProcessIdx = -1;
+  for (let i = 0; i < blocks.length; i += 1) {
+    const kind = blocks[i].kind;
+    if (kind === "thinking" || kind === "tool" || kind === "tool-group") {
+      lastProcessIdx = i;
+    }
+  }
+  if (lastProcessIdx < 0) {
+    return { process: [], final: blocks };
+  }
+  return {
+    process: blocks.slice(0, lastProcessIdx + 1),
+    final: blocks.slice(lastProcessIdx + 1),
+  };
+}

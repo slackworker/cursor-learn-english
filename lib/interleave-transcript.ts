@@ -7,6 +7,117 @@ export type InterleavedTranscriptPhase = {
   steps: TranscriptAssistantStep[];
 };
 
+/** Flat timeline unit used to mirror Cursor’s process fold vs final reply. */
+export type ProcessTimelineUnit =
+  | { kind: "thinking"; thinking: TimelineThinking }
+  | { kind: "step"; step: TranscriptAssistantStep; stepKey: string };
+
+/**
+ * Cursor folds interim narration + tools under one “process” section;
+ * only content after the last tool_use stays expanded as the formal reply.
+ */
+export function splitProcessAndFinalUnits(
+  units: ProcessTimelineUnit[]
+): {
+  process: ProcessTimelineUnit[];
+  finalSteps: { step: TranscriptAssistantStep; stepKey: string }[];
+} {
+  if (units.length === 0) {
+    return { process: [], finalSteps: [] };
+  }
+
+  const hasProcessMarker = units.some(
+    (u) =>
+      u.kind === "thinking" ||
+      (u.kind === "step" &&
+        u.step.items.some((item) => item.type === "tool_use"))
+  );
+
+  if (!hasProcessMarker) {
+    return {
+      process: [],
+      finalSteps: units
+        .filter((u): u is Extract<ProcessTimelineUnit, { kind: "step" }> => u.kind === "step")
+        .map((u) => ({ step: u.step, stepKey: u.stepKey })),
+    };
+  }
+
+  let lastToolUnitIdx = -1;
+  for (let i = 0; i < units.length; i += 1) {
+    const u = units[i];
+    if (u.kind === "thinking") {
+      lastToolUnitIdx = i;
+      continue;
+    }
+    if (u.step.items.some((item) => item.type === "tool_use")) {
+      lastToolUnitIdx = i;
+    }
+  }
+
+  if (lastToolUnitIdx < 0) {
+    return { process: units, finalSteps: [] };
+  }
+
+  const process = units.slice(0, lastToolUnitIdx + 1);
+  const after = units.slice(lastToolUnitIdx + 1);
+  const finalSteps: { step: TranscriptAssistantStep; stepKey: string }[] = [];
+
+  // If the last process unit mixes tools then trailing text, peel text after last tool_use.
+  const last = process[process.length - 1];
+  if (last?.kind === "step") {
+    const items = last.step.items;
+    let lastToolItemIdx = -1;
+    for (let i = 0; i < items.length; i += 1) {
+      if (items[i].type === "tool_use") lastToolItemIdx = i;
+    }
+    if (lastToolItemIdx >= 0 && lastToolItemIdx < items.length - 1) {
+      const head = items.slice(0, lastToolItemIdx + 1);
+      const tail = items.slice(lastToolItemIdx + 1);
+      if (tail.every((item) => item.type === "text")) {
+        process[process.length - 1] = {
+          kind: "step",
+          stepKey: last.stepKey,
+          step: { items: head },
+        };
+        finalSteps.push({
+          stepKey: `${last.stepKey}-final`,
+          step: { items: tail },
+        });
+      }
+    }
+  }
+
+  for (const u of after) {
+    if (u.kind === "step") {
+      finalSteps.push({ step: u.step, stepKey: u.stepKey });
+    } else {
+      // Orphan thinking after tools is still process material.
+      process.push(u);
+    }
+  }
+
+  return { process, finalSteps };
+}
+
+export function flattenPhasesToUnits(
+  phases: InterleavedTranscriptPhase[]
+): ProcessTimelineUnit[] {
+  const units: ProcessTimelineUnit[] = [];
+  phases.forEach((phase, phaseIdx) => {
+    if (phase.thinking) {
+      units.push({ kind: "thinking", thinking: phase.thinking });
+    }
+    phase.steps.forEach((step, stepIdx) => {
+      units.push({
+        kind: "step",
+        step,
+        stepKey: `phase-${phaseIdx}-step-${stepIdx}`,
+      });
+    });
+  });
+  return units;
+}
+
 const TOOLS_WITHOUT_HOOK = new Set([
   "TodoWrite",
   "ReadLints",
