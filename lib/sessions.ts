@@ -171,11 +171,17 @@ type SummariesCacheEntry = {
   result: { sessions: SessionSummary[]; truncated: boolean };
   /** hook call-* id → canonical transcript UUID */
   aliases: Map<string, string>;
+  builtAt: number;
 };
 
 const summariesCache = new Map<string, SummariesCacheEntry>();
 /** Latest includeSubagents=true alias map for detail deep-links. */
 let latestSubagentAliases = new Map<string, string>();
+/**
+ * While today's events JSONL is appending, serve a briefly-stale list instead of
+ * rebuilding for multiple seconds on every poll.
+ */
+const SUMMARIES_SOFT_STALE_MS = 20_000;
 
 function getSummariesCacheSignature(from?: string, to?: string): string {
   return [
@@ -226,26 +232,6 @@ function sessionSortKey(session: SessionSummary): string {
   );
 }
 
-/** Attach titles from transcripts (caller already filtered to sessions with files). */
-function attachTitles(sessions: SessionSummary[]): SessionSummary[] {
-  if (sessions.length === 0) return sessions;
-  const titles = getSessionTitles(sessions.map((s) => s.session_id));
-  return sessions.map((session) => {
-    const parsed = titles.get(session.session_id) as ParsedSessionTitle | undefined;
-    if (parsed?.plain) {
-      return {
-        ...session,
-        title: parsed.plain,
-        title_dom_contexts:
-          parsed.domContexts.length > 0 ? parsed.domContexts : undefined,
-        title_segments: parsed.segments.length > 0 ? parsed.segments : undefined,
-        title_body: parsed.body || undefined,
-      };
-    }
-    return session;
-  });
-}
-
 /** Prefer transcript title when present; keep existing title/task fallback otherwise. */
 function enrichTitlesFromTranscript(sessions: SessionSummary[]): SessionSummary[] {
   const ids = sessions
@@ -273,7 +259,17 @@ function keepListedSession(
 ): boolean {
   if (session.is_open) return true;
   if (session.title?.trim()) return true;
-  return contentById.get(session.session_id) === true;
+  if (contentById.get(session.session_id) === true) return true;
+  // Main rows are already transcript-gated; keep them for deferred title enrich.
+  // Hook-only subagent shells without content stay hidden.
+  return !session.is_subagent;
+}
+
+/** Attach transcript titles for a page of summaries (avoid full-list file reads). */
+export function enrichSessionPageTitles(
+  sessions: SessionSummary[]
+): SessionSummary[] {
+  return enrichTitlesFromTranscript(sessions);
 }
 
 /**
@@ -365,8 +361,9 @@ function buildMainSessionSummaries(
   }
 
   return {
-    main: attachTitles(mainRaw).filter((s) => keepListedSession(s, sessionHasContentEvent)),
-    subagentsFromTranscript: enrichTitlesFromTranscript(subRaw).filter((s) =>
+    // Titles are attached later for the paginated slice only.
+    main: mainRaw.filter((s) => keepListedSession(s, sessionHasContentEvent)),
+    subagentsFromTranscript: subRaw.filter((s) =>
       keepListedSession(s, sessionHasContentEvent)
     ),
   };
@@ -568,7 +565,8 @@ function canonicalizeSubagentSummaries(
   }
 
   return {
-    sessions: enrichTitlesFromTranscript(Array.from(byId.values())),
+    // Page route enriches titles for the visible slice.
+    sessions: Array.from(byId.values()),
     aliases,
   };
 }
@@ -680,9 +678,8 @@ function buildSubagentSessionSummaries(events: CursorEvent[]): SessionSummary[] 
     })
     .filter((s) => Boolean(s.start ?? s.timestamp));
 
-  // Subagents are listed from Start/Stop lifecycle; transcript is optional enrichment.
-  const withTitles = enrichTitlesFromTranscript(sessions);
-  return withTitles.filter((session) => keepListedSession(session, contentById));
+  // Subagents are listed from Start/Stop lifecycle; transcript titles enrich on page.
+  return sessions.filter((session) => keepListedSession(session, contentById));
 }
 
 function buildSessionSummaries(
@@ -735,9 +732,14 @@ export function getSessionSummaries(
   const cacheKey = `${from ?? ""}::${to ?? ""}::sub:${includeSubagents ? 1 : 0}`;
   const signature = getSummariesCacheSignature(from, to);
   const hit = summariesCache.get(cacheKey);
-  if (hit && hit.signature === signature) {
-    if (includeSubagents) latestSubagentAliases = hit.aliases;
-    return hit.result;
+  if (hit) {
+    const fresh = hit.signature === signature;
+    const softStale =
+      !fresh && Date.now() - hit.builtAt < SUMMARIES_SOFT_STALE_MS;
+    if (fresh || softStale) {
+      if (includeSubagents) latestSubagentAliases = hit.aliases;
+      return hit.result;
+    }
   }
 
   const built = buildSessionSummaries(from, to, options);
@@ -746,6 +748,7 @@ export function getSessionSummaries(
     signature,
     result,
     aliases: built.aliases,
+    builtAt: Date.now(),
   });
   if (includeSubagents) latestSubagentAliases = built.aliases;
   return result;

@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server";
-import { getSessionSummaries } from "@/lib/sessions";
+import {
+  enrichSessionPageTitles,
+  getSessionSummaries,
+} from "@/lib/sessions";
 import { getEventsPath } from "@/lib/events";
 import { getMergedReadSignature } from "@/lib/jsonl-daily";
 import {
@@ -27,7 +30,9 @@ export async function GET(request: NextRequest) {
     : 20;
   const includeSubagents = parseBoolParam(searchParams.get("includeSubagents"));
   const { sessions, truncated } = getSessionSummaries(from, to, { includeSubagents });
-  const pagedSessions = sessions.slice(offset, offset + limit);
+  const pagedSessions = enrichSessionPageTitles(
+    sessions.slice(offset, offset + limit)
+  );
   const hasMore = offset + pagedSessions.length < sessions.length;
   const etag = `"${getMergedReadSignature(getEventsPath(), from, to)}:sub${includeSubagents ? 1 : 0}"`;
   if (request.headers.get("if-none-match") === etag) {

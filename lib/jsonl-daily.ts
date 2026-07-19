@@ -67,19 +67,53 @@ export function listDailyPaths(
 }
 
 /**
- * Paths to read: legacy monolithic file (if any) plus daily shards in optional date range.
+ * Paths to read: daily shards in range, plus legacy only when needed.
+ *
+ * After a daily split, shards cover recent days; the monolithic file holds
+ * pre-shard history. Skip legacy when `from` is on/after the earliest shard
+ * so short windows do not re-parse the 10MB+ archive.
  */
 export function resolveReadPaths(
   basePath: string,
   from?: string,
   to?: string
 ): string[] {
-  const paths: string[] = [];
-  if (fs.existsSync(basePath)) {
-    paths.push(basePath);
+  const { dir, stem } = stemFromBasePath(basePath);
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    entries = [];
   }
-  for (const p of listDailyPaths(basePath, from, to)) {
-    if (!paths.includes(p)) paths.push(p);
+
+  const dailyAll: { date: string; path: string }[] = [];
+  for (const name of entries) {
+    const full = path.join(dir, name);
+    const date = parseDailyFileDate(full, stem);
+    if (!date) continue;
+    dailyAll.push({ date, path: full });
+  }
+  dailyAll.sort((a, b) => a.date.localeCompare(b.date));
+
+  const dailyInRange = dailyAll.filter((d) => {
+    if (from && d.date < from) return false;
+    if (to && d.date > to) return false;
+    return true;
+  });
+  const earliestDaily = dailyAll[0]?.date ?? null;
+
+  const paths: string[] = [];
+  const legacyExists = fs.existsSync(basePath);
+  const needLegacy =
+    legacyExists &&
+    (dailyInRange.length === 0 ||
+      !earliestDaily ||
+      !from ||
+      from < earliestDaily);
+
+  if (needLegacy) paths.push(basePath);
+  for (const d of dailyInRange) {
+    if (!paths.includes(d.path)) paths.push(d.path);
   }
   return paths;
 }

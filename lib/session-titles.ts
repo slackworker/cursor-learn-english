@@ -12,6 +12,8 @@ import {
 export { hasSessionTranscript } from "./agent-transcripts-path";
 
 const DEFAULT_MAX_TITLE_LENGTH = 60;
+/** First user message is near the top; avoid reading multi‑MB transcripts. */
+const TITLE_READ_BYTES = 64 * 1024;
 
 export type ParsedSessionTitle = {
   /** Plain text for search, filters, and legacy clients. */
@@ -20,6 +22,14 @@ export type ParsedSessionTitle = {
   domContexts: DomContextBlock[];
   body: string;
 };
+
+type TitleCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  value: ParsedSessionTitle | null;
+};
+
+const titleCache = new Map<string, TitleCacheEntry>();
 
 function safeTrim(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -50,10 +60,7 @@ export function parseSessionTitleFromText(rawText: string): ParsedSessionTitle {
   };
 }
 
-function readTranscriptTitleParts(sessionId: string): ParsedSessionTitle | null {
-  const transcriptPath = resolveTranscriptPath(sessionId);
-  if (!transcriptPath) return null;
-  const content = fs.readFileSync(transcriptPath, "utf8");
+function parseTitleFromPrefix(content: string): ParsedSessionTitle | null {
   if (!content.trim()) return null;
   const lines = content.split("\n");
   for (const line of lines) {
@@ -79,6 +86,49 @@ function readTranscriptTitleParts(sessionId: string): ParsedSessionTitle | null 
   return null;
 }
 
+function readTranscriptTitleParts(sessionId: string): ParsedSessionTitle | null {
+  const transcriptPath = resolveTranscriptPath(sessionId);
+  if (!transcriptPath) return null;
+
+  let st: fs.Stats;
+  try {
+    st = fs.statSync(transcriptPath);
+  } catch {
+    return null;
+  }
+  if (st.size <= 0) return null;
+
+  const cached = titleCache.get(transcriptPath);
+  if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) {
+    return cached.value;
+  }
+
+  const readLen = Math.min(st.size, TITLE_READ_BYTES);
+  const fd = fs.openSync(transcriptPath, "r");
+  let content: string;
+  try {
+    const buf = Buffer.alloc(readLen);
+    fs.readSync(fd, buf, 0, readLen, 0);
+    content = buf.toString("utf8");
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  // Drop a possibly truncated final line when reading a prefix.
+  if (st.size > TITLE_READ_BYTES) {
+    const lastNl = content.lastIndexOf("\n");
+    if (lastNl >= 0) content = content.slice(0, lastNl);
+  }
+
+  const parsed = parseTitleFromPrefix(content);
+  titleCache.set(transcriptPath, {
+    mtimeMs: st.mtimeMs,
+    size: st.size,
+    value: parsed,
+  });
+  return parsed;
+}
+
 export function getSessionTitles(sessionIds: string[]): Map<string, ParsedSessionTitle> {
   const result = new Map<string, ParsedSessionTitle>();
   for (const sessionId of sessionIds) {
@@ -87,4 +137,9 @@ export function getSessionTitles(sessionIds: string[]): Map<string, ParsedSessio
     if (parsed) result.set(sessionId, parsed);
   }
   return result;
+}
+
+/** Test-only. */
+export function clearSessionTitleCache(): void {
+  titleCache.clear();
 }
