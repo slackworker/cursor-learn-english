@@ -4,10 +4,11 @@
  *     Thought for …             (L1)
  *     Task card                 (L1)
  *     interim narration text    (L1)
- *     Explored N files …        (L1) — one fold until next narration/edit/shell
+ *     Explored N files …        (L1) — fold when ≥2 tools or nested Thought/text
  *       Checked to-do list /
  *       Grepped … / Thought …   (L2, chronological)
  *       Explored available tools / Browser tabs / CDP …  (MCP → explore)
+ *     Grepped … / Read …        (L1 tool-line) — lone explore tool, no nest
  *     interim narration text    (L1)
  *     Edited 3 files            (L1) — Thought splits edit batches
  *     Thought for …             (L1, sibling of Edited)
@@ -522,18 +523,32 @@ export function buildProcessActivityTree(
         open.items,
         open.deferredLong
       );
-      const tools = items
-        .filter(
-          (item): item is Extract<ProcessActivityItem, { kind: "tool" }> =>
-            item.kind === "tool"
-        )
-        .map((item) => item.tool);
-      nodes.push({
-        kind: "activity",
-        activityKind: "explore",
-        summary: summarizeActivity("explore", tools),
-        items,
-      });
+      const toolItems = items.filter(
+        (item): item is Extract<ProcessActivityItem, { kind: "tool" }> =>
+          item.kind === "tool"
+      );
+      const tools = toolItems.map((item) => item.tool);
+      const hasNestedNonTool = items.some((item) => item.kind !== "tool");
+      const onlyChrome =
+        toolItems.length > 0 &&
+        toolItems.every((item) => isExploreChromeTool(item.tool.name));
+      // Cursor (d77973b4): lone Grep with nothing nested is L1 "Grepped …"
+      // under Worked — not a one-line "Explored 1 search" fold. Chrome-only
+      // batches still use bare "Explored"; multi-tool / Thought keep the fold.
+      if (
+        !hasNestedNonTool &&
+        toolItems.length === 1 &&
+        !onlyChrome
+      ) {
+        nodes.push({ kind: "tool-line", tool: toolItems[0].tool });
+      } else {
+        nodes.push({
+          kind: "activity",
+          activityKind: "explore",
+          summary: summarizeActivity("explore", tools),
+          items,
+        });
+      }
       for (const t of spillThinking) emitThinkingL1(t);
     } else {
       const tools = open.items

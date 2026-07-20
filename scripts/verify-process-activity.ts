@@ -1006,9 +1006,9 @@ assert.deepEqual(
   [
     "thinking:Thought briefly",
     "text",
-    "activity:Explored 1 file",
+    "tool-line:Read lib/process-activity.ts",
   ],
-  "sole empty-phase Thought stays L1 above text+explore (phase marker, not pop heuristic)"
+  "sole empty-phase Thought stays L1; lone Read (no nest) is L1 tool-line, not Explored 1 file"
 );
 assert.equal(
   soleEmptyPhaseTree.some(
@@ -1116,6 +1116,45 @@ assert.deepEqual(activityLabels(twoPairedExplore), [
   "Thought for 2s",
   "Grepped phaseId",
 ]);
+
+// --- Lone Grep under Worked is L1 (Cursor d77973b4: no "Explored 1 search") ---
+const loneGrepUnits: ProcessTimelineUnit[] = [
+  step("narrate", [
+    {
+      type: "text",
+      text: "当前折叠用的是 daisyUI 的 `collapse`，我先核对它的高度动画和 `overflow` 设置。",
+    },
+    {
+      type: "tool_use",
+      name: "Grep",
+      input: {
+        path: "node_modules/daisyui",
+        pattern: "collapse",
+        glob: "*.css",
+        head_limit: 40,
+      },
+    },
+  ]),
+  step("sh", [
+    {
+      type: "tool_use",
+      name: "Shell",
+      input: {
+        command: 'rg -l "collapse" node_modules/daisyui --glob "*.css"',
+      },
+    },
+  ]),
+];
+const loneGrepTree = buildProcessActivityTree(loneGrepUnits);
+assert.deepEqual(
+  loneGrepTree.map(label),
+  [
+    "text",
+    "tool-line:Grepped collapse",
+    'tool-line:Ran rg -l "collapse" node_modules/daisyui --glob "*.css"',
+  ],
+  "lone Grep with no nested Thought is L1 under Worked, not Explored 1 search"
+);
 
 console.log("verify-process-activity: ok");
 console.log({
