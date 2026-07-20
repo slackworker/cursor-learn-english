@@ -364,59 +364,6 @@ html[data-theme="business"] {
   @apply mb-3 font-mono text-[11px] text-base-content/40;
 }
 
-/* Process folds: Cursor-like inline chevron after the label. */
-@layer utilities {
-  .process-fold.collapse {
-    border-style: none;
-    border-radius: 0;
-    background-color: transparent;
-    overflow: visible;
-  }
-
-  .process-fold > .collapse-title,
-  .process-fold > .process-fold-title {
-    display: inline-flex;
-    width: fit-content;
-    max-width: 100%;
-    min-height: 0;
-    align-items: center;
-    gap: 0.2rem;
-    padding-block: 0.35rem;
-    padding-inline: 0;
-    cursor: pointer;
-    list-style: none;
-  }
-
-  .process-fold > .collapse-title::-webkit-details-marker,
-  .process-fold > .process-fold-title::-webkit-details-marker {
-    display: none;
-  }
-
-  .process-fold > .collapse-title::marker,
-  .process-fold > .process-fold-title::marker {
-    content: "";
-    display: none;
-  }
-
-  .process-fold > .collapse-content {
-    padding-inline: 0;
-    padding-block: 0.25rem 0.35rem;
-  }
-
-  /* Kill daisyUI’s far-right arrow if present. */
-  .process-fold.collapse-arrow > .collapse-title:after {
-    content: none;
-    display: none;
-  }
-
-  /* Touch / no-hover: keep collapsed chevron discoverable. */
-  @media (hover: none) {
-    .process-fold:not([open]) > .collapse-title .process-fold-chevron > svg:first-child {
-      opacity: 1;
-    }
-  }
-}
-
 /* ── Pagination ── */
 .pagination-bar {
   @apply flex flex-wrap items-center justify-between gap-3 pt-1;

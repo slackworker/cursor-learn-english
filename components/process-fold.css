@@ -1,0 +1,80 @@
+/* Cursor-like process folds: inline chevron after the label.
+   Direct-child `>` is required so nested folds follow their OWN [open]
+   (Tailwind group-open matches any ancestor group and breaks nesting). */
+
+.process-fold.collapse {
+  border-style: none;
+  border-radius: 0;
+  background-color: transparent;
+  overflow: visible;
+}
+
+.process-fold > .collapse-title,
+.process-fold > .process-fold-title {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 0;
+  align-items: center;
+  gap: 0.2rem;
+  padding-block: 0.35rem;
+  padding-inline: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.process-fold > .collapse-title::-webkit-details-marker,
+.process-fold > .process-fold-title::-webkit-details-marker {
+  display: none;
+}
+
+.process-fold > .collapse-title::marker,
+.process-fold > .process-fold-title::marker {
+  content: "";
+  display: none;
+}
+
+.process-fold > .collapse-content {
+  padding-inline: 0;
+  padding-block: 0.25rem 0.35rem;
+}
+
+.process-fold.collapse-arrow > .collapse-title:after {
+  content: none;
+  display: none;
+}
+
+.process-fold-chevron {
+  position: relative;
+  display: inline-flex;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+}
+
+.process-fold-chevron-icon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: none;
+}
+
+/* Collapsed default: no icon. Hover/focus → › */
+.process-fold:not([open]) > .collapse-title:hover .process-fold-chevron-closed,
+.process-fold:not([open]) > .collapse-title:focus-visible .process-fold-chevron-closed {
+  display: block;
+}
+
+/* Expanded: always ∨ */
+.process-fold[open] > .collapse-title .process-fold-chevron-open {
+  display: block;
+}
+
+@media (hover: none) {
+  .process-fold:not([open]) > .collapse-title .process-fold-chevron-closed {
+    display: block;
+  }
+}

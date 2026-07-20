@@ -43,12 +43,13 @@ import {
   type TranscriptContentItem,
   type TranscriptToolUseItem,
 } from "@/lib/transcript-content";
+import "./process-fold.css";
 
 const TaskSubagentsContext = createContext<SessionSubagentLink[] | null>(null);
 
 /** Flat Cursor-like fold chrome — no nested card padding/indent. */
 const PROCESS_FOLD_CLASS =
-  "process-fold group/fold collapse !overflow-visible !rounded-none !border-0 !bg-transparent";
+  "process-fold collapse !overflow-visible !rounded-none !border-0 !bg-transparent";
 const PROCESS_FOLD_TITLE_CLASS =
   "collapse-title process-fold-title !min-h-0 !w-fit !max-w-full !py-1.5 !px-0 !pe-0 text-xs font-medium";
 const PROCESS_FOLD_CONTENT_CLASS = "collapse-content !px-0 !pb-1.5 !pt-1";
@@ -59,10 +60,10 @@ const TTS_CONTROL_CLASS =
 
 function FoldChevron() {
   return (
-    <span className="process-fold-chevron relative inline-flex size-3.5 shrink-0" aria-hidden>
-      {/* Collapsed: › — hidden until hover on the summary label */}
+    <span className="process-fold-chevron" aria-hidden>
+      {/* Collapsed: › — shown on summary hover only (see globals.css) */}
       <svg
-        className="absolute inset-0 size-3.5 text-base-content/55 opacity-0 transition-opacity group-hover/sum:opacity-100 group-open/fold:hidden"
+        className="process-fold-chevron-icon process-fold-chevron-closed"
         viewBox="0 0 16 16"
         fill="none"
         stroke="currentColor"
@@ -72,9 +73,9 @@ function FoldChevron() {
       >
         <path d="M6 3.5 10.5 8 6 12.5" />
       </svg>
-      {/* Expanded: ∨ — always visible */}
+      {/* Expanded: ∨ — always visible while this details is open */}
       <svg
-        className="absolute inset-0 hidden size-3.5 text-base-content/55 group-open/fold:block"
+        className="process-fold-chevron-icon process-fold-chevron-open"
         viewBox="0 0 16 16"
         fill="none"
         stroke="currentColor"
@@ -90,7 +91,7 @@ function FoldChevron() {
 
 function ProcessFoldSummary({ children }: { children: ReactNode }) {
   return (
-    <summary className={`${PROCESS_FOLD_TITLE_CLASS} group/sum`}>
+    <summary className={PROCESS_FOLD_TITLE_CLASS}>
       <span className="process-fold-label">{children}</span>
       <FoldChevron />
     </summary>
