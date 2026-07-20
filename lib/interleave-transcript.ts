@@ -283,7 +283,11 @@ export function buildInterleavedTranscriptPhases(
       const ts = bodyTs[si];
       if (ts) {
         if (ts < tCur) break;
-        if (tNext && ts > tNext) break;
+        // Same-ms tools belong with the next thinking (Cursor: Thought then tools).
+        // Using `>` leaked those tools into the previous phase and pushed the next
+        // Thought after them — e.g. 3 Reads before "Thought briefly", then
+        // "Thought for 16s" stranded at L1.
+        if (tNext && ts >= tNext) break;
         chunk.push(body[si]);
         si += 1;
         continue;

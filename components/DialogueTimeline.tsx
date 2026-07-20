@@ -26,6 +26,14 @@ import {
   splitProcessAndFinalUnits,
   type ProcessTimelineUnit,
 } from "@/lib/interleave-transcript";
+import {
+  buildProcessActivityTree,
+  thoughtFoldLabel,
+  toolActivityLine,
+  workedFoldSummary,
+  type ProcessActivityItem,
+  type ProcessActivityNode,
+} from "@/lib/process-activity";
 import type { SessionSubagentLink } from "@/lib/sessions";
 import { resolveTaskSubagent } from "@/lib/task-subagent";
 import {
@@ -68,14 +76,12 @@ function ThinkingBlock({
       key={blockKey}
       className={
         nested
-          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/50"
+          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/40"
           : "collapse collapse-arrow border border-base-300 bg-base-100"
       }
     >
       <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
-        {!nested && block.data.duration_ms < 100
-          ? "Thought briefly"
-          : `Thinking · ${block.data.model} · ${block.data.duration_ms}ms`}
+        {thoughtFoldLabel(block.data)}
       </summary>
       <div className="collapse-content relative pt-1 pr-12">
         <MarkdownContent className="text-sm">{block.data.text}</MarkdownContent>
@@ -425,29 +431,142 @@ function renderTranscriptRows(
   return result;
 }
 
-function collectProcessTools(units: ProcessTimelineUnit[]): TranscriptToolUseItem[] {
-  const tools: TranscriptToolUseItem[] = [];
-  for (const unit of units) {
-    if (unit.kind !== "step") continue;
-    for (const item of unit.step.items) {
-      if (item.type === "tool_use") tools.push(item);
-    }
-  }
-  return tools;
+function TaskProcessRow({
+  tool,
+}: {
+  tool: TranscriptToolUseItem;
+}) {
+  return (
+    <div className="flex items-start gap-2 py-0.5 text-xs">
+      <span className="mt-0.5 opacity-50" aria-hidden>
+        •
+      </span>
+      <div className="min-w-0 flex-1">
+        <TranscriptToolUseChip name={tool.name} input={tool.input} />
+      </div>
+    </div>
+  );
 }
 
-function processFoldSummary(units: ProcessTimelineUnit[]): string {
-  const thinkingCount = units.filter((u) => u.kind === "thinking").length;
-  const tools = collectProcessTools(units);
-  const parts = ["过程"];
-  if (thinkingCount > 0) {
-    parts.push(thinkingCount === 1 ? "Thinking×1" : `Thinking×${thinkingCount}`);
-  }
-  if (tools.length > 0) {
-    const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
-    parts.push(`工具 · ${countLabel} · ${summarizeTranscriptToolNames(tools)}`);
-  }
-  return parts.join(" · ");
+function ActivityItemViews({
+  items,
+  blockKey,
+}: {
+  items: ProcessActivityItem[];
+  blockKey: string;
+}) {
+  return (
+    <>
+      {items.map((item, idx) => {
+        const itemKey = `${blockKey}-item-${idx}`;
+        if (item.kind === "tool") {
+          return (
+            <div
+              key={itemKey}
+              className="font-mono text-[11px] leading-relaxed opacity-80"
+            >
+              {toolActivityLine(item.tool)}
+            </div>
+          );
+        }
+        if (item.kind === "thinking") {
+          return (
+            <ThinkingBlock
+              key={itemKey}
+              blockKey={itemKey}
+              nested
+              block={{
+                kind: "thinking",
+                timestamp: item.thinking.timestamp,
+                data: item.thinking,
+              }}
+            />
+          );
+        }
+        return (
+          <div key={itemKey} className="relative pr-12">
+            <MarkdownContent className="break-words text-sm opacity-90">
+              {item.text}
+            </MarkdownContent>
+            <div className="absolute right-2 top-0">
+              <DialogueTtsPlayButton id={`${itemKey}-tts`} text={item.text} />
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function ActivityGroupFold({
+  node,
+  blockKey,
+}: {
+  node: Extract<ProcessActivityNode, { kind: "activity" }>;
+  blockKey: string;
+}) {
+  return (
+    <details
+      key={blockKey}
+      className="collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/40"
+    >
+      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+        {node.summary}
+      </summary>
+      <div className="collapse-content space-y-1.5 pt-1">
+        <ActivityItemViews items={node.items} blockKey={blockKey} />
+      </div>
+    </details>
+  );
+}
+
+function renderProcessActivityNodes(
+  nodes: ProcessActivityNode[],
+  nested: boolean
+): ReactNode[] {
+  return nodes.map((node, idx) => {
+    const blockKey = `process-node-${idx}`;
+    if (node.kind === "thinking") {
+      return (
+        <ThinkingBlock
+          key={blockKey}
+          blockKey={blockKey}
+          nested={nested}
+          block={{
+            kind: "thinking",
+            timestamp: node.thinking.timestamp,
+            data: node.thinking,
+          }}
+        />
+      );
+    }
+    if (node.kind === "task") {
+      return <TaskProcessRow key={blockKey} tool={node.tool} />;
+    }
+    if (node.kind === "tool-line") {
+      return (
+        <div
+          key={blockKey}
+          className="font-mono text-[11px] leading-relaxed opacity-80"
+        >
+          {toolActivityLine(node.tool)}
+        </div>
+      );
+    }
+    if (node.kind === "activity") {
+      return (
+        <ActivityGroupFold key={blockKey} blockKey={blockKey} node={node} />
+      );
+    }
+    return (
+      <div key={blockKey} className="relative pr-12">
+        <MarkdownContent className="break-words text-sm">{node.text}</MarkdownContent>
+        <div className="absolute right-2 top-0">
+          <DialogueTtsPlayButton id={`${blockKey}-tts`} text={node.text} />
+        </div>
+      </div>
+    );
+  });
 }
 
 function renderProcessUnits(
@@ -496,10 +615,11 @@ function TranscriptStepsTimeline({
     flattenPhasesToUnits(phases)
   );
 
+  const activityNodes = buildProcessActivityTree(process);
   const processNodes =
-    process.length > 0 ? (
-      <ProcessFold summary={processFoldSummary(process)}>
-        {renderProcessUnits(process, true)}
+    activityNodes.length > 0 ? (
+      <ProcessFold summary={workedFoldSummary(process, tools)}>
+        {renderProcessActivityNodes(activityNodes, true)}
       </ProcessFold>
     ) : null;
 
