@@ -45,6 +45,14 @@ import {
 } from "@/lib/transcript-content";
 
 const TaskSubagentsContext = createContext<SessionSubagentLink[] | null>(null);
+
+/** Flat Cursor-like fold chrome — no nested card padding/indent. */
+const PROCESS_FOLD_CLASS =
+  "process-fold collapse collapse-arrow !overflow-visible !rounded-none !border-0 !bg-transparent";
+const PROCESS_FOLD_TITLE_CLASS =
+  "collapse-title !min-h-0 !py-2 !pl-0 !pr-10 text-xs font-medium";
+const PROCESS_FOLD_CONTENT_CLASS = "collapse-content !px-0 !pb-1.5 !pt-1";
+
 function ProcessFold({
   summary,
   children,
@@ -53,11 +61,9 @@ function ProcessFold({
   children: ReactNode;
 }) {
   return (
-    <details className="collapse collapse-arrow border border-base-300 bg-base-100">
-      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
-        {summary}
-      </summary>
-      <div className="collapse-content space-y-2 pt-1">{children}</div>
+    <details className={PROCESS_FOLD_CLASS}>
+      <summary className={PROCESS_FOLD_TITLE_CLASS}>{summary}</summary>
+      <div className={`${PROCESS_FOLD_CONTENT_CLASS} space-y-1`}>{children}</div>
     </details>
   );
 }
@@ -65,27 +71,18 @@ function ProcessFold({
 function ThinkingBlock({
   block,
   blockKey,
-  nested = false,
 }: {
   block: Extract<DialogueTimelineBlock, { kind: "thinking" }>;
   blockKey: string;
-  nested?: boolean;
 }) {
   return (
-    <details
-      key={blockKey}
-      className={
-        nested
-          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/40"
-          : "collapse collapse-arrow border border-base-300 bg-base-100"
-      }
-    >
-      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+    <details key={blockKey} className={PROCESS_FOLD_CLASS}>
+      <summary className={PROCESS_FOLD_TITLE_CLASS}>
         {thoughtFoldLabel(block.data)}
       </summary>
-      <div className="collapse-content relative pt-1 pr-12">
+      <div className={`${PROCESS_FOLD_CONTENT_CLASS} relative pr-12`}>
         <MarkdownContent className="text-sm">{block.data.text}</MarkdownContent>
-        <div className="absolute right-2 top-2">
+        <div className="absolute right-0 top-1">
           <DialogueTtsPlayButton id={`${blockKey}-tts`} text={block.data.text} />
         </div>
       </div>
@@ -116,30 +113,21 @@ function formatToolLine(tool: TimelineTool): string {
 function ToolGroupBlock({
   block,
   blockKey,
-  nested = false,
 }: {
   block: Extract<DialogueTimelineBlock, { kind: "tool-group" }>;
   blockKey: string;
-  nested?: boolean;
 }) {
   const { tools } = block;
   const timeRange = formatToolTimeRange(block.timestamp, block.endTimestamp);
   const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
   return (
-    <details
-      key={blockKey}
-      className={
-        nested
-          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/50"
-          : "collapse collapse-arrow border border-base-300 bg-base-100"
-      }
-    >
-      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+    <details key={blockKey} className={PROCESS_FOLD_CLASS}>
+      <summary className={PROCESS_FOLD_TITLE_CLASS}>
         工具
         {timeRange ? ` · ${timeRange}` : ""}
         {` · ${countLabel} · ${summarizeToolNames(tools)}`}
       </summary>
-      <div className="collapse-content pt-1">
+      <div className={PROCESS_FOLD_CONTENT_CLASS}>
         <ul className="space-y-0.5 font-mono text-[11px] opacity-70">
           {tools.map((tool, idx) => (
             <li key={`${tool.timestamp}-${tool.tool_name ?? "tool"}-${idx}`}>
@@ -190,27 +178,18 @@ function summarizeTranscriptToolNames(tools: TranscriptToolUseItem[]): string {
 function TranscriptToolGroupBlock({
   tools,
   blockKey,
-  nested = false,
 }: {
   tools: TranscriptToolUseItem[];
   blockKey: string;
-  nested?: boolean;
 }) {
   const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
   return (
-    <details
-      key={blockKey}
-      className={
-        nested
-          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/50"
-          : "collapse collapse-arrow border border-base-300 bg-base-100"
-      }
-    >
-      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+    <details key={blockKey} className={PROCESS_FOLD_CLASS}>
+      <summary className={PROCESS_FOLD_TITLE_CLASS}>
         工具
         {` · ${countLabel} · ${summarizeTranscriptToolNames(tools)}`}
       </summary>
-      <div className="collapse-content pt-1">
+      <div className={PROCESS_FOLD_CONTENT_CLASS}>
         <div className="flex flex-wrap gap-1.5">
           {tools.map((item, i) => (
             <TranscriptToolUseChip
@@ -228,35 +207,25 @@ function TranscriptToolGroupBlock({
 function TranscriptToolRoundsFold({
   batches,
   blockKey,
-  nested = false,
 }: {
   batches: { tools: TranscriptToolUseItem[]; key: string }[];
   blockKey: string;
-  nested?: boolean;
 }) {
   const allTools = batches.flatMap((batch) => batch.tools);
   const roundLabel = batches.length === 1 ? "1 轮" : `${batches.length} 轮`;
   const countLabel = allTools.length === 1 ? "1 次" : `${allTools.length} 次`;
   return (
-    <details
-      key={blockKey}
-      className={
-        nested
-          ? "collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/50"
-          : "collapse collapse-arrow border border-base-300 bg-base-100"
-      }
-    >
-      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+    <details key={blockKey} className={PROCESS_FOLD_CLASS}>
+      <summary className={PROCESS_FOLD_TITLE_CLASS}>
         工具
         {` · ${roundLabel} · ${countLabel} · ${summarizeTranscriptToolNames(allTools)}`}
       </summary>
-      <div className="collapse-content space-y-1 pt-1">
+      <div className={`${PROCESS_FOLD_CONTENT_CLASS} space-y-1`}>
         {batches.map((batch) => (
           <TranscriptToolGroupBlock
             key={batch.key}
             blockKey={batch.key}
             tools={batch.tools}
-            nested
           />
         ))}
       </div>
@@ -387,10 +356,7 @@ function buildTranscriptStepRows(
   return rows;
 }
 
-function renderTranscriptRows(
-  rows: TranscriptStepRow[],
-  nested = false
-): ReactNode[] {
+function renderTranscriptRows(rows: TranscriptStepRow[]): ReactNode[] {
   const result: ReactNode[] = [];
   let i = 0;
   while (i < rows.length) {
@@ -414,7 +380,6 @@ function renderTranscriptRows(
           key={batches[0].key}
           blockKey={batches[0].key}
           tools={batches[0].tools}
-          nested={nested}
         />
       );
     } else {
@@ -423,7 +388,6 @@ function renderTranscriptRows(
           key={`${batches[0].key}-fold`}
           blockKey={`${batches[0].key}-fold`}
           batches={batches}
-          nested={nested}
         />
       );
     }
@@ -474,7 +438,6 @@ function ActivityItemViews({
             <ThinkingBlock
               key={itemKey}
               blockKey={itemKey}
-              nested
               block={{
                 kind: "thinking",
                 timestamp: item.thinking.timestamp,
@@ -506,14 +469,11 @@ function ActivityGroupFold({
   blockKey: string;
 }) {
   return (
-    <details
-      key={blockKey}
-      className="collapse collapse-arrow collapse-sm border border-base-300/80 bg-base-200/40"
-    >
-      <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+    <details key={blockKey} className={PROCESS_FOLD_CLASS}>
+      <summary className={PROCESS_FOLD_TITLE_CLASS}>
         {node.summary}
       </summary>
-      <div className="collapse-content space-y-1.5 pt-1">
+      <div className={`${PROCESS_FOLD_CONTENT_CLASS} space-y-1`}>
         <ActivityItemViews items={node.items} blockKey={blockKey} />
       </div>
     </details>
@@ -521,8 +481,7 @@ function ActivityGroupFold({
 }
 
 function renderProcessActivityNodes(
-  nodes: ProcessActivityNode[],
-  nested: boolean
+  nodes: ProcessActivityNode[]
 ): ReactNode[] {
   return nodes.map((node, idx) => {
     const blockKey = `process-node-${idx}`;
@@ -531,7 +490,6 @@ function renderProcessActivityNodes(
         <ThinkingBlock
           key={blockKey}
           blockKey={blockKey}
-          nested={nested}
           block={{
             kind: "thinking",
             timestamp: node.thinking.timestamp,
@@ -569,10 +527,7 @@ function renderProcessActivityNodes(
   });
 }
 
-function renderProcessUnits(
-  units: ProcessTimelineUnit[],
-  nested: boolean
-): ReactNode[] {
+function renderProcessUnits(units: ProcessTimelineUnit[]): ReactNode[] {
   return units.flatMap((unit) => {
     if (unit.kind === "thinking") {
       const blockKey = `process-think-${unit.thinking.timestamp}`;
@@ -580,7 +535,6 @@ function renderProcessUnits(
         <ThinkingBlock
           key={blockKey}
           blockKey={blockKey}
-          nested={nested}
           block={{
             kind: "thinking",
             timestamp: unit.thinking.timestamp,
@@ -589,10 +543,7 @@ function renderProcessUnits(
         />,
       ];
     }
-    return renderTranscriptRows(
-      buildTranscriptStepRows(unit.step, unit.stepKey),
-      nested
-    );
+    return renderTranscriptRows(buildTranscriptStepRows(unit.step, unit.stepKey));
   });
 }
 
@@ -619,11 +570,11 @@ function TranscriptStepsTimeline({
   const processNodes =
     activityNodes.length > 0 ? (
       <ProcessFold summary={workedFoldSummary(process, tools)}>
-        {renderProcessActivityNodes(activityNodes, true)}
+        {renderProcessActivityNodes(activityNodes)}
       </ProcessFold>
     ) : null;
 
-  const finalNodes = renderProcessUnits(final, false);
+  const finalNodes = renderProcessUnits(final);
 
   if (!processNodes && finalNodes.length === 0) {
     return null;
@@ -680,8 +631,7 @@ export function DialogueTimeline({
 
     const renderBlock = (
       block: DialogueTimelineBlock,
-      idx: number,
-      nested: boolean
+      idx: number
     ) => {
       const blockKey = `${block.kind}-${block.timestamp}-${idx}`;
       if (block.kind === "thinking") {
@@ -690,7 +640,6 @@ export function DialogueTimeline({
             key={blockKey}
             block={block}
             blockKey={blockKey}
-            nested={nested}
           />
         );
       }
@@ -700,7 +649,6 @@ export function DialogueTimeline({
             key={blockKey}
             block={block}
             blockKey={blockKey}
-            nested={nested}
           />
         );
       }
@@ -735,10 +683,10 @@ export function DialogueTimeline({
       <div className="space-y-2">
         {process.length > 0 ? (
           <ProcessFold summary={processSummary}>
-            {process.map((block, idx) => renderBlock(block, idx, true))}
+            {process.map((block, idx) => renderBlock(block, idx))}
           </ProcessFold>
         ) : null}
-        {final.map((block, idx) => renderBlock(block, idx, false))}
+        {final.map((block, idx) => renderBlock(block, idx))}
       </div>
     );
   })();

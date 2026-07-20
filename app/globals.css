@@ -364,6 +364,32 @@ html[data-theme="business"] {
   @apply mb-3 font-mono text-[11px] text-base-content/40;
 }
 
+/* Process folds: flush left at every nesting level (Cursor-like). */
+@layer utilities {
+  .process-fold.collapse {
+    border-style: none;
+    border-radius: 0;
+    background-color: transparent;
+    overflow: visible;
+  }
+
+  .process-fold > .collapse-title {
+    min-height: 0;
+    padding-block: 0.5rem;
+    padding-inline-start: 0;
+    padding-inline-end: 2.5rem;
+  }
+
+  .process-fold > .collapse-content {
+    padding-inline: 0;
+    padding-block: 0.25rem 0.35rem;
+  }
+
+  .process-fold.collapse-arrow > .collapse-title:after {
+    inset-inline-end: 0.35rem;
+  }
+}
+
 /* ── Pagination ── */
 .pagination-bar {
   @apply flex flex-wrap items-center justify-between gap-3 pt-1;
