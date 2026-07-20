@@ -13,6 +13,8 @@
  *
  * Nesting rule: only `explore` activities may contain Thought.
  * Edit / shell / other never nest Thought; shell is always an inline L1 line.
+ * Phase-leading Thought before L1 narration is always L1 (never deferred into
+ * the following Explored fold).
  */
 
 import type { TimelineThinking, TimelineTool } from "./dialogue-timeline";
@@ -200,6 +202,10 @@ export function thoughtFoldLabel(thinking: TimelineThinking): string {
   return `Thought for ${formatDurationShort(thinking.duration_ms)}`;
 }
 
+/**
+ * Hook capture timestamps are completion times (`afterAgentThought` /
+ * `postToolUse`). Subtract duration so the wall-clock span matches Cursor.
+ */
 export function estimateWorkedMs(
   units: ProcessTimelineUnit[],
   tools?: TimelineTool[]
@@ -207,16 +213,18 @@ export function estimateWorkedMs(
   const marks: number[] = [];
   for (const unit of units) {
     if (unit.kind !== "thinking") continue;
-    const start = Date.parse(unit.thinking.timestamp);
-    if (Number.isNaN(start)) continue;
-    marks.push(start);
-    marks.push(start + Math.max(0, unit.thinking.duration_ms || 0));
+    const end = Date.parse(unit.thinking.timestamp);
+    if (Number.isNaN(end)) continue;
+    const duration = Math.max(0, unit.thinking.duration_ms || 0);
+    marks.push(end - duration);
+    marks.push(end);
   }
   for (const tool of tools ?? []) {
-    const start = Date.parse(tool.timestamp);
-    if (Number.isNaN(start)) continue;
-    marks.push(start);
-    marks.push(start + Math.max(0, tool.duration || 0));
+    const end = Date.parse(tool.timestamp);
+    if (Number.isNaN(end)) continue;
+    const duration = Math.max(0, tool.duration || 0);
+    marks.push(end - duration);
+    marks.push(end);
   }
   if (marks.length >= 2) {
     const span = Math.max(...marks) - Math.min(...marks);
@@ -468,15 +476,9 @@ export function buildProcessActivityTree(
       const item = stepItems[ii];
       if (item.type === "text") {
         flush();
-        const restHasExplore = stepItems
-          .slice(ii + 1)
-          .some(
-            (rest) =>
-              rest.type === "tool_use" &&
-              !isSkippedProcessTool(rest.name) &&
-              classifyToolName(rest.name) === "explore"
-          );
-        if (!restHasExplore) flushPendingLongAsL1();
+        // Phase-leading Thought stays L1 above narration, even when explore
+        // tools follow in the same step (Cursor: Thought → text → Explored).
+        flushPendingLongAsL1();
         nodes.push({
           kind: "text",
           text: item.text,

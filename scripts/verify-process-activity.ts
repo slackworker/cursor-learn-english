@@ -5,6 +5,8 @@
 import assert from "node:assert/strict";
 import {
   buildProcessActivityTree,
+  estimateWorkedMs,
+  formatDurationShort,
   summarizeActivity,
   thoughtFoldLabel,
   toolActivityLine,
@@ -215,6 +217,15 @@ assert.equal(
   false,
   "AskQuestion must not appear"
 );
+assert.deepEqual(
+  askTree.slice(0, 3).map(label),
+  [
+    "thinking:Thought for 15s",
+    "text",
+    "activity:Explored interleave-transcript.ts, 5 searches",
+  ],
+  "phase-leading Thought stays L1 above narration before Explored"
+);
 const askExplore = askTree.find((n) => n.kind === "activity");
 assert.ok(askExplore && askExplore.kind === "activity");
 assert.equal(askExplore.summary, "Explored interleave-transcript.ts, 5 searches");
@@ -226,14 +237,14 @@ assert.deepEqual(activityLabels(askExplore), [
   "Thought briefly",
   "Grepped tool_use|thinking|assistant",
   "Searched files **/*transcript*",
-  "Thought for 15s",
+  "Thought for 28s",
 ]);
 assert.equal(
   askTree.some(
-    (n) => n.kind === "thinking" && thoughtFoldLabel(n.thinking) === "Thought for 28s"
+    (n) => n.kind === "thinking" && thoughtFoldLabel(n.thinking) === "Thought for 15s"
   ),
   true,
-  "extra long after explore spills to L1"
+  "phase-leading Thought is L1, not nested under Explored"
 );
 
 assert.equal(
@@ -254,6 +265,24 @@ assert.equal(
 );
 
 assert.match(workedFoldSummary(exploreUnits), /^Worked for /);
+
+// Hook timestamps are end times: span = last.end - first.(end - duration)
+const workedMs = estimateWorkedMs([
+  {
+    kind: "thinking",
+    thinking: thinking("first", 8459, "2026-07-20T05:47:28.642Z"),
+  },
+  {
+    kind: "thinking",
+    thinking: thinking("last", 1000, "2026-07-20T05:53:54.492Z"),
+  },
+]);
+assert.ok(workedMs != null);
+assert.equal(
+  formatDurationShort(workedMs),
+  "6m 34s",
+  "Worked span uses thought start = timestamp - duration_ms"
+);
 
 // --- Same-ms boundary still nests Thought for 16s ---
 const sameMsThinking = [
