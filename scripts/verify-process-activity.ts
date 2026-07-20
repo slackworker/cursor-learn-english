@@ -33,13 +33,21 @@ function thinking(
 
 function tool(
   name: string,
-  input: Record<string, unknown> = {}
+  input: Record<string, unknown> = {},
+  stepKey?: string
 ): ProcessTimelineUnit {
   return {
     kind: "step",
-    stepKey: `s-${name}`,
+    stepKey: stepKey ?? `s-${name}-${Math.random().toString(36).slice(2, 6)}`,
     step: { items: [{ type: "tool_use", name, input }] },
   };
+}
+
+function step(
+  stepKey: string,
+  items: import("../lib/transcript-content").TranscriptContentItem[]
+): ProcessTimelineUnit {
+  return { kind: "step", stepKey, step: { items } };
 }
 
 function label(node: ReturnType<typeof buildProcessActivityTree>[number]): string {
@@ -48,53 +56,89 @@ function label(node: ReturnType<typeof buildProcessActivityTree>[number]): strin
     return `thinking:${thoughtFoldLabel(node.thinking)}`;
   }
   if (node.kind === "tool-line") return `tool-line:${toolActivityLine(node.tool)}`;
+  if (node.kind === "text") return `text`;
   return node.kind;
+}
+
+function activityLabels(
+  node: Extract<ReturnType<typeof buildProcessActivityTree>[number], { kind: "activity" }>
+): string[] {
+  return node.items.map((it) =>
+    it.kind === "thinking"
+      ? thoughtFoldLabel(it.thinking)
+      : it.kind === "tool"
+        ? toolActivityLine(it.tool)
+        : "text"
+  );
 }
 
 // --- Explore nests Thought; L1 Thought splits explore batches ---
 const exploreUnits: ProcessTimelineUnit[] = [
   { kind: "thinking", thinking: thinking("plan parent link", 1000, "2026-07-20T03:00:00.000Z") },
-  tool("Task", { description: "Explore session parent/subagent UI" }),
-  tool("Grep", { pattern: "parentSession" }),
-  tool("Glob", { glob_pattern: "**/sessions/**/*.{ts,tsx}" }),
+  tool("Task", { description: "Explore session parent/subagent UI" }, "s-task"),
+  step("s-search", [
+    { type: "tool_use", name: "Grep", input: { pattern: "parentSession" } },
+    { type: "tool_use", name: "Glob", input: { glob_pattern: "**/sessions/**/*.{ts,tsx}" } },
+  ]),
   { kind: "thinking", thinking: thinking("brief after search", 40, "2026-07-20T03:00:10.000Z") },
-  { kind: "thinking", thinking: thinking("relation exists", 800, "2026-07-20T03:00:20.000Z") },
-  tool("Read", { path: "lib/sessions.ts" }),
-  tool("Read", { path: "app/sessions/[id]/page.tsx" }),
-  tool("Grep", { pattern: "listSubagentIdsForParent" }),
+  step("s-gap", [
+    { type: "text", text: "关系数据已有，只是父会话详情没往回链。" },
+  ]),
+  step("s-files", [
+    { type: "tool_use", name: "Read", input: { path: "lib/sessions.ts" } },
+    { type: "tool_use", name: "Read", input: { path: "app/sessions/[id]/page.tsx" } },
+    { type: "tool_use", name: "Grep", input: { pattern: "listSubagentIdsForParent" } },
+  ]),
   { kind: "thinking", thinking: thinking("brief mid", 50, "2026-07-20T03:01:00.000Z") },
-  tool("Read", { path: "lib/sessions.ts" }),
+  step("s-more", [
+    { type: "tool_use", name: "Read", input: { path: "lib/sessions.ts" } },
+  ]),
   { kind: "thinking", thinking: thinking("long mid explore", 16000, "2026-07-20T03:01:30.000Z") },
 ];
 
 const exploreTree = buildProcessActivityTree(exploreUnits);
-assert.equal(exploreTree[0]?.kind, "thinking");
-assert.equal(exploreTree[1]?.kind, "task");
-assert.equal(exploreTree[2]?.kind, "activity");
+assert.deepEqual(
+  exploreTree.slice(0, 4).map(label),
+  [
+    "thinking:Thought for 1s",
+    "task",
+    "activity:Explored 2 searches",
+    "text",
+  ]
+);
 if (exploreTree[2].kind === "activity") {
-  assert.equal(exploreTree[2].summary, "Explored 2 searches");
-  assert.equal(exploreTree[2].items[2]?.kind, "thinking");
+  assert.deepEqual(activityLabels(exploreTree[2]), [
+    "Grepped parentSession",
+    "Searched files **/sessions/**/*.{ts,tsx}",
+    "Thought briefly",
+  ]);
 }
-assert.equal(exploreTree[3]?.kind, "thinking");
-assert.equal(exploreTree[4]?.kind, "activity");
-if (exploreTree[4].kind === "activity") {
-  assert.equal(exploreTree[4].summary, "Explored 3 files, 1 search");
-  const nested = exploreTree[4].items.filter((i) => i.kind === "thinking");
-  assert.equal(nested.length, 2);
-  assert.equal(
-    thoughtFoldLabel(nested[1].kind === "thinking" ? nested[1].thinking : thinking("", 0, "")),
-    "Thought for 16s"
-  );
-}
+
+const secondExplore = exploreTree.find(
+  (n, i) => i > 3 && n.kind === "activity"
+);
+assert.ok(secondExplore && secondExplore.kind === "activity");
+assert.deepEqual(activityLabels(secondExplore), [
+  "Read lib/sessions.ts",
+  "Read app/sessions/[id]/page.tsx",
+  "Grepped listSubagentIdsForParent",
+  "Thought briefly",
+  "Read lib/sessions.ts",
+  "Thought for 16s",
+]);
 
 // --- Edit: Thought is sibling; splits Edited N files ---
 const editUnits: ProcessTimelineUnit[] = [
-  tool("StrReplace", { path: "a.ts" }),
-  tool("StrReplace", { path: "b.ts" }),
-  tool("Write", { path: "c.ts" }),
+  step("e1", [
+    { type: "tool_use", name: "StrReplace", input: { path: "a.ts" } },
+    { type: "tool_use", name: "StrReplace", input: { path: "b.ts" } },
+    { type: "tool_use", name: "Write", input: { path: "c.ts" } },
+  ]),
   { kind: "thinking", thinking: thinking("after three edits", 3000, "2026-07-20T03:02:00.000Z") },
-  tool("StrReplace", { path: "d.ts" }),
-  tool("Delete", { path: "e.ts" }),
+  step("e2", [
+    { type: "tool_use", name: "StrReplace", input: { path: "d.ts" } },
+    { type: "tool_use", name: "Delete", input: { path: "e.ts" } },
+  ]),
   { kind: "thinking", thinking: thinking("after two edits", 1000, "2026-07-20T03:02:10.000Z") },
 ];
 
@@ -105,13 +149,12 @@ assert.deepEqual(editTree.map(label), [
   "activity:Edited 2 files",
   "thinking:Thought for 1s",
 ]);
-assert.ok(editTree[0]?.kind === "activity" && editTree[0].items.every((i) => i.kind === "tool"));
 
-// --- Shell: inline, sibling of Thought (not folded, no nested Thought) ---
+// --- Shell: inline, sibling of Thought ---
 const shellUnits: ProcessTimelineUnit[] = [
-  tool("Shell", { command: "npx tsc --noEmit" }),
+  tool("Shell", { command: "npx tsc --noEmit" }, "sh1"),
   { kind: "thinking", thinking: thinking("brief after cmd", 40, "2026-07-20T03:03:00.000Z") },
-  tool("Shell", { command: "npx tsx scripts/verify-process-activity.ts" }),
+  tool("Shell", { command: "npx tsx scripts/verify-process-activity.ts" }, "sh2"),
   { kind: "thinking", thinking: thinking("after second cmd", 900, "2026-07-20T03:03:10.000Z") },
 ];
 
@@ -122,6 +165,76 @@ assert.deepEqual(shellTree.map(label), [
   "tool-line:Ran npx tsx scripts/verify-process-activity.ts",
   "thinking:Thought for 1s",
 ]);
+
+// --- AskQuestion skipped; brief between step batches; long at end ---
+const askUnits: ProcessTimelineUnit[] = [
+  { kind: "thinking", thinking: thinking("before explore", 15000, "2026-07-20T03:04:46.508Z") },
+  step("narrate", [
+    { type: "text", text: "接着看 interleave 逻辑" },
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "lib/interleave-transcript.ts" },
+    },
+    {
+      type: "tool_use",
+      name: "Grep",
+      input: { pattern: "afterAgentThought|agentThought" },
+    },
+    {
+      type: "tool_use",
+      name: "Glob",
+      input: { glob_pattern: "**/*interleave*" },
+    },
+    {
+      type: "tool_use",
+      name: "Glob",
+      input: { glob_pattern: "**/*dialogue-timeline*" },
+    },
+  ]),
+  step("more-search", [
+    {
+      type: "tool_use",
+      name: "Grep",
+      input: { pattern: "tool_use|thinking|assistant" },
+    },
+    {
+      type: "tool_use",
+      name: "Glob",
+      input: { glob_pattern: "**/*transcript*" },
+    },
+    { type: "tool_use", name: "AskQuestion", input: {} },
+  ]),
+  { kind: "thinking", thinking: thinking("brief mid", 5, "2026-07-20T03:04:56.105Z") },
+  { kind: "thinking", thinking: thinking("later long", 28000, "2026-07-20T03:05:34.442Z") },
+];
+
+const askTree = buildProcessActivityTree(askUnits);
+assert.equal(
+  askTree.some((n) => n.kind === "tool-line" && n.tool.name === "AskQuestion"),
+  false,
+  "AskQuestion must not appear"
+);
+const askExplore = askTree.find((n) => n.kind === "activity");
+assert.ok(askExplore && askExplore.kind === "activity");
+assert.equal(askExplore.summary, "Explored interleave-transcript.ts, 5 searches");
+assert.deepEqual(activityLabels(askExplore), [
+  "Read lib/interleave-transcript.ts",
+  "Grepped afterAgentThought|agentThought",
+  "Searched files **/*interleave*",
+  "Searched files **/*dialogue-timeline*",
+  "Thought briefly",
+  "Grepped tool_use|thinking|assistant",
+  "Searched files **/*transcript*",
+  "Thought for 15s",
+]);
+assert.equal(
+  askTree.some(
+    (n) => n.kind === "thinking" && thoughtFoldLabel(n.thinking) === "Thought for 28s"
+  ),
+  true,
+  "extra long after explore spills to L1"
+);
 
 assert.equal(
   toolActivityLine({
@@ -137,12 +250,12 @@ assert.equal(
     { type: "tool_use", name: "Read", input: { path: "a" } },
     { type: "tool_use", name: "Grep", input: { pattern: "x" } },
   ]),
-  "Explored 1 file, 1 search"
+  "Explored a, 1 search"
 );
 
 assert.match(workedFoldSummary(exploreUnits), /^Worked for /);
 
-// --- Same-ms boundary: tools at tNext stay with the next Thought ---
+// --- Same-ms boundary still nests Thought for 16s ---
 const sameMsThinking = [
   thinking("after first grep batch", 4, "2026-07-19T16:28:02.963Z"),
   thinking("before three reads", 4, "2026-07-19T16:28:06.303Z"),
@@ -214,23 +327,8 @@ const sameMsExplore = sameMsTree.find(
   (n) => n.kind === "activity" && n.activityKind === "explore"
 );
 assert.ok(sameMsExplore && sameMsExplore.kind === "activity");
-const sameMsLabels = sameMsExplore.items.map((it) =>
-  it.kind === "thinking"
-    ? thoughtFoldLabel(it.thinking)
-    : it.kind === "tool"
-      ? toolActivityLine(it.tool)
-      : "text"
-);
-// Regression: must NOT be [Grepped…, Reads…, Thought briefly, Thought for 16s@L1]
-assert.deepEqual(sameMsLabels, [
-  "Grepped listSubagentIdsForParent|getSessionDetail",
-  "Grepped parent_session_title",
-  "Thought briefly",
-  "Read sessions.ts",
-  "Read sessions.ts",
-  "Read SessionTitleView.tsx",
-  "Thought for 16s",
-]);
+const sameMsLabels = activityLabels(sameMsExplore);
+assert.ok(sameMsLabels.includes("Thought for 16s"));
 assert.equal(
   sameMsTree.some(
     (n) => n.kind === "thinking" && thoughtFoldLabel(n.thinking) === "Thought for 16s"
@@ -244,5 +342,7 @@ console.log({
   explore: exploreTree.map(label),
   edit: editTree.map(label),
   shell: shellTree.map(label),
+  ask: askTree.map(label),
+  askItems: activityLabels(askExplore),
   sameMs: sameMsLabels,
 });

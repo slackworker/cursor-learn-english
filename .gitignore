@@ -1,6 +1,9 @@
 node_modules
 .next
 
+# TypeScript incremental build cache（本地生成，勿提交）
+*.tsbuildinfo
+
 # Next.js 自动生成（dev/build 会改写，勿提交）
 next-env.d.ts
 

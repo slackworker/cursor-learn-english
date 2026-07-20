@@ -24,9 +24,21 @@ export const BRIEF_THINKING_MS = 100;
 export type ActivityToolKind = "explore" | "edit" | "shell" | "other";
 
 export type ProcessActivityItem =
-  | { kind: "tool"; tool: TranscriptToolUseItem }
+  | { kind: "tool"; tool: TranscriptToolUseItem; stepKey?: string }
   | { kind: "thinking"; thinking: TimelineThinking }
   | { kind: "text"; text: string };
+
+/** UI-chrome tools Cursor does not put in Explored / Ran folds. */
+const SKIP_PROCESS_TOOLS = new Set([
+  "AskQuestion",
+  "TodoWrite",
+  "SwitchMode",
+  "GenerateImage",
+]);
+
+export function isSkippedProcessTool(name: string): boolean {
+  return SKIP_PROCESS_TOOLS.has(name);
+}
 
 export type ProcessActivityNode =
   | { kind: "thinking"; thinking: TimelineThinking }
@@ -103,6 +115,16 @@ export function summarizeActivity(
 ): string {
   if (kind === "explore") {
     const { files, searches } = countExploreParts(tools);
+    if (files === 1 && searches > 0) {
+      const read = tools.find((t) => t.name === "Read");
+      const path = typeof read?.input.path === "string" ? read.input.path : "";
+      const base = path.split(/[/\\]/).pop();
+      if (base) {
+        const searchLabel =
+          searches === 1 ? "1 search" : `${searches} searches`;
+        return `Explored ${base}, ${searchLabel}`;
+      }
+    }
     const parts: string[] = [];
     if (files > 0) {
       parts.push(files === 1 ? "1 file" : `${files} files`);
@@ -234,11 +256,71 @@ export function workedFoldSummary(
   return parts.join(" · ");
 }
 
-function lastActivityItemKind(
-  items: ProcessActivityItem[]
-): ProcessActivityItem["kind"] | null {
-  if (items.length === 0) return null;
-  return items[items.length - 1].kind;
+/**
+ * Cursor explore folds: tool batches by transcript step, brief thoughts between
+ * batches, long thoughts (including deferred phase-leading ones) at the end.
+ * Extra nested longs after the first trailing long are returned for L1.
+ */
+function finalizeExploreItems(
+  items: ProcessActivityItem[],
+  deferredLong: TimelineThinking[]
+): { items: ProcessActivityItem[]; spillThinking: TimelineThinking[] } {
+  const toolItems: Extract<ProcessActivityItem, { kind: "tool" }>[] = [];
+  const briefThoughts: TimelineThinking[] = [];
+  const nestedLongs: TimelineThinking[] = [];
+
+  for (const item of items) {
+    if (item.kind === "tool") toolItems.push(item);
+    else if (item.kind === "thinking") {
+      if (isBriefThinking(item.thinking)) briefThoughts.push(item.thinking);
+      else nestedLongs.push(item.thinking);
+    }
+  }
+
+  const groups: Extract<ProcessActivityItem, { kind: "tool" }>[][] = [];
+  for (const tool of toolItems) {
+    const prev = groups[groups.length - 1];
+    const prevKey = prev?.[0]?.stepKey;
+    if (
+      prev &&
+      ((tool.stepKey != null && prevKey === tool.stepKey) ||
+        (tool.stepKey == null && prevKey == null))
+    ) {
+      prev.push(tool);
+    } else {
+      groups.push([tool]);
+    }
+  }
+
+  const out: ProcessActivityItem[] = [];
+  let briefIdx = 0;
+  for (let gi = 0; gi < groups.length; gi += 1) {
+    out.push(...groups[gi]);
+    const isLast = gi === groups.length - 1;
+    if (!isLast && briefIdx < briefThoughts.length) {
+      out.push({ kind: "thinking", thinking: briefThoughts[briefIdx] });
+      briefIdx += 1;
+    }
+  }
+  while (briefIdx < briefThoughts.length) {
+    out.push({ kind: "thinking", thinking: briefThoughts[briefIdx] });
+    briefIdx += 1;
+  }
+
+  // Prefer phase-leading deferred long as the single trailing Thought in the fold.
+  const trailingLong = deferredLong[0] ?? nestedLongs[0];
+  const spillThinking: TimelineThinking[] = [];
+  if (trailingLong) {
+    out.push({ kind: "thinking", thinking: trailingLong });
+  }
+  for (const t of deferredLong) {
+    if (t !== trailingLong) spillThinking.push(t);
+  }
+  for (const t of nestedLongs) {
+    if (t !== trailingLong) spillThinking.push(t);
+  }
+
+  return { items: out, spillThinking };
 }
 
 /**
@@ -247,63 +329,154 @@ function lastActivityItemKind(
 export function buildProcessActivityTree(
   units: ProcessTimelineUnit[]
 ): ProcessActivityNode[] {
-  const nodes: ProcessActivityNode[] = [];
-  let open: {
+  type OpenActivity = {
     activityKind: ActivityToolKind;
     items: ProcessActivityItem[];
-  } | null = null;
+    /** Phase-leading longs held until an explore fold can take them. */
+    deferredLong: TimelineThinking[];
+  };
+
+  const nodes: ProcessActivityNode[] = [];
+  // Use a box so closures (flush) do not poison control-flow narrowing of `open`.
+  const state: { open: OpenActivity | null } = { open: null };
+  /** Thinking before the next explore fold (not yet L1). */
+  let pendingLong: TimelineThinking[] = [];
+
+  const emitThinkingL1 = (thinking: TimelineThinking) => {
+    nodes.push({ kind: "thinking", thinking });
+  };
+
+  const flushPendingLongAsL1 = () => {
+    for (const t of pendingLong) emitThinkingL1(t);
+    pendingLong = [];
+  };
 
   const flush = () => {
+    const open = state.open;
     if (!open || open.items.length === 0) {
-      open = null;
+      if (open?.deferredLong.length) {
+        for (const t of open.deferredLong) emitThinkingL1(t);
+      }
+      state.open = null;
       return;
     }
-    const tools = open.items
-      .filter(
-        (item): item is Extract<ProcessActivityItem, { kind: "tool" }> =>
-          item.kind === "tool"
-      )
-      .map((item) => item.tool);
-    nodes.push({
-      kind: "activity",
-      activityKind: open.activityKind,
-      summary: summarizeActivity(open.activityKind, tools),
-      items: open.items,
-    });
-    open = null;
+
+    if (open.activityKind === "explore") {
+      const { items, spillThinking } = finalizeExploreItems(
+        open.items,
+        open.deferredLong
+      );
+      const tools = items
+        .filter(
+          (item): item is Extract<ProcessActivityItem, { kind: "tool" }> =>
+            item.kind === "tool"
+        )
+        .map((item) => item.tool);
+      nodes.push({
+        kind: "activity",
+        activityKind: "explore",
+        summary: summarizeActivity("explore", tools),
+        items,
+      });
+      for (const t of spillThinking) emitThinkingL1(t);
+    } else {
+      const tools = open.items
+        .filter(
+          (item): item is Extract<ProcessActivityItem, { kind: "tool" }> =>
+            item.kind === "tool"
+        )
+        .map((item) => item.tool);
+      const onlyTools = open.items.filter((item) => item.kind === "tool");
+      for (const item of open.items) {
+        if (item.kind === "thinking") emitThinkingL1(item.thinking);
+      }
+      nodes.push({
+        kind: "activity",
+        activityKind: open.activityKind,
+        summary: summarizeActivity(open.activityKind, tools),
+        items: onlyTools,
+      });
+      for (const t of open.deferredLong) emitThinkingL1(t);
+    }
+    state.open = null;
   };
 
   const ensureActivity = (kind: ActivityToolKind) => {
-    if (open && open.activityKind !== kind) flush();
-    if (!open) open = { activityKind: kind, items: [] };
+    if (state.open && state.open.activityKind !== kind) flush();
+    if (!state.open) {
+      state.open = {
+        activityKind: kind,
+        items: [],
+        deferredLong: kind === "explore" ? pendingLong.splice(0) : [],
+      };
+      if (kind !== "explore") flushPendingLongAsL1();
+    } else if (
+      kind === "explore" &&
+      pendingLong.length > 0 &&
+      state.open.deferredLong.length === 0
+    ) {
+      state.open.deferredLong.push(...pendingLong.splice(0));
+    }
   };
 
-  /** Only explore folds nest Thought (Cursor: edit/shell stay siblings). */
-  const shouldNestThinking = (thinking: TimelineThinking): boolean => {
-    if (!open || open.activityKind !== "explore") return false;
-    if (!open.items.some((item) => item.kind === "tool")) return false;
-    const last = lastActivityItemKind(open.items);
-    // Mid-batch: nest after a tool (brief or long, e.g. Thought for 16s).
-    if (last === "tool") return true;
-    // After a nested thought: only keep chaining brief ones.
-    if (last === "thinking" && isBriefThinking(thinking)) return true;
+  const remainingHasExploreTool = (fromUnitIdx: number): boolean => {
+    for (let ui = fromUnitIdx; ui < units.length; ui += 1) {
+      const u = units[ui];
+      if (u.kind !== "step") continue;
+      for (const it of u.step.items) {
+        if (it.type !== "tool_use") continue;
+        if (isSkippedProcessTool(it.name)) continue;
+        const cls = classifyToolName(it.name);
+        if (cls === "explore") return true;
+        if (cls === "edit" || cls === "shell" || cls === "task") return false;
+      }
+    }
     return false;
   };
 
-  for (const unit of units) {
+  for (let ui = 0; ui < units.length; ui += 1) {
+    const unit = units[ui];
     if (unit.kind === "thinking") {
-      if (shouldNestThinking(unit.thinking)) {
-        open!.items.push({ kind: "thinking", thinking: unit.thinking });
+      const exploreOpen =
+        state.open && state.open.activityKind === "explore"
+          ? state.open
+          : null;
+      if (exploreOpen && exploreOpen.items.some((item) => item.kind === "tool")) {
+        if (isBriefThinking(unit.thinking)) {
+          exploreOpen.items.push({ kind: "thinking", thinking: unit.thinking });
+        } else if (remainingHasExploreTool(ui + 1)) {
+          flush();
+          pendingLong.push(unit.thinking);
+        } else {
+          exploreOpen.deferredLong.push(unit.thinking);
+          flush();
+        }
         continue;
       }
-      flush();
-      nodes.push({ kind: "thinking", thinking: unit.thinking });
+      if (state.open) flush();
+      if (isBriefThinking(unit.thinking)) {
+        flushPendingLongAsL1();
+        emitThinkingL1(unit.thinking);
+      } else {
+        pendingLong.push(unit.thinking);
+      }
       continue;
     }
 
-    for (const item of unit.step.items) {
+    const stepItems = unit.step.items;
+    for (let ii = 0; ii < stepItems.length; ii += 1) {
+      const item = stepItems[ii];
       if (item.type === "text") {
         flush();
+        const restHasExplore = stepItems
+          .slice(ii + 1)
+          .some(
+            (rest) =>
+              rest.type === "tool_use" &&
+              !isSkippedProcessTool(rest.name) &&
+              classifyToolName(rest.name) === "explore"
+          );
+        if (!restHasExplore) flushPendingLongAsL1();
         nodes.push({
           kind: "text",
           text: item.text,
@@ -312,24 +485,34 @@ export function buildProcessActivityTree(
         continue;
       }
 
+      if (isSkippedProcessTool(item.name)) {
+        continue;
+      }
+
       const cls = classifyToolName(item.name);
       if (cls === "task") {
         flush();
+        flushPendingLongAsL1();
         nodes.push({ kind: "task", tool: item });
         continue;
       }
-      // Shell / other: Cursor shows these inline next to Thought, not folded.
       if (cls === "shell" || cls === "other") {
         flush();
+        flushPendingLongAsL1();
         nodes.push({ kind: "tool-line", tool: item });
         continue;
       }
 
       ensureActivity(cls);
-      open!.items.push({ kind: "tool", tool: item });
+      state.open!.items.push({
+        kind: "tool",
+        tool: item,
+        stepKey: unit.stepKey,
+      });
     }
   }
 
   flush();
+  flushPendingLongAsL1();
   return nodes;
 }
