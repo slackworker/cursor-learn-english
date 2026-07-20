@@ -15,6 +15,7 @@ import {
 import {
   buildInterleavedTranscriptPhases,
   flattenPhasesToUnits,
+  assignStepTimestamps,
   type ProcessTimelineUnit,
 } from "../lib/interleave-transcript";
 import type { TimelineThinking } from "../lib/dialogue-timeline";
@@ -218,18 +219,15 @@ assert.equal(
   "AskQuestion must not appear"
 );
 assert.deepEqual(
-  askTree.slice(0, 3).map(label),
-  [
-    "thinking:Thought for 15s",
-    "text",
-    "activity:Explored interleave-transcript.ts, 5 searches",
-  ],
-  "phase-leading Thought stays L1 above narration before Explored"
+  askTree.slice(0, 2).map(label),
+  ["text", "activity:Explored interleave-transcript.ts, 5 searches"],
+  "Thought before text+explore same step nests inside Explored, not L1 above narration"
 );
 const askExplore = askTree.find((n) => n.kind === "activity");
 assert.ok(askExplore && askExplore.kind === "activity");
 assert.equal(askExplore.summary, "Explored interleave-transcript.ts, 5 searches");
 assert.deepEqual(activityLabels(askExplore), [
+  "Thought for 15s",
   "Read lib/interleave-transcript.ts",
   "Grepped afterAgentThought|agentThought",
   "Searched files **/*interleave*",
@@ -243,8 +241,8 @@ assert.equal(
   askTree.some(
     (n) => n.kind === "thinking" && thoughtFoldLabel(n.thinking) === "Thought for 15s"
   ),
-  true,
-  "phase-leading Thought is L1, not nested under Explored"
+  false,
+  "phase-leading Thought with same-step explore tools nests under Explored"
 );
 
 assert.equal(
@@ -357,6 +355,99 @@ const sameMsExplore = sameMsTree.find(
 );
 assert.ok(sameMsExplore && sameMsExplore.kind === "activity");
 const sameMsLabels = activityLabels(sameMsExplore);
+
+// --- CallMcpTool hooks are MCP:${toolName}; without this, MCP steps lose
+// timestamps and all later Thoughts collapse into the previous Explored. ---
+const mcpHookSteps = [
+  {
+    items: [
+      {
+        type: "tool_use" as const,
+        name: "CallMcpTool",
+        input: {
+          server: "cursor-ide-browser",
+          toolName: "browser_tabs",
+          arguments: { action: "list" },
+        },
+      },
+    ],
+  },
+  {
+    items: [
+      {
+        type: "tool_use" as const,
+        name: "GetMcpTools",
+        input: { server: "cursor-ide-browser", toolName: "browser_navigate" },
+      },
+    ],
+  },
+  {
+    items: [
+      {
+        type: "tool_use" as const,
+        name: "CallMcpTool",
+        input: {
+          server: "cursor-ide-browser",
+          toolName: "browser_navigate",
+          arguments: { url: "http://localhost:3000/sessions" },
+        },
+      },
+    ],
+  },
+];
+const mcpHookTools = [
+  {
+    event_type: "postToolUse" as const,
+    timestamp: "2026-07-20T08:48:40.600Z",
+    tool_name: "MCP:browser_tabs",
+  },
+  {
+    event_type: "postToolUse" as const,
+    timestamp: "2026-07-20T08:48:53.260Z",
+    tool_name: "MCP:browser_navigate",
+  },
+];
+assert.deepEqual(
+  assignStepTimestamps(mcpHookSteps, mcpHookTools),
+  ["2026-07-20T08:48:40.600Z", undefined, "2026-07-20T08:48:53.260Z"],
+  "CallMcpTool matches MCP:* hooks; GetMcpTools has no hook of its own"
+);
+const mcpInterleaveThinking = [
+  thinking("after tabs", 3, "2026-07-20T08:48:47.000Z"),
+  thinking("before nav", 2, "2026-07-20T08:48:52.000Z"),
+];
+const mcpInterleaveUnits = flattenPhasesToUnits(
+  buildInterleavedTranscriptPhases(
+    mcpInterleaveThinking,
+    mcpHookSteps,
+    mcpHookTools
+  )
+);
+assert.deepEqual(
+  mcpInterleaveUnits.map((u) =>
+    u.kind === "thinking"
+      ? "thinking"
+      : u.step.items
+          .map((it) =>
+            it.type === "tool_use"
+              ? it.name === "CallMcpTool"
+                ? `CallMcp:${it.input.toolName}`
+                : it.name === "GetMcpTools"
+                  ? "GetMcp"
+                  : it.name
+              : "text"
+          )
+          .join("+")
+  ),
+  [
+    "CallMcp:browser_tabs",
+    "thinking",
+    "thinking",
+    "GetMcp",
+    "CallMcp:browser_navigate",
+  ],
+  "GetMcpTools back-fills from next CallMcp so it stays after intervening Thoughts"
+);
 assert.ok(sameMsLabels.includes("Thought for 16s"));
 assert.equal(
   sameMsTree.some(
@@ -535,6 +626,446 @@ assert.deepEqual(activityLabels(todoOnlyExplore), [
   "Thought briefly",
 ]);
 
+// --- Browser MCP nests inside Explored (Cursor: N browser actions) ---
+assert.equal(
+  toolActivityLine({
+    type: "tool_use",
+    name: "GetMcpTools",
+    input: { server: "cursor-ide-browser", toolName: "browser_tabs" },
+  }),
+  "Explored available tools"
+);
+assert.equal(
+  toolActivityLine({
+    type: "tool_use",
+    name: "CallMcpTool",
+    input: {
+      server: "cursor-ide-browser",
+      toolName: "browser_navigate",
+      arguments: { url: "http://localhost:3000/sessions/5ee232c4-8899-4f40-ab4d-0112746c0ad5" },
+    },
+  }),
+  "Navigated to http://localhost:3000/sessions/5ee232c4-8899-..."
+);
+assert.equal(
+  toolActivityLine({
+    type: "tool_use",
+    name: "CallMcpTool",
+    input: {
+      server: "cursor-ide-browser",
+      toolName: "browser_cdp",
+      arguments: { method: "Runtime.evaluate", params: {} },
+    },
+  }),
+  "CDP Runtime.evaluate"
+);
+assert.equal(
+  summarizeActivity("explore", [
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "components/process-fold.css" },
+    },
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "terminals/62.txt" },
+    },
+    {
+      type: "tool_use",
+      name: "GetMcpTools",
+      input: { server: "cursor-ide-browser", toolName: "browser_tabs" },
+    },
+    {
+      type: "tool_use",
+      name: "CallMcpTool",
+      input: {
+        server: "cursor-ide-browser",
+        toolName: "browser_tabs",
+        arguments: { action: "list" },
+      },
+    },
+    {
+      type: "tool_use",
+      name: "Grep",
+      input: { pattern: "dev:host|localhost|port" },
+    },
+  ]),
+  "Explored 2 files, 2 searches, 1 browser action"
+);
+
+const browserMcpUnits: ProcessTimelineUnit[] = [
+  step("narr1", [
+    { type: "text", text: "我误删了 chevron 样式，马上补回去。" },
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "components/process-fold.css" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief after css", 3, "2026-07-20T10:00:01.000Z"),
+  },
+  step("explore1", [
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "terminals/62.txt" },
+    },
+    {
+      type: "tool_use",
+      name: "GetMcpTools",
+      input: { server: "cursor-ide-browser", toolName: "browser_tabs" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief before tabs", 2, "2026-07-20T10:00:02.000Z"),
+  },
+  step("tabs", [
+    {
+      type: "tool_use",
+      name: "CallMcpTool",
+      input: {
+        server: "cursor-ide-browser",
+        toolName: "browser_tabs",
+        arguments: { action: "list" },
+      },
+    },
+    {
+      type: "tool_use",
+      name: "Grep",
+      input: { pattern: "dev:host|localhost|port" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief before shell", 2, "2026-07-20T10:00:03.000Z"),
+  },
+  step("shell", [
+    {
+      type: "tool_use",
+      name: "Shell",
+      input: { command: "head -n 30 terminals/62.txt" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief after shell", 2, "2026-07-20T10:00:04.000Z"),
+  },
+  step("nav", [
+    {
+      type: "tool_use",
+      name: "GetMcpTools",
+      input: { server: "cursor-ide-browser", toolName: "browser_navigate" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief", 1, "2026-07-20T10:00:05.000Z"),
+  },
+  step("nav2", [
+    {
+      type: "tool_use",
+      name: "CallMcpTool",
+      input: {
+        server: "cursor-ide-browser",
+        toolName: "browser_navigate",
+        arguments: { url: "http://localhost:3000/sessions" },
+      },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief", 1, "2026-07-20T10:00:06.000Z"),
+  },
+  step("cdp-schema", [
+    {
+      type: "tool_use",
+      name: "GetMcpTools",
+      input: { server: "cursor-ide-browser", toolName: "browser_cdp" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief", 1, "2026-07-20T10:00:07.000Z"),
+  },
+  step("cdp1", [
+    {
+      type: "tool_use",
+      name: "CallMcpTool",
+      input: {
+        server: "cursor-ide-browser",
+        toolName: "browser_cdp",
+        arguments: { method: "Runtime.evaluate", params: {} },
+      },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief", 1, "2026-07-20T10:00:08.000Z"),
+  },
+  step("nav3", [
+    {
+      type: "tool_use",
+      name: "CallMcpTool",
+      input: {
+        server: "cursor-ide-browser",
+        toolName: "browser_navigate",
+        arguments: {
+          url: "http://localhost:3000/sessions/5ee232c4-8899-4f40-ab4d-0112746c0ad5",
+        },
+      },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief", 1, "2026-07-20T10:00:09.000Z"),
+  },
+  step("cdp2", [
+    {
+      type: "tool_use",
+      name: "CallMcpTool",
+      input: {
+        server: "cursor-ide-browser",
+        toolName: "browser_cdp",
+        arguments: { method: "Runtime.evaluate", params: {} },
+      },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief", 1, "2026-07-20T10:00:10.000Z"),
+  },
+  step("cdp3", [
+    {
+      type: "tool_use",
+      name: "CallMcpTool",
+      input: {
+        server: "cursor-ide-browser",
+        toolName: "browser_cdp",
+        arguments: { method: "Runtime.evaluate", params: {} },
+      },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("measure animation", 13000, "2026-07-20T10:00:23.000Z"),
+  },
+  step("narr2", [
+    {
+      type: "text",
+      text: "测量显示延迟 content-visibility 会让高度无法过渡、直接跳变。",
+    },
+  ]),
+];
+
+const browserMcpTree = buildProcessActivityTree(browserMcpUnits);
+assert.deepEqual(
+  browserMcpTree.map(label),
+  [
+    "text",
+    "activity:Explored 2 files, 2 searches, 1 browser action",
+    "tool-line:Ran head -n 30 terminals/62.txt",
+    "activity:Explored 2 searches, 5 browser actions",
+    "text",
+  ],
+  "browser MCP + Grep collapse into Explored with browser action counts; Shell stays L1"
+);
+const browserFirst = browserMcpTree[1];
+assert.ok(browserFirst && browserFirst.kind === "activity");
+assert.deepEqual(activityLabels(browserFirst), [
+  "Read components/process-fold.css",
+  "Thought briefly",
+  "Read terminals/62.txt",
+  "Explored available tools",
+  "Thought briefly",
+  "Browser tabs",
+  "Grepped dev:host|localhost|port",
+  "Thought briefly",
+]);
+const browserSecond = browserMcpTree[3];
+assert.ok(browserSecond && browserSecond.kind === "activity");
+assert.deepEqual(activityLabels(browserSecond), [
+  "Thought briefly",
+  "Explored available tools",
+  "Thought briefly",
+  "Navigated to http://localhost:3000/sessions",
+  "Thought briefly",
+  "Explored available tools",
+  "Thought briefly",
+  "CDP Runtime.evaluate",
+  "Thought briefly",
+  "Navigated to http://localhost:3000/sessions/5ee232c4-8899-...",
+  "Thought briefly",
+  "CDP Runtime.evaluate",
+  "Thought briefly",
+  "CDP Runtime.evaluate",
+  "Thought for 13s",
+]);
+assert.equal(
+  browserMcpTree.some((n) => n.kind === "tool-line" && n.tool.name === "CallMcpTool"),
+  false,
+  "CallMcpTool must nest inside Explored, not appear as L1 tool-line"
+);
+assert.equal(
+  browserMcpTree.filter((n) => n.kind === "thinking").length,
+  0,
+  "Thoughts after Shell nest inside the next Explored, not L1"
+);
+
+// --- Thought + text+Read same step: phaseId decides L1 vs Explored ---
+const textToolThoughtUnits = flattenPhasesToUnits([
+  {
+    // Empty-phase Thought — must stay L1 above narration.
+    thinking: thinking(
+      "替换时误删了 chevron 的样式。",
+      2,
+      "2026-07-20T08:48:30.471Z"
+    ),
+    steps: [],
+  },
+  {
+    // Same phase as text+Read — nests inside Explored.
+    thinking: thinking("confirm chevron styles", 6399, "2026-07-20T08:48:38.508Z"),
+    steps: [
+      {
+        items: [
+          { type: "text", text: "我误删了 chevron 样式，马上补回去。" },
+          {
+            type: "tool_use",
+            name: "Read",
+            input: { path: "components/process-fold.css" },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    thinking: thinking("brief after read", 3, "2026-07-20T08:48:40.397Z"),
+    steps: [
+      {
+        items: [
+          { type: "tool_use", name: "Grep", input: { pattern: "chevron" } },
+        ],
+      },
+    ],
+  },
+]);
+const textToolThoughtTree = buildProcessActivityTree(textToolThoughtUnits);
+assert.deepEqual(
+  textToolThoughtTree.map(label),
+  [
+    "thinking:Thought briefly",
+    "text",
+    "activity:Explored process-fold.css, 1 search",
+  ],
+  "earlier Thought briefly stays above narration; paired Thought for 6s nests in Explored"
+);
+const textToolExplore = textToolThoughtTree[2];
+assert.ok(textToolExplore && textToolExplore.kind === "activity");
+assert.deepEqual(activityLabels(textToolExplore), [
+  "Thought for 6s",
+  "Read components/process-fold.css",
+  "Thought briefly",
+  "Grepped chevron",
+]);
+assert.equal(
+  textToolThoughtTree.some(
+    (n) => n.kind === "thinking" && thoughtFoldLabel(n.thinking) === "Thought briefly"
+  ),
+  true,
+  "leading Thought briefly remains L1 above「我误删了…」"
+);
+
+// Sole empty-phase Thought before text+explore must stay L1 (not nest).
+const soleEmptyPhaseUnits = flattenPhasesToUnits([
+  {
+    thinking: thinking("empty phase only", 2, "2026-07-20T08:00:00.000Z"),
+    steps: [],
+  },
+  {
+    steps: [
+      {
+        items: [
+          { type: "text", text: "旁白后立刻探索" },
+          {
+            type: "tool_use",
+            name: "Read",
+            input: { path: "lib/process-activity.ts" },
+          },
+        ],
+      },
+    ],
+  },
+]);
+const soleEmptyPhaseTree = buildProcessActivityTree(soleEmptyPhaseUnits);
+assert.deepEqual(
+  soleEmptyPhaseTree.map(label),
+  [
+    "thinking:Thought briefly",
+    "text",
+    "activity:Explored 1 file",
+  ],
+  "sole empty-phase Thought stays L1 above text+explore (phase marker, not pop heuristic)"
+);
+assert.equal(
+  soleEmptyPhaseTree.some(
+    (n) =>
+      n.kind === "activity" &&
+      n.items.some(
+        (it) =>
+          it.kind === "thinking" &&
+          thoughtFoldLabel(it.thinking) === "Thought briefly"
+      )
+  ),
+  false,
+  "empty-phase Thought must not be pulled into Explored"
+);
+
+// Two Thoughts in the same phase as text+explore both nest (not only last).
+const twoPairedPhaseUnits: ProcessTimelineUnit[] = [
+  {
+    kind: "thinking",
+    phaseId: 0,
+    thinking: thinking("first paired", 1000, "2026-07-20T08:01:00.000Z"),
+  },
+  {
+    kind: "thinking",
+    phaseId: 0,
+    thinking: thinking("second paired", 2000, "2026-07-20T08:01:02.000Z"),
+  },
+  {
+    kind: "step",
+    phaseId: 0,
+    stepKey: "same-phase",
+    step: {
+      items: [
+        { type: "text", text: "同 phase 双 Thought" },
+        {
+          type: "tool_use",
+          name: "Grep",
+          input: { pattern: "phaseId" },
+        },
+      ],
+    },
+  },
+];
+const twoPairedPhaseTree = buildProcessActivityTree(twoPairedPhaseUnits);
+assert.deepEqual(
+  twoPairedPhaseTree.map(label),
+  ["text", "activity:Explored 1 search"],
+  "all same-phase Thoughts nest; none remain L1"
+);
+const twoPairedExplore = twoPairedPhaseTree[1];
+assert.ok(twoPairedExplore && twoPairedExplore.kind === "activity");
+assert.deepEqual(activityLabels(twoPairedExplore), [
+  "Thought for 1s",
+  "Thought for 2s",
+  "Grepped phaseId",
+]);
+
 console.log("verify-process-activity: ok");
 console.log({
   explore: exploreTree.map(label),
@@ -546,4 +1077,8 @@ console.log({
   sandwich: sandwichTree.map(label),
   todoOnly: todoOnlyTree.map(label),
   todoOnlyItems: activityLabels(todoOnlyExplore),
+  browserMcp: browserMcpTree.map(label),
+  textToolThought: textToolThoughtTree.map(label),
+  soleEmptyPhase: soleEmptyPhaseTree.map(label),
+  twoPairedPhase: twoPairedPhaseTree.map(label),
 });

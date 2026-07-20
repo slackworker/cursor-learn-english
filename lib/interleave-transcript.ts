@@ -1,6 +1,9 @@
 import type { TimelineThinking, TimelineTool } from "./dialogue-timeline";
 import { findProcessFinalSplitIndex } from "./process-fold";
-import type { TranscriptAssistantStep } from "./transcript-content";
+import type {
+  TranscriptAssistantStep,
+  TranscriptToolUseItem,
+} from "./transcript-content";
 
 /** One thinking block plus transcript steps that follow it in Cursor order. */
 export type InterleavedTranscriptPhase = {
@@ -10,8 +13,19 @@ export type InterleavedTranscriptPhase = {
 
 /** Flat timeline unit used to mirror Cursor’s process fold vs final reply. */
 export type ProcessTimelineUnit =
-  | { kind: "thinking"; thinking: TimelineThinking }
-  | { kind: "step"; step: TranscriptAssistantStep; stepKey: string };
+  | {
+      kind: "thinking";
+      thinking: TimelineThinking;
+      /** Interleave phase index — same id as following steps in that phase. */
+      phaseId?: number;
+    }
+  | {
+      kind: "step";
+      step: TranscriptAssistantStep;
+      stepKey: string;
+      /** Interleave phase index — shared with that phase’s Thought when present. */
+      phaseId?: number;
+    };
 
 function stepHasToolUse(step: TranscriptAssistantStep): boolean {
   return step.items.some((item) => item.type === "tool_use");
@@ -88,13 +102,18 @@ export function flattenPhasesToUnits(
   const units: ProcessTimelineUnit[] = [];
   phases.forEach((phase, phaseIdx) => {
     if (phase.thinking) {
-      units.push({ kind: "thinking", thinking: phase.thinking });
+      units.push({
+        kind: "thinking",
+        thinking: phase.thinking,
+        phaseId: phaseIdx,
+      });
     }
     phase.steps.forEach((step, stepIdx) => {
       units.push({
         kind: "step",
         step,
         stepKey: `phase-${phaseIdx}-step-${stepIdx}`,
+        phaseId: phaseIdx,
       });
     });
   });
@@ -108,12 +127,37 @@ const TOOLS_WITHOUT_HOOK = new Set([
   "SwitchMode",
   "AskQuestion",
   "GenerateImage",
+  // Schema discovery — no postToolUse; CallMcpTool carries the MCP:* hook.
+  "GetMcpTools",
 ]);
 
 /** Hooks often log Write while transcript says StrReplace. */
 function hookToolName(name: string): string {
   if (name === "StrReplace" || name === "Delete") return "Write";
   return name;
+}
+
+/**
+ * Hook event names to match for a transcript tool_use item.
+ * CallMcpTool → `MCP:${toolName}` (hooks log MCP:browser_tabs, etc.).
+ */
+function transcriptToolHookKeys(item: TranscriptToolUseItem): string[] {
+  if (TOOLS_WITHOUT_HOOK.has(item.name)) return [];
+  if (item.name === "CallMcpTool") {
+    const toolName =
+      typeof item.input.toolName === "string" ? item.input.toolName.trim() : "";
+    return toolName ? [`MCP:${toolName}`] : [];
+  }
+  return [hookToolName(item.name)];
+}
+
+function stepHookKeys(step: TranscriptAssistantStep): string[] {
+  const keys: string[] = [];
+  for (const item of step.items) {
+    if (item.type !== "tool_use") continue;
+    keys.push(...transcriptToolHookKeys(item));
+  }
+  return keys;
 }
 
 function stepToolNames(step: TranscriptAssistantStep): string[] {
@@ -137,11 +181,10 @@ export function assignStepTimestamps(
 
   return steps.map((step) => {
     let ts: string | undefined;
-    for (const name of stepToolNames(step)) {
-      if (TOOLS_WITHOUT_HOOK.has(name)) continue;
+    for (const key of stepHookKeys(step)) {
       for (let j = ei; j < sorted.length; j += 1) {
         const evName = hookToolName(sorted[j].tool_name || "");
-        if (evName !== name) continue;
+        if (evName !== key) continue;
         ts = ts ?? sorted[j].timestamp;
         ei = j + 1;
         break;
@@ -179,6 +222,21 @@ function fillStepTimestamps(
   hookAnchored: (string | undefined)[]
 ): (string | undefined)[] {
   const filled = [...stepTs];
+
+  // Back-fill gaps from the next anchored tool (GetMcpTools-only steps, etc.).
+  // Prefer next over previous so schema-discovery lands with its CallMcpTool,
+  // not with the preceding Shell (which would pull Thoughts into the wrong fold).
+  let nextToolTs: string | undefined;
+  for (let i = filled.length - 1; i >= 0; i -= 1) {
+    if (filled[i]) {
+      nextToolTs = filled[i];
+      continue;
+    }
+    if (!nextToolTs) continue;
+    if (stepToolNames(steps[i]).length === 0) continue;
+    filled[i] = nextToolTs;
+  }
+
   // Forward-fill only non-text-only gaps after the last tool anchor.
   let lastToolIdx = -1;
   for (let i = filled.length - 1; i >= 0; i -= 1) {

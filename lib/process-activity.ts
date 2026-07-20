@@ -7,6 +7,7 @@
  *     Explored N files …        (L1) — one fold until next narration/edit/shell
  *       Checked to-do list /
  *       Grepped … / Thought …   (L2, chronological)
+ *       Explored available tools / Browser tabs / CDP …  (MCP → explore)
  *     interim narration text    (L1)
  *     Edited 3 files            (L1) — Thought splits edit batches
  *     Thought for …             (L1, sibling of Edited)
@@ -16,13 +17,23 @@
  * Mid-explore Thoughts (brief or long) stay inside the open Explored fold;
  * do not split Explored on long Thought when more explore tools follow.
  * Edit / shell / other never nest Thought; shell is always an inline L1 line.
- * Phase-leading Thought before L1 narration is always L1 (never deferred into
- * the following Explored fold).
+ * Phase-leading Thought before a text-only narration is L1. When narration
+ * shares a step with explore tools (text → Read/Grep/…), Thoughts whose
+ * `phaseId` matches that step nest inside Explored; other pending Thoughts
+ * (earlier empty phases) stay L1 above the sentence. Phase ids come from
+ * `flattenPhasesToUnits` — not from flat-order heuristics like `pop()`.
+ * After Shell/edit, leading Thoughts nest inside the next Explored fold.
+ *
+ * MCP: GetMcpTools + CallMcpTool nest inside Explored (not L1 tool-lines).
+ * GetMcpTools counts as a search; browser_* CallMcpTool as browser actions.
  */
 
 import type { TimelineThinking, TimelineTool } from "./dialogue-timeline";
 import type { ProcessTimelineUnit } from "./interleave-transcript";
-import type { TranscriptToolUseItem } from "./transcript-content";
+import type {
+  TranscriptContentItem,
+  TranscriptToolUseItem,
+} from "./transcript-content";
 
 export const BRIEF_THINKING_MS = 100;
 
@@ -84,7 +95,9 @@ export function classifyToolName(
     name === "WebFetch" ||
     name === "Read" ||
     name === "ReadLints" ||
-    name === "FetchMcpResource"
+    name === "FetchMcpResource" ||
+    name === "GetMcpTools" ||
+    name === "CallMcpTool"
   ) {
     return "explore";
   }
@@ -100,14 +113,47 @@ export function classifyToolName(
   return "other";
 }
 
+function mcpToolName(input: Record<string, unknown>): string {
+  return typeof input.toolName === "string" ? input.toolName : "";
+}
+
+function mcpArguments(
+  input: Record<string, unknown>
+): Record<string, unknown> {
+  const args = input.arguments;
+  if (args && typeof args === "object" && !Array.isArray(args)) {
+    return args as Record<string, unknown>;
+  }
+  return {};
+}
+
+/** CallMcpTool against browser MCP (cursor-ide-browser / browser_*). */
+export function isBrowserMcpCall(tool: TranscriptToolUseItem): boolean {
+  if (tool.name !== "CallMcpTool") return false;
+  const name = mcpToolName(tool.input);
+  if (name.startsWith("browser_")) return true;
+  return tool.input.server === "cursor-ide-browser";
+}
+
 function countExploreParts(tools: TranscriptToolUseItem[]): {
   files: number;
   searches: number;
+  browserActions: number;
 } {
   let files = 0;
   let searches = 0;
+  let browserActions = 0;
   for (const tool of tools) {
     if (isExploreChromeTool(tool.name)) continue;
+    if (tool.name === "GetMcpTools") {
+      // Cursor: "Explored available tools" counts as a search.
+      searches += 1;
+      continue;
+    }
+    if (isBrowserMcpCall(tool)) {
+      browserActions += 1;
+      continue;
+    }
     if (
       tool.name === "Grep" ||
       tool.name === "Glob" ||
@@ -119,10 +165,19 @@ function countExploreParts(tools: TranscriptToolUseItem[]): {
     } else if (tool.name === "Read" || tool.name === "ReadLints") {
       files += 1;
     } else {
+      // Non-browser CallMcpTool / FetchMcpResource / etc.
       files += 1;
     }
   }
-  return { files, searches };
+  return { files, searches, browserActions };
+}
+
+function exploreCountLabel(
+  n: number,
+  one: string,
+  many: string
+): string {
+  return n === 1 ? `1 ${one}` : `${n} ${many}`;
 }
 
 export function summarizeActivity(
@@ -130,24 +185,29 @@ export function summarizeActivity(
   tools: TranscriptToolUseItem[]
 ): string {
   if (kind === "explore") {
-    const { files, searches } = countExploreParts(tools);
-    if (files === 1 && searches > 0) {
+    const { files, searches, browserActions } = countExploreParts(tools);
+    const tailParts: string[] = [];
+    if (searches > 0) {
+      tailParts.push(exploreCountLabel(searches, "search", "searches"));
+    }
+    if (browserActions > 0) {
+      tailParts.push(
+        exploreCountLabel(browserActions, "browser action", "browser actions")
+      );
+    }
+    if (files === 1 && tailParts.length > 0) {
       const read = tools.find((t) => t.name === "Read");
       const path = typeof read?.input.path === "string" ? read.input.path : "";
       const base = path.split(/[/\\]/).pop();
       if (base) {
-        const searchLabel =
-          searches === 1 ? "1 search" : `${searches} searches`;
-        return `Explored ${base}, ${searchLabel}`;
+        return `Explored ${base}, ${tailParts.join(", ")}`;
       }
     }
     const parts: string[] = [];
     if (files > 0) {
-      parts.push(files === 1 ? "1 file" : `${files} files`);
+      parts.push(exploreCountLabel(files, "file", "files"));
     }
-    if (searches > 0) {
-      parts.push(searches === 1 ? "1 search" : `${searches} searches`);
-    }
+    parts.push(...tailParts);
     if (parts.length === 0) {
       // TodoWrite-only (or other chrome) folds: Cursor shows bare "Explored".
       return "Explored";
@@ -165,8 +225,59 @@ export function summarizeActivity(
   return tools.length === 1 ? "Used 1 tool" : `Used ${tools.length} tools`;
 }
 
+function truncateDisplay(text: string, max = 48): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 3))}...`;
+}
+
+function humanizeBrowserToolName(toolName: string): string {
+  const rest = toolName.replace(/^browser_/, "").replace(/_/g, " ");
+  if (!rest) return "Browser";
+  return `Browser ${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+}
+
+/** Cursor-friendly line for CallMcpTool / GetMcpTools. */
+export function mcpActivityLine(tool: TranscriptToolUseItem): string | null {
+  if (tool.name === "GetMcpTools") return "Explored available tools";
+  if (tool.name !== "CallMcpTool") return null;
+
+  const toolName = mcpToolName(tool.input);
+  const args = mcpArguments(tool.input);
+
+  if (toolName === "browser_tabs") return "Browser tabs";
+  if (toolName === "browser_navigate") {
+    const url = typeof args.url === "string" ? args.url.trim() : "";
+    return url ? `Navigated to ${truncateDisplay(url)}` : "Navigated";
+  }
+  if (toolName === "browser_cdp") {
+    const method = typeof args.method === "string" ? args.method.trim() : "";
+    return method ? `CDP ${method}` : "CDP";
+  }
+  if (toolName === "browser_lock") {
+    return args.action === "unlock" ? "Browser unlock" : "Browser lock";
+  }
+  if (toolName === "browser_snapshot") return "Browser snapshot";
+  if (toolName === "browser_take_screenshot") return "Took screenshot";
+  if (toolName === "browser_click") return "Browser click";
+  if (toolName === "browser_type") return "Browser type";
+  if (toolName === "browser_fill") return "Browser fill";
+  if (toolName === "browser_scroll") return "Browser scroll";
+  if (toolName === "browser_press_key") return "Browser key";
+  if (toolName === "browser_select_option") return "Browser select";
+  if (toolName === "browser_drag") return "Browser drag";
+  if (toolName === "browser_highlight") return "Browser highlight";
+  if (toolName === "browser_get_bounding_box") return "Browser bounding box";
+  if (toolName === "browser_mouse_click_xy") return "Browser click";
+  if (toolName === "mcp_auth") return "MCP auth";
+  if (toolName.startsWith("browser_")) return humanizeBrowserToolName(toolName);
+  return toolName || "MCP tool";
+}
+
 /** Cursor-style tool line inside an activity fold. */
 export function toolActivityLine(tool: TranscriptToolUseItem): string {
+  const mcpLine = mcpActivityLine(tool);
+  if (mcpLine) return mcpLine;
+
   const input = tool.input;
   if (tool.name === "Grep" && typeof input.pattern === "string") {
     return `Grepped ${input.pattern}`;
@@ -346,6 +457,11 @@ function finalizeExploreItems(
 export function buildProcessActivityTree(
   units: ProcessTimelineUnit[]
 ): ProcessActivityNode[] {
+  type PendingThought = {
+    thinking: TimelineThinking;
+    phaseId: number | undefined;
+  };
+
   type OpenActivity = {
     activityKind: ActivityToolKind;
     items: ProcessActivityItem[];
@@ -357,7 +473,10 @@ export function buildProcessActivityTree(
   // Use a box so closures (flush) do not poison control-flow narrowing of `open`.
   const state: { open: OpenActivity | null } = { open: null };
   /** Thinking before the next explore fold (not yet L1). */
-  let pendingLong: TimelineThinking[] = [];
+  let pendingLong: PendingThought[] = [];
+  /** Last thinking’s phase — hand-built units without phaseId inherit this. */
+  let lastThinkingPhaseId: number | undefined;
+  let nextSyntheticPhaseId = 0;
   /** Running TodoWrite list — needed for "Completed N of N to-dos". */
   const todoState = new Map<string, TodoEntry>();
 
@@ -366,7 +485,7 @@ export function buildProcessActivityTree(
   };
 
   const flushPendingLongAsL1 = () => {
-    for (const t of pendingLong) emitThinkingL1(t);
+    for (const p of pendingLong) emitThinkingL1(p.thinking);
     pendingLong = [];
   };
 
@@ -439,15 +558,59 @@ export function buildProcessActivityTree(
   const ensureActivity = (kind: ActivityToolKind) => {
     if (state.open && state.open.activityKind !== kind) flush();
     if (!state.open) {
-      // Phase-leading Thought stays L1 above the new activity (Cursor:
-      // Thought → text → Explored, or Thought → Explored).
-      flushPendingLongAsL1();
-      state.open = {
-        activityKind: kind,
-        items: [],
-        deferredLong: [],
-      };
+      if (kind === "explore") {
+        // After Shell/edit, leading Thoughts nest inside the next Explored
+        // (Cursor: Shell → Thought briefly → Explored available tools → …).
+        state.open = {
+          activityKind: kind,
+          items: pendingLong.map((p) => ({
+            kind: "thinking" as const,
+            thinking: p.thinking,
+          })),
+          deferredLong: [],
+        };
+        pendingLong = [];
+      } else {
+        // Phase-leading Thought stays L1 above non-explore activities.
+        flushPendingLongAsL1();
+        state.open = {
+          activityKind: kind,
+          items: [],
+          deferredLong: [],
+        };
+      }
     }
+  };
+
+  const stepRestOpensExplore = (
+    items: TranscriptContentItem[],
+    fromIdx: number
+  ): boolean => {
+    for (let i = fromIdx; i < items.length; i += 1) {
+      const rest = items[i];
+      if (rest.type !== "tool_use") continue;
+      if (isSkippedProcessTool(rest.name)) continue;
+      if (isExploreChromeTool(rest.name)) return true;
+      if (classifyToolName(rest.name) === "explore") return true;
+    }
+    return false;
+  };
+
+  /** Keep Thoughts that share this step’s phase; flush the rest as L1. */
+  const keepPendingForStepPhase = (stepPhaseId: number | undefined) => {
+    if (stepPhaseId === undefined) {
+      // No phase marker and no prior thinking — nothing to pair.
+      flushPendingLongAsL1();
+      return;
+    }
+    const paired: PendingThought[] = [];
+    const earlier: PendingThought[] = [];
+    for (const p of pendingLong) {
+      if (p.phaseId === stepPhaseId) paired.push(p);
+      else earlier.push(p);
+    }
+    for (const p of earlier) emitThinkingL1(p.thinking);
+    pendingLong = paired;
   };
 
   for (let ui = 0; ui < units.length; ui += 1) {
@@ -457,30 +620,38 @@ export function buildProcessActivityTree(
         state.open && state.open.activityKind === "explore"
           ? state.open
           : null;
-      // Cursor: once Explored is open (Read/Grep or TodoWrite), Thoughts nest
-      // inside until the next L1 narration / edit / shell.
-      if (exploreOpen && exploreOpen.items.some((item) => item.kind === "tool")) {
+      // Cursor: once Explored is open, Thoughts nest inside until the next
+      // L1 narration / edit / shell — including leading Thoughts placed into a
+      // freshly opened fold (e.g. after Shell before the next GetMcpTools).
+      if (exploreOpen) {
         exploreOpen.items.push({ kind: "thinking", thinking: unit.thinking });
         continue;
       }
       if (state.open) flush();
-      if (isBriefThinking(unit.thinking)) {
-        flushPendingLongAsL1();
-        emitThinkingL1(unit.thinking);
-      } else {
-        pendingLong.push(unit.thinking);
-      }
+      const phaseId =
+        unit.phaseId !== undefined ? unit.phaseId : nextSyntheticPhaseId++;
+      lastThinkingPhaseId = phaseId;
+      // Hold until text / shell / task / next Explored (do not emit L1 yet).
+      pendingLong.push({ thinking: unit.thinking, phaseId });
       continue;
     }
 
+    const stepPhaseId =
+      unit.phaseId !== undefined ? unit.phaseId : lastThinkingPhaseId;
     const stepItems = unit.step.items;
     for (let ii = 0; ii < stepItems.length; ii += 1) {
       const item = stepItems[ii];
       if (item.type === "text") {
         flush();
-        // Phase-leading Thought stays L1 above narration, even when explore
-        // tools follow in the same step (Cursor: Thought → text → Explored).
-        flushPendingLongAsL1();
+        // Text-only narration: all pending Thoughts stay L1 above it.
+        // Same step as explore tools (text → Read/…): nest Thoughts that
+        // share this step’s interleave phaseId; earlier empty-phase Thoughts
+        // stay L1 above the sentence.
+        if (stepRestOpensExplore(stepItems, ii + 1)) {
+          keepPendingForStepPhase(stepPhaseId);
+        } else {
+          flushPendingLongAsL1();
+        }
         nodes.push({
           kind: "text",
           text: item.text,
