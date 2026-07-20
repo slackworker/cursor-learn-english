@@ -49,7 +49,7 @@ const TaskSubagentsContext = createContext<SessionSubagentLink[] | null>(null);
 
 /** Flat Cursor-like fold chrome — no nested card padding/indent. */
 const PROCESS_FOLD_CLASS =
-  "process-fold collapse !overflow-visible !rounded-none !border-0 !bg-transparent";
+  "process-fold collapse !rounded-none !border-0 !bg-transparent";
 const PROCESS_FOLD_TITLE_CLASS =
   "collapse-title process-fold-title !min-h-0 !w-fit !max-w-full !py-1.5 !px-0 !pe-0 text-xs font-medium";
 const PROCESS_FOLD_CONTENT_CLASS = "collapse-content !px-0 !pb-1.5 !pt-1";

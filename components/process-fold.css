@@ -1,12 +1,18 @@
 /* Cursor-like process folds: inline chevron after the label.
    Direct-child `>` is required so nested folds follow their OWN [open]
-   (Tailwind group-open matches any ancestor group and breaks nesting). */
+   (Tailwind group-open matches any ancestor group and breaks nesting).
+
+   Expand/collapse sequencing (avoids overlap with following rows):
+   - Open:  grow row height first → then fade content in
+   - Close: fade content out first → then shrink row height
+   Different transition delays on [open] vs closed enable this. */
 
 .process-fold.collapse {
   border-style: none;
   border-radius: 0;
   background-color: transparent;
-  overflow: visible;
+  /* Clip during height animation so content cannot paint over siblings. */
+  overflow: hidden;
 }
 
 .process-fold > .collapse-title,
@@ -42,6 +48,57 @@
 .process-fold.collapse-arrow > .collapse-title:after {
   content: none;
   display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /*
+   * Sequencing via asymmetric transition delays:
+   * - Open:  height grows immediately; opacity fades in after growth.
+   * - Close: opacity fades out immediately; height shrinks after fade.
+   * Do NOT delay content-visibility — that prevents height from measuring
+   * content and causes a snap instead of a slide.
+   */
+  .process-fold.collapse {
+    transition: grid-template-rows 0.22s ease 0.14s;
+  }
+
+  .process-fold.collapse::details-content {
+    overflow: clip;
+    interpolate-size: allow-keywords;
+    transition:
+      height 0.22s ease 0.14s,
+      content-visibility 0.22s allow-discrete,
+      visibility 0.22s allow-discrete;
+  }
+
+  .process-fold > .collapse-content {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+
+  .process-fold.collapse[open] {
+    transition: grid-template-rows 0.22s ease;
+  }
+
+  .process-fold.collapse[open]::details-content {
+    transition:
+      height 0.22s ease,
+      content-visibility 0.22s allow-discrete,
+      visibility 0.22s allow-discrete;
+  }
+
+  .process-fold[open] > .collapse-content {
+    opacity: 1;
+    transition: opacity 0.14s ease 0.2s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-fold > .collapse-content,
+  .process-fold[open] > .collapse-content {
+    opacity: 1;
+    transition: none;
+  }
 }
 
 .process-fold-chevron {
