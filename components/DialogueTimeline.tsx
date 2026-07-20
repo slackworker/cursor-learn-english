@@ -207,6 +207,23 @@ function ToolGroupBlock({
   );
 }
 
+function ResponseMeta({
+  timestamp,
+  model,
+}: {
+  timestamp?: string;
+  model?: string | null;
+}) {
+  const timeLabel = timestamp ? formatTimelineTime(timestamp) : "";
+  if (!timeLabel && !model) return null;
+  return (
+    <div className="mb-1 text-[11px] opacity-60">
+      {timeLabel}
+      {model ? `${timeLabel ? " · " : ""}${model}` : ""}
+    </div>
+  );
+}
+
 function ResponseBlock({
   block,
   blockKey,
@@ -214,15 +231,9 @@ function ResponseBlock({
   block: Extract<DialogueTimelineBlock, { kind: "response" }>;
   blockKey: string;
 }) {
-  const timeLabel = formatTimelineTime(block.timestamp);
   return (
     <div key={blockKey}>
-      {(timeLabel || block.data.model) && (
-        <div className="mb-1 text-[11px] opacity-60">
-          {timeLabel}
-          {block.data.model ? ` · ${block.data.model}` : ""}
-        </div>
-      )}
+      <ResponseMeta timestamp={block.timestamp} model={block.data.model} />
       <TextWithTts id={`${blockKey}-tts`} text={block.data.text} />
     </div>
   );
@@ -706,10 +717,11 @@ function renderProcessActivityNodes(
 }
 
 function renderProcessUnits(units: ProcessTimelineUnit[]): ReactNode[] {
-  return units.flatMap((unit) => {
+  const nodes: ReactNode[] = [];
+  for (const unit of units) {
     if (unit.kind === "thinking") {
       const blockKey = `process-think-${unit.thinking.timestamp}`;
-      return [
+      nodes.push(
         <ThinkingBlock
           key={blockKey}
           blockKey={blockKey}
@@ -718,11 +730,15 @@ function renderProcessUnits(units: ProcessTimelineUnit[]): ReactNode[] {
             timestamp: unit.thinking.timestamp,
             data: unit.thinking,
           }}
-        />,
-      ];
+        />
+      );
+      continue;
     }
-    return renderTranscriptRows(buildTranscriptStepRows(unit.step, unit.stepKey));
-  });
+    nodes.push(
+      ...renderTranscriptRows(buildTranscriptStepRows(unit.step, unit.stepKey))
+    );
+  }
+  return nodes;
 }
 
 /** Transcript steps interleaved with thinking via postToolUse / afterAgentThought timestamps. */
@@ -761,7 +777,9 @@ function TranscriptStepsTimeline({
   return (
     <div className="space-y-2">
       {processNodes}
-      {finalNodes}
+      {finalNodes.length > 0 ? (
+        <div className="space-y-2">{finalNodes}</div>
+      ) : null}
     </div>
   );
 }

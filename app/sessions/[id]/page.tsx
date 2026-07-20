@@ -125,6 +125,16 @@ type SessionDetail = {
       id: string;
       prompt: string;
       prompt_timestamp: string;
+      response?: {
+        text: string;
+        timestamp: string;
+        model?: string | null;
+      };
+      response_segments?: Array<{
+        text: string;
+        timestamp: string;
+        model?: string | null;
+      }>;
       thinking: Array<{
         text: string;
         timestamp: string;
@@ -146,6 +156,26 @@ type SessionDetail = {
 type SessionDetailResponse = {
   session?: SessionDetail;
 };
+
+function resolveTurnModelLabel(
+  turn: SessionDetail["transcript_turns"][number]
+): string | undefined {
+  const round = turn.round;
+  if (!round) return undefined;
+  const models: string[] = [];
+  const seen = new Set<string>();
+  const add = (m?: string | null) => {
+    if (!m || seen.has(m)) return;
+    seen.add(m);
+    models.push(m);
+  };
+  for (const seg of round.response_segments ?? []) add(seg.model);
+  add(round.response?.model);
+  if (models.length === 0) {
+    for (const t of round.thinking ?? []) add(t.model);
+  }
+  return models.length > 0 ? models.join(" · ") : undefined;
+}
 
 async function fetchSessionDetail(url: string): Promise<SessionDetail> {
   const data = await fetchJson<SessionDetailResponse>(url);
@@ -343,11 +373,19 @@ export default function SessionDetailPage() {
           <h2 className="section-title">对话流</h2>
           <Surface padding="none">
             <ul className="dialogue-list">
-              {sortedTurns.map((turn) => (
+              {sortedTurns.map((turn) => {
+                const timeLabel = formatLocalDateTime(
+                  turn.user_timestamp ?? turn.round?.prompt_timestamp
+                );
+                const modelLabel = resolveTurnModelLabel(turn);
+                return (
                 <li key={turn.id} className="dialogue-item">
-                  <div className="dialogue-item-meta">
-                    {formatLocalDateTime(turn.user_timestamp ?? turn.round?.prompt_timestamp)}
-                  </div>
+                  {(timeLabel || modelLabel) && (
+                    <div className="dialogue-item-meta">
+                      {timeLabel}
+                      {modelLabel ? ` · ${modelLabel}` : ""}
+                    </div>
+                  )}
                   <MessageBubble variant="user" label="用户提示词">
                     <UserPromptView
                       prompt={
@@ -375,7 +413,8 @@ export default function SessionDetailPage() {
                     </MessageBubble>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </Surface>
         </section>
