@@ -1171,6 +1171,106 @@ assert.deepEqual(activityLabels(twoPairedExplore), [
   "Grepped phaseId",
 ]);
 
+// --- Narration-phase Thought leaves prior Explored (Cursor d77973b4) ---
+// 「上下文因页面重载…」shares a phase with L1 narration + explore tools; it must
+// not stay inside the previous Explored, and mid-session briefs nest in the next.
+const narrationPhaseThoughtUnits = flattenPhasesToUnits([
+  {
+    thinking: thinking("准备重新测试", 3, "2026-07-20T08:49:59.613Z"),
+    steps: [
+      {
+        items: [
+          {
+            type: "tool_use",
+            name: "CallMcpTool",
+            input: {
+              server: "cursor-ide-browser",
+              toolName: "browser_cdp",
+              arguments: { method: "Runtime.evaluate" },
+            },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    thinking: thinking("高度卡住", 4000, "2026-07-20T08:50:08.552Z"),
+    steps: [],
+  },
+  {
+    thinking: thinking(
+      "上下文因页面重载被销毁，需等待并重新评估。",
+      1,
+      "2026-07-20T08:50:13.017Z"
+    ),
+    steps: [
+      {
+        items: [
+          {
+            type: "text",
+            text: "动画测量异常，先硬刷新并核对计算样式是否已生效。",
+          },
+          {
+            type: "tool_use",
+            name: "CallMcpTool",
+            input: {
+              server: "cursor-ide-browser",
+              toolName: "browser_cdp",
+              arguments: { method: "Runtime.evaluate" },
+            },
+          },
+          {
+            type: "tool_use",
+            name: "Grep",
+            input: { pattern: "process-fold" },
+          },
+        ],
+      },
+    ],
+  },
+]);
+const narrationPhaseTree = buildProcessActivityTree(narrationPhaseThoughtUnits);
+assert.deepEqual(
+  narrationPhaseTree.map(label),
+  [
+    "activity:Explored 1 browser action",
+    "text",
+    "activity:Explored 1 search, 1 browser action",
+  ],
+  "narration-phase Thought closes prior Explored; brief nests in the next"
+);
+const priorBrowse = narrationPhaseTree[0];
+assert.ok(priorBrowse && priorBrowse.kind === "activity");
+assert.deepEqual(activityLabels(priorBrowse), [
+  "Thought briefly",
+  "CDP Runtime.evaluate",
+  "Thought for 4s",
+]);
+assert.equal(
+  priorBrowse.items.some(
+    (it) =>
+      it.kind === "thinking" &&
+      (it.thinking.text || "").includes("页面重载")
+  ),
+  false,
+  "page-reload Thought must not remain in the previous Explored"
+);
+const nextExplore = narrationPhaseTree[2];
+assert.ok(nextExplore && nextExplore.kind === "activity");
+assert.deepEqual(activityLabels(nextExplore), [
+  "Thought briefly",
+  "CDP Runtime.evaluate",
+  "Grepped process-fold",
+]);
+assert.ok(
+  nextExplore.items.some(
+    (it) =>
+      it.kind === "thinking" &&
+      (it.thinking.text || "").includes("页面重载")
+  ),
+  "page-reload Thought nests inside the following Explored"
+);
+
 // --- Lone Grep under Worked is L1 (Cursor d77973b4: no "Explored 1 search") ---
 const loneGrepUnits: ProcessTimelineUnit[] = [
   step("narrate", [

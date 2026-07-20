@@ -22,10 +22,13 @@
  * (Cursor: "⚛ file.tsx +1 -1", not an "Edited N files" fold). Shell is L1.
  * Phase-leading Thought before a text-only narration is L1. When narration
  * shares a step with explore tools (text → Read/Grep/…):
- *   - brief Thoughts (and earlier empty-phase Thoughts) stay L1 above the
- *     sentence — Cursor shows them as the first lines under Worked;
- *   - long Thoughts whose `phaseId` matches that step nest inside Explored
- *     (e.g. Thought for 6s under Explored after「我误删了…」).
+ *   - at Worked start, brief Thoughts stay L1 above the sentence;
+ *   - mid-session (after prior L1 activity), same-phase briefs nest in the
+ *     next Explored (e.g.「上下文因页面重载…」under the following Explored);
+ *   - long Thoughts whose `phaseId` matches that step nest inside Explored.
+ * If a Thought’s phase pairs L1 narration with further explore tools, close
+ * any open Explored first so it can join the next fold. Narration + edit
+ * keeps the Thought as the trailing item of the current Explored.
  * Phase ids come from `flattenPhasesToUnits` — not flat-order heuristics.
  * After Shell/edit, leading Thoughts nest inside the next Explored fold.
  *
@@ -643,6 +646,44 @@ function finalizeExploreItems(
   return { items: out, spillThinking: [] };
 }
 
+function stepItemsOpenExplore(
+  items: TranscriptContentItem[],
+  fromIdx: number
+): boolean {
+  for (let i = fromIdx; i < items.length; i += 1) {
+    const rest = items[i];
+    if (rest.type !== "tool_use") continue;
+    if (isSkippedProcessTool(rest.name)) continue;
+    if (isExploreChromeTool(rest.name)) return true;
+    if (classifyToolName(rest.name) === "explore") return true;
+  }
+  return false;
+}
+
+/**
+ * Thought phase pairs with narration that continues into explore tools →
+ * leave the open Explored (join the next one). Narration + edit/shell/end
+ * keeps the Thought as the trailing item of the current Explored.
+ */
+function phaseNarrationOpensExploreAhead(
+  units: ProcessTimelineUnit[],
+  phaseId: number | undefined,
+  fromIdx: number
+): boolean {
+  if (phaseId === undefined) return false;
+  for (let i = fromIdx; i < units.length; i += 1) {
+    const u = units[i];
+    if (u.kind !== "step" || u.phaseId !== phaseId) continue;
+    const items = u.step.items;
+    for (let j = 0; j < items.length; j += 1) {
+      if (items[j].type !== "text") continue;
+      return stepItemsOpenExplore(items, j + 1);
+    }
+    return false;
+  }
+  return false;
+}
+
 /**
  * Build L1 process nodes from flat interleaved units.
  */
@@ -791,30 +832,30 @@ export function buildProcessActivityTree(
   const stepRestOpensExplore = (
     items: TranscriptContentItem[],
     fromIdx: number
-  ): boolean => {
-    for (let i = fromIdx; i < items.length; i += 1) {
-      const rest = items[i];
-      if (rest.type !== "tool_use") continue;
-      if (isSkippedProcessTool(rest.name)) continue;
-      if (isExploreChromeTool(rest.name)) return true;
-      if (classifyToolName(rest.name) === "explore") return true;
-    }
-    return false;
-  };
+  ): boolean => stepItemsOpenExplore(items, fromIdx);
+
+  /** Already emitted non-Thought L1 (prior Explored / Shell / narration…). */
+  const hasPriorL1Activity = () =>
+    nodes.some((n) => n.kind !== "thinking");
 
   /**
-   * For text → explore: keep long Thoughts that share this step’s phase to
-   * nest inside Explored; lift briefs and earlier-phase Thoughts to L1 so
-   * they stay above the narration (not buried under Explored after it).
+   * For text → explore: nest same-phase Thoughts into Explored when mid-session
+   * or when long; at Worked start, briefs stay L1 above the sentence.
+   * Earlier-phase / empty-phase Thoughts always stay L1 above narration.
    */
   const keepLongPendingForStepPhase = (stepPhaseId: number | undefined) => {
     if (stepPhaseId === undefined) {
       flushPendingLongAsL1();
       return;
     }
+    const nestBriefs = hasPriorL1Activity();
     const nest: PendingThought[] = [];
     for (const p of pendingLong) {
-      if (p.phaseId === stepPhaseId && !isBriefThinking(p.thinking)) {
+      const samePhase = p.phaseId === stepPhaseId;
+      const nestThis =
+        samePhase &&
+        (!isBriefThinking(p.thinking) || nestBriefs);
+      if (nestThis) {
         nest.push(p);
       } else {
         emitThinkingL1(p.thinking);
@@ -830,10 +871,19 @@ export function buildProcessActivityTree(
         state.open && state.open.activityKind === "explore"
           ? state.open
           : null;
-      // Cursor: once Explored is open, Thoughts nest inside until the next
-      // L1 narration / edit / shell — including leading Thoughts placed into a
-      // freshly opened fold (e.g. after Shell before the next GetMcpTools).
+      // Cursor: once Explored is open, mid-explore Thoughts nest inside —
+      // unless this Thought’s phase pairs narration with further explore tools
+      // (leave so it can join the following Explored). Narration+edit keeps it
+      // as the trailing Thought of the current fold.
       if (exploreOpen) {
+        if (phaseNarrationOpensExploreAhead(units, unit.phaseId, ui + 1)) {
+          flush();
+          const phaseId =
+            unit.phaseId !== undefined ? unit.phaseId : nextSyntheticPhaseId++;
+          lastThinkingPhaseId = phaseId;
+          pendingLong.push({ thinking: unit.thinking, phaseId });
+          continue;
+        }
         exploreOpen.items.push({ kind: "thinking", thinking: unit.thinking });
         continue;
       }
