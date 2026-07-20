@@ -135,3 +135,167 @@
     display: block;
   }
 }
+
+/* Shell tool card under Worked — full-width L1 terminal component. */
+.process-shell-line {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-block: 0.2rem;
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 18%, transparent);
+  border-radius: 0.375rem;
+  background-color: color-mix(in oklab, var(--color-base-200) 70%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.process-shell-line:not(details) {
+  display: flex;
+  align-items: baseline;
+  padding: 0.3rem 0.55rem;
+}
+
+.process-shell-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.process-shell-summary::-webkit-details-marker,
+.process-shell-summary::marker {
+  display: none;
+  content: "";
+}
+
+.process-shell-prompt {
+  flex-shrink: 0;
+  opacity: 0.55;
+  user-select: none;
+}
+
+.process-shell-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  opacity: 0.9;
+}
+
+.process-shell-command {
+  margin: 0;
+  padding: 0.45rem 0.55rem 0.55rem;
+  border-top: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent);
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  opacity: 0.85;
+}
+
+/* File edit card — Cursor "⚛ file.tsx +1 -1" component (full-width L1). */
+.process-edit-line {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-block: 0.2rem;
+  border: 1px solid color-mix(in oklab, var(--color-base-content) 18%, transparent);
+  border-radius: 0.375rem;
+  background-color: color-mix(in oklab, var(--color-base-200) 65%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.process-edit-line:not(details) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem;
+}
+
+.process-edit-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.process-edit-summary::-webkit-details-marker,
+.process-edit-summary::marker {
+  display: none;
+  content: "";
+}
+
+.process-edit-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
+  user-select: none;
+}
+
+.process-edit-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  opacity: 0.92;
+}
+
+.process-edit-plus {
+  color: color-mix(in oklab, #16a34a 85%, var(--color-base-content));
+  font-variant-numeric: tabular-nums;
+}
+
+.process-edit-minus {
+  color: color-mix(in oklab, #dc2626 85%, var(--color-base-content));
+  font-variant-numeric: tabular-nums;
+}
+
+.process-edit-diff {
+  border-top: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent);
+  padding: 0.35rem 0.45rem 0.45rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.process-edit-add,
+.process-edit-del {
+  display: flex;
+  gap: 0.4rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.process-edit-add {
+  background-color: color-mix(in oklab, #16a34a 12%, transparent);
+}
+
+.process-edit-del {
+  background-color: color-mix(in oklab, #dc2626 12%, transparent);
+}
+
+.process-edit-mark {
+  flex-shrink: 0;
+  width: 0.75rem;
+  text-align: center;
+  opacity: 0.7;
+  user-select: none;
+}
+
+.process-edit-text {
+  min-width: 0;
+}
+
+.process-edit-more {
+  padding: 0.15rem 0.75rem;
+  opacity: 0.5;
+}

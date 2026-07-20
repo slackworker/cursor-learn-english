@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import {
   buildProcessActivityTree,
+  editActivityLine,
   estimateWorkedMs,
   formatDurationShort,
   summarizeActivity,
@@ -130,7 +131,7 @@ assert.deepEqual(activityLabels(secondExplore), [
   "Thought for 16s",
 ]);
 
-// --- Edit: Thought is sibling; splits Edited N files ---
+// --- Edit: each file is an L1 card (Cursor), Thought stays sibling ---
 const editUnits: ProcessTimelineUnit[] = [
   step("e1", [
     { type: "tool_use", name: "StrReplace", input: { path: "a.ts" } },
@@ -147,11 +148,29 @@ const editUnits: ProcessTimelineUnit[] = [
 
 const editTree = buildProcessActivityTree(editUnits);
 assert.deepEqual(editTree.map(label), [
-  "activity:Edited 3 files",
+  "tool-line:JS a.ts",
+  "tool-line:JS b.ts",
+  "tool-line:JS c.ts",
   "thinking:Thought for 3s",
-  "activity:Edited 2 files",
+  "tool-line:JS d.ts",
+  "tool-line:JS e.ts",
   "thinking:Thought for 1s",
 ]);
+
+assert.equal(
+  editActivityLine({
+    type: "tool_use",
+    name: "StrReplace",
+    input: {
+      path: "components/DialogueTimeline.tsx",
+      old_string:
+        'const PROCESS_FOLD_CLASS =\n  "process-fold collapse !overflow-visible !rounded-none !border-0 !bg-transparent";',
+      new_string:
+        'const PROCESS_FOLD_CLASS =\n  "process-fold collapse !rounded-none !border-0 !bg-transparent";',
+    },
+  }),
+  "⚛ DialogueTimeline.tsx +1 -1"
+);
 
 // --- Shell: inline, sibling of Thought ---
 const shellUnits: ProcessTimelineUnit[] = [
@@ -252,6 +271,41 @@ assert.equal(
     input: { pattern: "parentSession" },
   }),
   "Grepped parentSession"
+);
+
+// Cursor Shell titles prefer `description` (+ argv0), not truncated command.
+assert.equal(
+  toolActivityLine({
+    type: "tool_use",
+    name: "Shell",
+    input: {
+      command:
+        'node -e "\nconst fs=require(\'fs\');\nconst s=fs.readFileSync(\'node_modules/daisyui/components/collapse.css\',\'utf8\');\n"',
+      description: "Format collapse.css for reading",
+    },
+  }),
+  "Format collapse.css for reading node"
+);
+assert.equal(
+  toolActivityLine({
+    type: "tool_use",
+    name: "Shell",
+    input: {
+      command:
+        'node -e "\nconst fs=require(\'fs\');\nconst i=s.indexOf(\'.collapse:is(details)\');\n"',
+      description: "Read details-specific collapse CSS",
+    },
+  }),
+  "Read details-specific collapse CSS node"
+);
+assert.equal(
+  toolActivityLine({
+    type: "tool_use",
+    name: "Shell",
+    input: { command: "npx tsc --noEmit" },
+  }),
+  "Ran npx tsc --noEmit",
+  "Shell without description still shows Ran + command"
 );
 
 assert.equal(
@@ -608,7 +662,7 @@ assert.deepEqual(
   todoOnlyTree.map(label),
   [
     "activity:Explored 1 search",
-    "activity:Edited 1 file",
+    "tool-line:JS a.ts",
     "tool-line:Ran npx tsx scripts/verify-process-activity.ts",
     "activity:Explored",
     "text",

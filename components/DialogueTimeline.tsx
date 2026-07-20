@@ -28,6 +28,10 @@ import {
 } from "@/lib/interleave-transcript";
 import {
   buildProcessActivityTree,
+  editActivityLine,
+  editDiffPreviewLines,
+  editDiffStatsFromTool,
+  isEditToolName,
   thoughtFoldLabel,
   toolActivityLine,
   workedFoldSummary,
@@ -467,6 +471,112 @@ function TaskProcessRow({
   );
 }
 
+/** Cursor-like Shell card: `>_ ` title, expands to show the command. */
+function ShellToolLine({
+  tool,
+  line,
+}: {
+  tool: TranscriptToolUseItem;
+  line?: string;
+}) {
+  const label = line ?? toolActivityLine(tool);
+  const command =
+    typeof tool.input.command === "string" ? tool.input.command : "";
+
+  if (!command) {
+    return (
+      <div className="process-shell-line">
+        <span className="process-shell-prompt" aria-hidden>
+          {">_ "}
+        </span>
+        <span className="process-shell-label">{label}</span>
+      </div>
+    );
+  }
+
+  return (
+    <details className="process-shell-line process-shell-fold">
+      <summary className="process-shell-summary">
+        <span className="process-shell-prompt" aria-hidden>
+          {">_ "}
+        </span>
+        <span className="process-shell-label">{label}</span>
+      </summary>
+      <pre className="process-shell-command" tabIndex={0}>
+        {command}
+      </pre>
+    </details>
+  );
+}
+
+/** Cursor-like file edit card: "⚛ file.tsx +1 -1" with expandable hunk. */
+function EditToolLine({ tool }: { tool: TranscriptToolUseItem }) {
+  const title = editActivityLine(tool);
+  const stats = editDiffStatsFromTool(tool);
+  const preview = editDiffPreviewLines(tool);
+  const path = typeof tool.input.path === "string" ? tool.input.path : "";
+  const base = path.split(/[/\\]/).pop() || tool.name;
+
+  const titleNodes = (() => {
+    const iconEnd = title.indexOf(" ");
+    const icon = iconEnd > 0 ? title.slice(0, iconEnd) : "";
+    const rest = iconEnd > 0 ? title.slice(iconEnd + 1) : title;
+    const statsMatch = rest.match(/^(.*)\s(\+\d+)\s(-\d+)$/);
+    if (statsMatch) {
+      return (
+        <>
+          <span className="process-edit-icon" aria-hidden>
+            {icon}
+          </span>
+          <span className="process-edit-name">{statsMatch[1]}</span>
+          <span className="process-edit-plus">{statsMatch[2]}</span>
+          <span className="process-edit-minus">{statsMatch[3]}</span>
+        </>
+      );
+    }
+    return (
+      <>
+        <span className="process-edit-icon" aria-hidden>
+          {icon}
+        </span>
+        <span className="process-edit-name">{rest || base}</span>
+      </>
+    );
+  })();
+
+  if (preview.length === 0) {
+    return <div className="process-edit-line">{titleNodes}</div>;
+  }
+
+  return (
+    <details className="process-edit-line process-edit-fold">
+      <summary className="process-edit-summary">{titleNodes}</summary>
+      <div className="process-edit-diff" role="region" aria-label={`${base} diff`}>
+        {preview.map((row, idx) => (
+          <div
+            key={`${row.type}-${idx}`}
+            className={
+              row.type === "add" ? "process-edit-add" : "process-edit-del"
+            }
+          >
+            <span className="process-edit-mark" aria-hidden>
+              {row.type === "add" ? "+" : "-"}
+            </span>
+            <span className="process-edit-text">{row.text || " "}</span>
+          </div>
+        ))}
+        {stats && preview.length >= 80 ? (
+          <div className="process-edit-more">…</div>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
+function isShellToolName(name: string): boolean {
+  return name === "Shell" || name === "AwaitShell";
+}
+
 function ActivityItemViews({
   items,
   blockKey,
@@ -479,6 +589,18 @@ function ActivityItemViews({
       {items.map((item, idx) => {
         const itemKey = `${blockKey}-item-${idx}`;
         if (item.kind === "tool") {
+          if (isEditToolName(item.tool.name)) {
+            return <EditToolLine key={itemKey} tool={item.tool} />;
+          }
+          if (isShellToolName(item.tool.name)) {
+            return (
+              <ShellToolLine
+                key={itemKey}
+                tool={item.tool}
+                line={item.line}
+              />
+            );
+          }
           return (
             <div
               key={itemKey}
@@ -553,6 +675,12 @@ function renderProcessActivityNodes(
       return <TaskProcessRow key={blockKey} tool={node.tool} />;
     }
     if (node.kind === "tool-line") {
+      if (isEditToolName(node.tool.name)) {
+        return <EditToolLine key={blockKey} tool={node.tool} />;
+      }
+      if (isShellToolName(node.tool.name)) {
+        return <ShellToolLine key={blockKey} tool={node.tool} />;
+      }
       return (
         <div
           key={blockKey}
