@@ -1024,7 +1024,58 @@ assert.equal(
   "empty-phase Thought must not be pulled into Explored"
 );
 
-// Two Thoughts in the same phase as text+explore both nest (not only last).
+// Same-phase brief Thought + text+explore must stay L1 (not nest under Explored).
+// Regression: session start「折叠展开时…」had Thought briefly buried inside Explored.
+const soleBriefSamePhaseUnits = flattenPhasesToUnits([
+  {
+    thinking: thinking(
+      "用户反馈折叠动画时序问题。",
+      3,
+      "2026-07-20T08:46:06.389Z"
+    ),
+    steps: [
+      {
+        items: [
+          {
+            type: "text",
+            text: "折叠展开时先腾出空间、收起时先收内容——我先看当前折叠动画的实现。",
+          },
+          {
+            type: "tool_use",
+            name: "Grep",
+            input: { pattern: "process-fold" },
+          },
+          {
+            type: "tool_use",
+            name: "Glob",
+            input: { glob_pattern: "**/*Fold*" },
+          },
+        ],
+      },
+    ],
+  },
+]);
+const soleBriefSamePhaseTree = buildProcessActivityTree(soleBriefSamePhaseUnits);
+assert.deepEqual(
+  soleBriefSamePhaseTree.map(label),
+  [
+    "thinking:Thought briefly",
+    "text",
+    "activity:Explored 2 searches",
+  ],
+  "same-phase brief Thought stays L1 above text+explore (first under Worked)"
+);
+assert.equal(
+  soleBriefSamePhaseTree.some(
+    (n) =>
+      n.kind === "activity" &&
+      n.items.some((it) => it.kind === "thinking")
+  ),
+  false,
+  "same-phase brief Thought must not nest inside Explored"
+);
+
+// Two long Thoughts in the same phase as text+explore both nest (not only last).
 const twoPairedPhaseUnits: ProcessTimelineUnit[] = [
   {
     kind: "thinking",
@@ -1056,7 +1107,7 @@ const twoPairedPhaseTree = buildProcessActivityTree(twoPairedPhaseUnits);
 assert.deepEqual(
   twoPairedPhaseTree.map(label),
   ["text", "activity:Explored 1 search"],
-  "all same-phase Thoughts nest; none remain L1"
+  "all same-phase long Thoughts nest; none remain L1"
 );
 const twoPairedExplore = twoPairedPhaseTree[1];
 assert.ok(twoPairedExplore && twoPairedExplore.kind === "activity");
@@ -1080,5 +1131,6 @@ console.log({
   browserMcp: browserMcpTree.map(label),
   textToolThought: textToolThoughtTree.map(label),
   soleEmptyPhase: soleEmptyPhaseTree.map(label),
+  soleBriefSamePhase: soleBriefSamePhaseTree.map(label),
   twoPairedPhase: twoPairedPhaseTree.map(label),
 });

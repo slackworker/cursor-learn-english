@@ -18,10 +18,12 @@
  * do not split Explored on long Thought when more explore tools follow.
  * Edit / shell / other never nest Thought; shell is always an inline L1 line.
  * Phase-leading Thought before a text-only narration is L1. When narration
- * shares a step with explore tools (text → Read/Grep/…), Thoughts whose
- * `phaseId` matches that step nest inside Explored; other pending Thoughts
- * (earlier empty phases) stay L1 above the sentence. Phase ids come from
- * `flattenPhasesToUnits` — not from flat-order heuristics like `pop()`.
+ * shares a step with explore tools (text → Read/Grep/…):
+ *   - brief Thoughts (and earlier empty-phase Thoughts) stay L1 above the
+ *     sentence — Cursor shows them as the first lines under Worked;
+ *   - long Thoughts whose `phaseId` matches that step nest inside Explored
+ *     (e.g. Thought for 6s under Explored after「我误删了…」).
+ * Phase ids come from `flattenPhasesToUnits` — not flat-order heuristics.
  * After Shell/edit, leading Thoughts nest inside the next Explored fold.
  *
  * MCP: GetMcpTools + CallMcpTool nest inside Explored (not L1 tool-lines).
@@ -596,21 +598,25 @@ export function buildProcessActivityTree(
     return false;
   };
 
-  /** Keep Thoughts that share this step’s phase; flush the rest as L1. */
-  const keepPendingForStepPhase = (stepPhaseId: number | undefined) => {
+  /**
+   * For text → explore: keep long Thoughts that share this step’s phase to
+   * nest inside Explored; lift briefs and earlier-phase Thoughts to L1 so
+   * they stay above the narration (not buried under Explored after it).
+   */
+  const keepLongPendingForStepPhase = (stepPhaseId: number | undefined) => {
     if (stepPhaseId === undefined) {
-      // No phase marker and no prior thinking — nothing to pair.
       flushPendingLongAsL1();
       return;
     }
-    const paired: PendingThought[] = [];
-    const earlier: PendingThought[] = [];
+    const nest: PendingThought[] = [];
     for (const p of pendingLong) {
-      if (p.phaseId === stepPhaseId) paired.push(p);
-      else earlier.push(p);
+      if (p.phaseId === stepPhaseId && !isBriefThinking(p.thinking)) {
+        nest.push(p);
+      } else {
+        emitThinkingL1(p.thinking);
+      }
     }
-    for (const p of earlier) emitThinkingL1(p.thinking);
-    pendingLong = paired;
+    pendingLong = nest;
   };
 
   for (let ui = 0; ui < units.length; ui += 1) {
@@ -644,11 +650,10 @@ export function buildProcessActivityTree(
       if (item.type === "text") {
         flush();
         // Text-only narration: all pending Thoughts stay L1 above it.
-        // Same step as explore tools (text → Read/…): nest Thoughts that
-        // share this step’s interleave phaseId; earlier empty-phase Thoughts
-        // stay L1 above the sentence.
+        // Same step as explore tools (text → Read/…): nest only long Thoughts
+        // that share this step’s phaseId; briefs stay L1 above the sentence.
         if (stepRestOpensExplore(stepItems, ii + 1)) {
-          keepPendingForStepPhase(stepPhaseId);
+          keepLongPendingForStepPhase(stepPhaseId);
         } else {
           flushPendingLongAsL1();
         }
