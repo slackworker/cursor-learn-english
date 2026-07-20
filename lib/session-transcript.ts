@@ -10,6 +10,7 @@ import {
   type TranscriptAssistantStep,
 } from "./transcript-content";
 import { resolveTranscriptPath } from "./agent-transcripts-path";
+import { compareTimestamps } from "./format-datetime";
 
 export type { DomContextBlock, PromptSegment } from "./parse-dom-context";
 
@@ -181,5 +182,8 @@ export function getTranscriptTurns(sessionId: string): TranscriptTurn[] {
   }
 
   flushPendingUser();
+  // Forked chats can append older copied turns after newer ones in the JSONL;
+  // always order by <timestamp> (not file order / string localeCompare).
+  turns.sort((a, b) => compareTimestamps(a.user_timestamp, b.user_timestamp));
   return turns;
 }

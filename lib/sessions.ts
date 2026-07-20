@@ -11,6 +11,7 @@ import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./think
 import { getMergedReadSignature, readMergedJsonlLinesCached } from "./jsonl-daily";
 import { getDialogueRounds, type DialogueRound } from "./dialogue";
 import { spanDurationMs } from "./format-duration";
+import { compareTimestamps } from "./format-datetime";
 import { getTranscriptTurns, type TranscriptTurn } from "./session-transcript";
 import {
   listSubagentIdsForParent,
@@ -1272,7 +1273,7 @@ export function getSessionDetail(sessionId: string): SessionDetail | null {
   });
   const transcriptTurns = getTranscriptTurns(lookupId);
   const roundsAsc = [...rounds].sort((a, b) =>
-    a.prompt_timestamp.localeCompare(b.prompt_timestamp)
+    compareTimestamps(a.prompt_timestamp, b.prompt_timestamp)
   );
   const transcriptTurnsWithRounds = transcriptTurns.map((turn) => {
     const normalizedPrompt = turn.user_prompt.toLowerCase();

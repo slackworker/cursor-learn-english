@@ -12,7 +12,7 @@ import { MessageBubble } from "@/components/ui/MessageBubble";
 import { PageShell } from "@/components/ui/PageShell";
 import { Surface } from "@/components/ui/Surface";
 import type { DomContextBlock, PromptSegment } from "@/lib/parse-dom-context";
-import { formatLocalDateTime } from "@/lib/format-datetime";
+import { formatLocalDateTime, compareTimestamps } from "@/lib/format-datetime";
 import { formatDurationMs } from "@/lib/format-duration";
 import { fetchJson } from "@/lib/fetch-json";
 import { sessionsSwrOptions } from "@/lib/sessions-swr";
@@ -209,11 +209,11 @@ export default function SessionDetailPage() {
   const sortedTurns = [...session.transcript_turns].sort((a, b) => {
     const aTs = a.user_timestamp ?? a.round?.prompt_timestamp ?? "";
     const bTs = b.user_timestamp ?? b.round?.prompt_timestamp ?? "";
-    return aTs.localeCompare(bTs);
+    return compareTimestamps(aTs, bTs);
   });
 
   const sortedRounds = [...session.dialogue_rounds].sort((a, b) =>
-    a.prompt_timestamp.localeCompare(b.prompt_timestamp)
+    compareTimestamps(a.prompt_timestamp, b.prompt_timestamp)
   );
   const hasUnmatchedTurns = sortedTurns.some((turn) => !turn.round);
   const openDebugRounds = sortedTurns.length === 0 || hasUnmatchedTurns;

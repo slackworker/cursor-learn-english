@@ -20,3 +20,29 @@ export function formatLocalDateTime(value?: string, empty = "—"): string {
     hour12: false,
   }).format(date);
 }
+
+/**
+ * Parse ISO or Cursor transcript `<timestamp>` strings to epoch ms.
+ * Human forms like "Monday, Jul 20, 2026, 9:13 PM (UTC+8)" must not be
+ * ordered with string localeCompare ("10:24" sorts before "9:13").
+ */
+export function parseTimestampMs(value?: string): number {
+  if (!value) return Number.NaN;
+  const direct = Date.parse(value);
+  if (!Number.isNaN(direct)) return direct;
+  const stripped = value.replace(/\s*\(UTC[+-]\d+(?::\d+)?\)\s*$/i, "").trim();
+  if (stripped === value) return Number.NaN;
+  return Date.parse(stripped);
+}
+
+/** Ascending chronological compare; unparsable values sort after parsable ones. */
+export function compareTimestamps(a?: string, b?: string): number {
+  const am = parseTimestampMs(a);
+  const bm = parseTimestampMs(b);
+  const aOk = !Number.isNaN(am);
+  const bOk = !Number.isNaN(bm);
+  if (aOk && bOk) return am - bm;
+  if (aOk) return -1;
+  if (bOk) return 1;
+  return (a ?? "").localeCompare(b ?? "");
+}
