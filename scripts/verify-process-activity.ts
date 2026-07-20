@@ -69,7 +69,7 @@ function activityLabels(
     it.kind === "thinking"
       ? thoughtFoldLabel(it.thinking)
       : it.kind === "tool"
-        ? toolActivityLine(it.tool)
+        ? it.line ?? toolActivityLine(it.tool)
         : "text"
   );
 }
@@ -234,9 +234,9 @@ assert.deepEqual(activityLabels(askExplore), [
   "Grepped afterAgentThought|agentThought",
   "Searched files **/*interleave*",
   "Searched files **/*dialogue-timeline*",
-  "Thought briefly",
   "Grepped tool_use|thinking|assistant",
   "Searched files **/*transcript*",
+  "Thought briefly",
   "Thought for 28s",
 ]);
 assert.equal(
@@ -366,6 +366,175 @@ assert.equal(
   "Thought for 16s must stay nested in explore"
 );
 
+// --- Cursor sandwich: text → one Explored (tools + thoughts + todo) → text ---
+const sandwichUnits: ProcessTimelineUnit[] = [
+  step("n1", [{ type: "text", text: "着手改这两处，并同步更新相关测试。" }]),
+  step("todo", [{ type: "tool_use", name: "TodoWrite", input: {} }]),
+  step("s1", [
+    { type: "tool_use", name: "Grep", input: { pattern: "timestamp|duration" } },
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "scripts/verify-process-activity.ts" },
+    },
+    {
+      type: "tool_use",
+      name: "Grep",
+      input: { pattern: "postToolUse|duration|timestamp" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief after greps", 40, "2026-07-20T06:00:10.000Z"),
+  },
+  step("s2", [
+    { type: "tool_use", name: "Read", input: { path: "scripts/capture-event.mjs" } },
+    { type: "tool_use", name: "Read", input: { path: "lib/dialogue-timeline.ts" } },
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "scripts/verify-process-activity.ts" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("brief mid", 50, "2026-07-20T06:00:20.000Z"),
+  },
+  step("s3", [
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "scripts/verify-process-activity.ts" },
+    },
+    {
+      type: "tool_use",
+      name: "Read",
+      input: { path: "scripts/verify-process-activity.ts" },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("long before next narration", 27000, "2026-07-20T06:00:50.000Z"),
+  },
+  step("n2", [
+    {
+      type: "text",
+      text: "正在修改 estimateWorkedMs 与 text 分支的 flush 逻辑，并更新测试。",
+    },
+  ]),
+];
+
+const sandwichTree = buildProcessActivityTree(sandwichUnits);
+assert.deepEqual(
+  sandwichTree.map(label),
+  [
+    "text",
+    "activity:Explored 6 files, 2 searches",
+    "text",
+  ],
+  "middle explore tools + thoughts collapse into one Explored between narrations"
+);
+const sandwichExplore = sandwichTree.find((n) => n.kind === "activity");
+assert.ok(sandwichExplore && sandwichExplore.kind === "activity");
+assert.deepEqual(activityLabels(sandwichExplore), [
+  "Checked to-do list",
+  "Grepped timestamp|duration",
+  "Read scripts/verify-process-activity.ts",
+  "Grepped postToolUse|duration|timestamp",
+  "Thought briefly",
+  "Read scripts/capture-event.mjs",
+  "Read lib/dialogue-timeline.ts",
+  "Read scripts/verify-process-activity.ts",
+  "Thought briefly",
+  "Read scripts/verify-process-activity.ts",
+  "Read scripts/verify-process-activity.ts",
+  "Thought for 27s",
+]);
+assert.equal(
+  sandwichTree.some((n) => n.kind === "thinking"),
+  false,
+  "Thought for 27s must nest inside Explored, not L1 between narrations"
+);
+
+// --- TodoWrite-only Explored after Shell (Cursor: bare "Explored") ---
+const todoOnlyUnits: ProcessTimelineUnit[] = [
+  step("boot", [
+    {
+      type: "tool_use",
+      name: "TodoWrite",
+      input: {
+        merge: false,
+        todos: [
+          { id: "1", content: "a", status: "in_progress" },
+          { id: "2", content: "b", status: "pending" },
+          { id: "3", content: "c", status: "pending" },
+        ],
+      },
+    },
+    { type: "tool_use", name: "Grep", input: { pattern: "x" } },
+  ]),
+  step("edit", [
+    { type: "tool_use", name: "StrReplace", input: { path: "a.ts" } },
+  ]),
+  step("sh", [
+    { type: "tool_use", name: "Shell", input: { command: "npx tsx scripts/verify-process-activity.ts" } },
+    {
+      type: "tool_use",
+      name: "TodoWrite",
+      input: {
+        merge: true,
+        todos: [
+          { id: "1", status: "completed" },
+          { id: "2", status: "completed" },
+          { id: "3", status: "in_progress" },
+        ],
+      },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("tests passed", 2, "2026-07-20T06:14:22.618Z"),
+  },
+  step("done", [
+    {
+      type: "tool_use",
+      name: "TodoWrite",
+      input: {
+        merge: true,
+        todos: [{ id: "3", status: "completed" }],
+      },
+    },
+  ]),
+  {
+    kind: "thinking",
+    thinking: thinking("summarize", 2, "2026-07-20T06:14:24.054Z"),
+  },
+  step("final", [{ type: "text", text: "两处都改好了，验证脚本已通过。" }]),
+];
+
+const todoOnlyTree = buildProcessActivityTree(todoOnlyUnits);
+assert.deepEqual(
+  todoOnlyTree.map(label),
+  [
+    "activity:Explored 1 search",
+    "activity:Edited 1 file",
+    "tool-line:Ran npx tsx scripts/verify-process-activity.ts",
+    "activity:Explored",
+    "text",
+  ],
+  "TodoWrite-only batch after Shell becomes bare Explored, not L1 Thoughts"
+);
+const todoOnlyExplore = [...todoOnlyTree]
+  .reverse()
+  .find((n) => n.kind === "activity" && n.summary === "Explored");
+assert.ok(todoOnlyExplore && todoOnlyExplore.kind === "activity");
+assert.deepEqual(activityLabels(todoOnlyExplore), [
+  "Checked to-do list",
+  "Thought briefly",
+  "Completed 3 of 3 to-dos",
+  "Thought briefly",
+]);
+
 console.log("verify-process-activity: ok");
 console.log({
   explore: exploreTree.map(label),
@@ -374,4 +543,7 @@ console.log({
   ask: askTree.map(label),
   askItems: activityLabels(askExplore),
   sameMs: sameMsLabels,
+  sandwich: sandwichTree.map(label),
+  todoOnly: todoOnlyTree.map(label),
+  todoOnlyItems: activityLabels(todoOnlyExplore),
 });

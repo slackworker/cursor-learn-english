@@ -3,15 +3,18 @@
  *   Worked for …                (L0)
  *     Thought for …             (L1)
  *     Task card                 (L1)
- *     Explored N files …        (L1) — only explore nests Thought
- *       Grepped … / Thought …   (L2)
+ *     interim narration text    (L1)
+ *     Explored N files …        (L1) — one fold until next narration/edit/shell
+ *       Checked to-do list /
+ *       Grepped … / Thought …   (L2, chronological)
+ *     interim narration text    (L1)
  *     Edited 3 files            (L1) — Thought splits edit batches
  *     Thought for …             (L1, sibling of Edited)
- *     Edited 2 files            (L1)
  *     Ran <command>             (L1, inline — not folded)
- *     Thought briefly           (L1, sibling of Ran)
  *
  * Nesting rule: only `explore` activities may contain Thought.
+ * Mid-explore Thoughts (brief or long) stay inside the open Explored fold;
+ * do not split Explored on long Thought when more explore tools follow.
  * Edit / shell / other never nest Thought; shell is always an inline L1 line.
  * Phase-leading Thought before L1 narration is always L1 (never deferred into
  * the following Explored fold).
@@ -26,17 +29,27 @@ export const BRIEF_THINKING_MS = 100;
 export type ActivityToolKind = "explore" | "edit" | "shell" | "other";
 
 export type ProcessActivityItem =
-  | { kind: "tool"; tool: TranscriptToolUseItem; stepKey?: string }
+  | {
+      kind: "tool";
+      tool: TranscriptToolUseItem;
+      stepKey?: string;
+      /** Precomputed Cursor label (e.g. TodoWrite → Completed N of N). */
+      line?: string;
+    }
   | { kind: "thinking"; thinking: TimelineThinking }
   | { kind: "text"; text: string };
 
 /** UI-chrome tools Cursor does not put in Explored / Ran folds. */
 const SKIP_PROCESS_TOOLS = new Set([
   "AskQuestion",
-  "TodoWrite",
   "SwitchMode",
   "GenerateImage",
 ]);
+
+/** Shown inside Explored (does not count toward files/searches). */
+function isExploreChromeTool(name: string): boolean {
+  return name === "TodoWrite";
+}
 
 export function isSkippedProcessTool(name: string): boolean {
   return SKIP_PROCESS_TOOLS.has(name);
@@ -94,6 +107,7 @@ function countExploreParts(tools: TranscriptToolUseItem[]): {
   let files = 0;
   let searches = 0;
   for (const tool of tools) {
+    if (isExploreChromeTool(tool.name)) continue;
     if (
       tool.name === "Grep" ||
       tool.name === "Glob" ||
@@ -135,7 +149,8 @@ export function summarizeActivity(
       parts.push(searches === 1 ? "1 search" : `${searches} searches`);
     }
     if (parts.length === 0) {
-      return tools.length === 1 ? "Explored 1 item" : `Explored ${tools.length} items`;
+      // TodoWrite-only (or other chrome) folds: Cursor shows bare "Explored".
+      return "Explored";
     }
     return `Explored ${parts.join(", ")}`;
   }
@@ -184,7 +199,52 @@ export function toolActivityLine(tool: TranscriptToolUseItem): string {
   if (tool.name === "Task" && typeof input.description === "string") {
     return input.description.trim() || "Task";
   }
+  if (tool.name === "TodoWrite") {
+    return "Checked to-do list";
+  }
   return tool.name;
+}
+
+type TodoEntry = { status: string };
+
+/**
+ * Apply a TodoWrite to running list state and return the Cursor activity line.
+ * merge:false replaces the list; merge:true patches by id.
+ * When every known todo is completed → "Completed N of N to-dos".
+ */
+export function applyTodoWriteAndLabel(
+  state: Map<string, TodoEntry>,
+  tool: TranscriptToolUseItem
+): string {
+  const input = tool.input ?? {};
+  const todos = Array.isArray(input.todos) ? input.todos : [];
+  if (input.merge !== true) {
+    state.clear();
+  }
+  for (const raw of todos) {
+    if (!raw || typeof raw !== "object") continue;
+    const rec = raw as Record<string, unknown>;
+    if (typeof rec.id !== "string") continue;
+    const prev = state.get(rec.id);
+    const status =
+      typeof rec.status === "string"
+        ? rec.status
+        : prev?.status ?? "pending";
+    state.set(rec.id, { status });
+  }
+  const all = [...state.values()];
+  const completed = all.filter((t) => t.status === "completed").length;
+  if (all.length > 0 && completed === all.length) {
+    return `Completed ${completed} of ${all.length} to-dos`;
+  }
+  return "Checked to-do list";
+}
+
+/** Prefer precomputed line (TodoWrite state) when present. */
+export function activityItemLine(
+  item: Extract<ProcessActivityItem, { kind: "tool" }>
+): string {
+  return item.line ?? toolActivityLine(item.tool);
 }
 
 export function formatDurationShort(ms: number): string {
@@ -265,70 +325,19 @@ export function workedFoldSummary(
 }
 
 /**
- * Cursor explore folds: tool batches by transcript step, brief thoughts between
- * batches, long thoughts (including deferred phase-leading ones) at the end.
- * Extra nested longs after the first trailing long are returned for L1.
+ * Cursor explore folds keep chronological tool/thinking order. Phase-leading
+ * longs that were deferred into this fold (no intervening L1 narration) append
+ * as trailing Thought. Extra spill is unused — mid-explore longs all nest.
  */
 function finalizeExploreItems(
   items: ProcessActivityItem[],
   deferredLong: TimelineThinking[]
 ): { items: ProcessActivityItem[]; spillThinking: TimelineThinking[] } {
-  const toolItems: Extract<ProcessActivityItem, { kind: "tool" }>[] = [];
-  const briefThoughts: TimelineThinking[] = [];
-  const nestedLongs: TimelineThinking[] = [];
-
-  for (const item of items) {
-    if (item.kind === "tool") toolItems.push(item);
-    else if (item.kind === "thinking") {
-      if (isBriefThinking(item.thinking)) briefThoughts.push(item.thinking);
-      else nestedLongs.push(item.thinking);
-    }
-  }
-
-  const groups: Extract<ProcessActivityItem, { kind: "tool" }>[][] = [];
-  for (const tool of toolItems) {
-    const prev = groups[groups.length - 1];
-    const prevKey = prev?.[0]?.stepKey;
-    if (
-      prev &&
-      ((tool.stepKey != null && prevKey === tool.stepKey) ||
-        (tool.stepKey == null && prevKey == null))
-    ) {
-      prev.push(tool);
-    } else {
-      groups.push([tool]);
-    }
-  }
-
-  const out: ProcessActivityItem[] = [];
-  let briefIdx = 0;
-  for (let gi = 0; gi < groups.length; gi += 1) {
-    out.push(...groups[gi]);
-    const isLast = gi === groups.length - 1;
-    if (!isLast && briefIdx < briefThoughts.length) {
-      out.push({ kind: "thinking", thinking: briefThoughts[briefIdx] });
-      briefIdx += 1;
-    }
-  }
-  while (briefIdx < briefThoughts.length) {
-    out.push({ kind: "thinking", thinking: briefThoughts[briefIdx] });
-    briefIdx += 1;
-  }
-
-  // Prefer phase-leading deferred long as the single trailing Thought in the fold.
-  const trailingLong = deferredLong[0] ?? nestedLongs[0];
-  const spillThinking: TimelineThinking[] = [];
-  if (trailingLong) {
-    out.push({ kind: "thinking", thinking: trailingLong });
-  }
+  const out: ProcessActivityItem[] = [...items];
   for (const t of deferredLong) {
-    if (t !== trailingLong) spillThinking.push(t);
+    out.push({ kind: "thinking", thinking: t });
   }
-  for (const t of nestedLongs) {
-    if (t !== trailingLong) spillThinking.push(t);
-  }
-
-  return { items: out, spillThinking };
+  return { items: out, spillThinking: [] };
 }
 
 /**
@@ -349,6 +358,8 @@ export function buildProcessActivityTree(
   const state: { open: OpenActivity | null } = { open: null };
   /** Thinking before the next explore fold (not yet L1). */
   let pendingLong: TimelineThinking[] = [];
+  /** Running TodoWrite list — needed for "Completed N of N to-dos". */
+  const todoState = new Map<string, TodoEntry>();
 
   const emitThinkingL1 = (thinking: TimelineThinking) => {
     nodes.push({ kind: "thinking", thinking });
@@ -357,6 +368,22 @@ export function buildProcessActivityTree(
   const flushPendingLongAsL1 = () => {
     for (const t of pendingLong) emitThinkingL1(t);
     pendingLong = [];
+  };
+
+  const pushToolItem = (
+    tool: TranscriptToolUseItem,
+    stepKey: string | undefined
+  ) => {
+    const line =
+      tool.name === "TodoWrite"
+        ? applyTodoWriteAndLabel(todoState, tool)
+        : undefined;
+    state.open!.items.push({
+      kind: "tool",
+      tool,
+      stepKey,
+      line,
+    });
   };
 
   const flush = () => {
@@ -412,34 +439,15 @@ export function buildProcessActivityTree(
   const ensureActivity = (kind: ActivityToolKind) => {
     if (state.open && state.open.activityKind !== kind) flush();
     if (!state.open) {
+      // Phase-leading Thought stays L1 above the new activity (Cursor:
+      // Thought → text → Explored, or Thought → Explored).
+      flushPendingLongAsL1();
       state.open = {
         activityKind: kind,
         items: [],
-        deferredLong: kind === "explore" ? pendingLong.splice(0) : [],
+        deferredLong: [],
       };
-      if (kind !== "explore") flushPendingLongAsL1();
-    } else if (
-      kind === "explore" &&
-      pendingLong.length > 0 &&
-      state.open.deferredLong.length === 0
-    ) {
-      state.open.deferredLong.push(...pendingLong.splice(0));
     }
-  };
-
-  const remainingHasExploreTool = (fromUnitIdx: number): boolean => {
-    for (let ui = fromUnitIdx; ui < units.length; ui += 1) {
-      const u = units[ui];
-      if (u.kind !== "step") continue;
-      for (const it of u.step.items) {
-        if (it.type !== "tool_use") continue;
-        if (isSkippedProcessTool(it.name)) continue;
-        const cls = classifyToolName(it.name);
-        if (cls === "explore") return true;
-        if (cls === "edit" || cls === "shell" || cls === "task") return false;
-      }
-    }
-    return false;
   };
 
   for (let ui = 0; ui < units.length; ui += 1) {
@@ -449,16 +457,10 @@ export function buildProcessActivityTree(
         state.open && state.open.activityKind === "explore"
           ? state.open
           : null;
+      // Cursor: once Explored is open (Read/Grep or TodoWrite), Thoughts nest
+      // inside until the next L1 narration / edit / shell.
       if (exploreOpen && exploreOpen.items.some((item) => item.kind === "tool")) {
-        if (isBriefThinking(unit.thinking)) {
-          exploreOpen.items.push({ kind: "thinking", thinking: unit.thinking });
-        } else if (remainingHasExploreTool(ui + 1)) {
-          flush();
-          pendingLong.push(unit.thinking);
-        } else {
-          exploreOpen.deferredLong.push(unit.thinking);
-          flush();
-        }
+        exploreOpen.items.push({ kind: "thinking", thinking: unit.thinking });
         continue;
       }
       if (state.open) flush();
@@ -491,6 +493,12 @@ export function buildProcessActivityTree(
         continue;
       }
 
+      if (isExploreChromeTool(item.name)) {
+        ensureActivity("explore");
+        pushToolItem(item, unit.stepKey);
+        continue;
+      }
+
       const cls = classifyToolName(item.name);
       if (cls === "task") {
         flush();
@@ -506,11 +514,7 @@ export function buildProcessActivityTree(
       }
 
       ensureActivity(cls);
-      state.open!.items.push({
-        kind: "tool",
-        tool: item,
-        stepKey: unit.stepKey,
-      });
+      pushToolItem(item, unit.stepKey);
     }
   }
 

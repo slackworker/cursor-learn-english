@@ -484,7 +484,7 @@ function ActivityItemViews({
               key={itemKey}
               className="font-mono text-[11px] leading-relaxed opacity-80"
             >
-              {toolActivityLine(item.tool)}
+              {item.line ?? toolActivityLine(item.tool)}
             </div>
           );
         }
