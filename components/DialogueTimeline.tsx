@@ -48,10 +48,77 @@ const TaskSubagentsContext = createContext<SessionSubagentLink[] | null>(null);
 
 /** Flat Cursor-like fold chrome — no nested card padding/indent. */
 const PROCESS_FOLD_CLASS =
-  "process-fold collapse collapse-arrow !overflow-visible !rounded-none !border-0 !bg-transparent";
+  "process-fold group/fold collapse !overflow-visible !rounded-none !border-0 !bg-transparent";
 const PROCESS_FOLD_TITLE_CLASS =
-  "collapse-title !min-h-0 !py-2 !pl-0 !pr-10 text-xs font-medium";
+  "collapse-title process-fold-title !min-h-0 !w-fit !max-w-full !py-1.5 !px-0 !pe-0 text-xs font-medium";
 const PROCESS_FOLD_CONTENT_CLASS = "collapse-content !px-0 !pb-1.5 !pt-1";
+
+/** Right gutter for TTS — centers the control on the first text line. */
+const TTS_CONTROL_CLASS =
+  "flex h-[1lh] w-8 shrink-0 items-center justify-center self-start";
+
+function FoldChevron() {
+  return (
+    <span className="process-fold-chevron relative inline-flex size-3.5 shrink-0" aria-hidden>
+      {/* Collapsed: › — hidden until hover on the summary label */}
+      <svg
+        className="absolute inset-0 size-3.5 text-base-content/55 opacity-0 transition-opacity group-hover/sum:opacity-100 group-open/fold:hidden"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M6 3.5 10.5 8 6 12.5" />
+      </svg>
+      {/* Expanded: ∨ — always visible */}
+      <svg
+        className="absolute inset-0 hidden size-3.5 text-base-content/55 group-open/fold:block"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3.5 6 8 10.5 12.5 6" />
+      </svg>
+    </span>
+  );
+}
+
+function ProcessFoldSummary({ children }: { children: ReactNode }) {
+  return (
+    <summary className={`${PROCESS_FOLD_TITLE_CLASS} group/sum`}>
+      <span className="process-fold-label">{children}</span>
+      <FoldChevron />
+    </summary>
+  );
+}
+
+function TextWithTts({
+  id,
+  text,
+  className = "",
+}: {
+  id: string;
+  text: string;
+  className?: string;
+}) {
+  return (
+    <div className="flex items-start gap-0 text-sm leading-relaxed">
+      <MarkdownContent
+        className={`min-w-0 flex-1 break-words ${className}`.trim()}
+      >
+        {text}
+      </MarkdownContent>
+      <div className={TTS_CONTROL_CLASS}>
+        <DialogueTtsPlayButton id={id} text={text} />
+      </div>
+    </div>
+  );
+}
 
 function ProcessFold({
   summary,
@@ -62,7 +129,7 @@ function ProcessFold({
 }) {
   return (
     <details className={PROCESS_FOLD_CLASS}>
-      <summary className={PROCESS_FOLD_TITLE_CLASS}>{summary}</summary>
+      <ProcessFoldSummary>{summary}</ProcessFoldSummary>
       <div className={`${PROCESS_FOLD_CONTENT_CLASS} space-y-1`}>{children}</div>
     </details>
   );
@@ -77,14 +144,9 @@ function ThinkingBlock({
 }) {
   return (
     <details key={blockKey} className={PROCESS_FOLD_CLASS}>
-      <summary className={PROCESS_FOLD_TITLE_CLASS}>
-        {thoughtFoldLabel(block.data)}
-      </summary>
-      <div className={`${PROCESS_FOLD_CONTENT_CLASS} relative pr-12`}>
-        <MarkdownContent className="text-sm">{block.data.text}</MarkdownContent>
-        <div className="absolute right-0 top-1">
-          <DialogueTtsPlayButton id={`${blockKey}-tts`} text={block.data.text} />
-        </div>
+      <ProcessFoldSummary>{thoughtFoldLabel(block.data)}</ProcessFoldSummary>
+      <div className={PROCESS_FOLD_CONTENT_CLASS}>
+        <TextWithTts id={`${blockKey}-tts`} text={block.data.text} />
       </div>
     </details>
   );
@@ -122,11 +184,11 @@ function ToolGroupBlock({
   const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
   return (
     <details key={blockKey} className={PROCESS_FOLD_CLASS}>
-      <summary className={PROCESS_FOLD_TITLE_CLASS}>
+      <ProcessFoldSummary>
         工具
         {timeRange ? ` · ${timeRange}` : ""}
         {` · ${countLabel} · ${summarizeToolNames(tools)}`}
-      </summary>
+      </ProcessFoldSummary>
       <div className={PROCESS_FOLD_CONTENT_CLASS}>
         <ul className="space-y-0.5 font-mono text-[11px] opacity-70">
           {tools.map((tool, idx) => (
@@ -149,17 +211,14 @@ function ResponseBlock({
 }) {
   const timeLabel = formatTimelineTime(block.timestamp);
   return (
-    <div key={blockKey} className="relative pr-12">
+    <div key={blockKey}>
       {(timeLabel || block.data.model) && (
         <div className="mb-1 text-[11px] opacity-60">
           {timeLabel}
           {block.data.model ? ` · ${block.data.model}` : ""}
         </div>
       )}
-      <MarkdownContent className="break-words text-sm">{block.data.text}</MarkdownContent>
-      <div className="absolute right-2 top-0">
-        <DialogueTtsPlayButton id={`${blockKey}-tts`} text={block.data.text} />
-      </div>
+      <TextWithTts id={`${blockKey}-tts`} text={block.data.text} />
     </div>
   );
 }
@@ -185,10 +244,10 @@ function TranscriptToolGroupBlock({
   const countLabel = tools.length === 1 ? "1 次" : `${tools.length} 次`;
   return (
     <details key={blockKey} className={PROCESS_FOLD_CLASS}>
-      <summary className={PROCESS_FOLD_TITLE_CLASS}>
+      <ProcessFoldSummary>
         工具
         {` · ${countLabel} · ${summarizeTranscriptToolNames(tools)}`}
-      </summary>
+      </ProcessFoldSummary>
       <div className={PROCESS_FOLD_CONTENT_CLASS}>
         <div className="flex flex-wrap gap-1.5">
           {tools.map((item, i) => (
@@ -216,10 +275,10 @@ function TranscriptToolRoundsFold({
   const countLabel = allTools.length === 1 ? "1 次" : `${allTools.length} 次`;
   return (
     <details key={blockKey} className={PROCESS_FOLD_CLASS}>
-      <summary className={PROCESS_FOLD_TITLE_CLASS}>
+      <ProcessFoldSummary>
         工具
         {` · ${roundLabel} · ${countLabel} · ${summarizeTranscriptToolNames(allTools)}`}
-      </summary>
+      </ProcessFoldSummary>
       <div className={`${PROCESS_FOLD_CONTENT_CLASS} space-y-1`}>
         {batches.map((batch) => (
           <TranscriptToolGroupBlock
@@ -300,12 +359,7 @@ function TranscriptContentItemView({
 }) {
   if (item.type === "text") {
     return (
-      <div key={itemKey} className="relative pr-12">
-        <MarkdownContent className="break-words text-sm">{item.text}</MarkdownContent>
-        <div className="absolute right-2 top-0">
-          <DialogueTtsPlayButton id={`${itemKey}-tts`} text={item.text} />
-        </div>
-      </div>
+      <TextWithTts key={itemKey} id={`${itemKey}-tts`} text={item.text} />
     );
   }
   return (
@@ -447,14 +501,12 @@ function ActivityItemViews({
           );
         }
         return (
-          <div key={itemKey} className="relative pr-12">
-            <MarkdownContent className="break-words text-sm opacity-90">
-              {item.text}
-            </MarkdownContent>
-            <div className="absolute right-2 top-0">
-              <DialogueTtsPlayButton id={`${itemKey}-tts`} text={item.text} />
-            </div>
-          </div>
+          <TextWithTts
+            key={itemKey}
+            id={`${itemKey}-tts`}
+            text={item.text}
+            className="opacity-90"
+          />
         );
       })}
     </>
@@ -470,9 +522,7 @@ function ActivityGroupFold({
 }) {
   return (
     <details key={blockKey} className={PROCESS_FOLD_CLASS}>
-      <summary className={PROCESS_FOLD_TITLE_CLASS}>
-        {node.summary}
-      </summary>
+      <ProcessFoldSummary>{node.summary}</ProcessFoldSummary>
       <div className={`${PROCESS_FOLD_CONTENT_CLASS} space-y-1`}>
         <ActivityItemViews items={node.items} blockKey={blockKey} />
       </div>
@@ -517,12 +567,11 @@ function renderProcessActivityNodes(
       );
     }
     return (
-      <div key={blockKey} className="relative pr-12">
-        <MarkdownContent className="break-words text-sm">{node.text}</MarkdownContent>
-        <div className="absolute right-2 top-0">
-          <DialogueTtsPlayButton id={`${blockKey}-tts`} text={node.text} />
-        </div>
-      </div>
+      <TextWithTts
+        key={blockKey}
+        id={`${blockKey}-tts`}
+        text={node.text}
+      />
     );
   });
 }
