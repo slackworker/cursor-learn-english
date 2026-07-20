@@ -57,6 +57,14 @@ export function toolUseLabel(name: string, input: Record<string, unknown>): stri
   if (name === "Glob" && typeof input.glob_pattern === "string") {
     return `Glob · ${input.glob_pattern}`;
   }
+  if (name === "Task" && typeof input.description === "string") {
+    const description = input.description.trim();
+    if (description) {
+      return description.length > 40
+        ? `Task · ${description.slice(0, 40)}…`
+        : `Task · ${description}`;
+    }
+  }
   return name;
 }
 

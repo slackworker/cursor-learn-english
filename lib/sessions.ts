@@ -72,6 +72,8 @@ export type SessionSubagentLink = {
   title_dom_contexts?: DomContextBlock[];
   title_segments?: PromptSegment[];
   title_body?: string;
+  /** Short Task `description` from hooks (best match key for transcript Task chips). */
+  task_description?: string;
   subagent_type?: string;
   start?: string;
   timestamp?: string;
@@ -988,13 +990,61 @@ function collectSubagentsForParent(
     ) {
       continue;
     }
+
+    let task_description: string | undefined;
+    let subagent_type = summary?.subagent_type;
+    for (const e of events) {
+      if (!SUBAGENT_EVENT_TYPES.has(e.event_type)) continue;
+      const parent = sanitizeSessionId(
+        (typeof e.parent_session_id === "string" && e.parent_session_id) ||
+          (typeof e.parent_conversation_id === "string" &&
+            e.parent_conversation_id) ||
+          ""
+      );
+      if (parent !== sanitizedParent) continue;
+      const fromPath = subagentIdFromTranscriptPath(
+        (e as { agent_transcript_path?: string }).agent_transcript_path
+      );
+      const eventId = sanitizeSessionId(fromPath || getSubagentSessionId(e));
+      const sameChild =
+        fromPath === id ||
+        (eventId !== "" && (eventId === id || aliasIds.has(eventId)));
+      if (!sameChild) {
+        // Stop often only has call-* id; fall back to description ↔ title.
+        const stopDescription =
+          e.event_type === "subagentStop" &&
+          typeof e.description === "string"
+            ? e.description.trim()
+            : "";
+        const title = summary?.title?.trim() ?? "";
+        if (
+          !stopDescription ||
+          !title ||
+          (stopDescription !== title &&
+            !(
+              title.endsWith("…") &&
+              stopDescription.startsWith(title.replace(/…$/, ""))
+            ))
+        ) {
+          continue;
+        }
+      }
+      if (typeof e.description === "string" && e.description.trim()) {
+        task_description = e.description.trim();
+      }
+      if (typeof e.subagent_type === "string" && e.subagent_type.trim()) {
+        subagent_type = e.subagent_type.trim();
+      }
+    }
+
     links.push({
       session_id: id,
       title: summary?.title,
       title_dom_contexts: summary?.title_dom_contexts,
       title_segments: summary?.title_segments,
       title_body: summary?.title_body,
-      subagent_type: summary?.subagent_type,
+      task_description: task_description || summary?.title,
+      subagent_type,
       start: summary?.start,
       timestamp: summary?.timestamp,
       is_open: summary?.is_open,

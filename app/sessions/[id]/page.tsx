@@ -47,6 +47,7 @@ type SessionDetail = {
     title_dom_contexts?: DomContextBlock[];
     title_segments?: PromptSegment[];
     title_body?: string;
+    task_description?: string;
     subagent_type?: string;
     start?: string;
     timestamp?: string;
@@ -363,6 +364,7 @@ export default function SessionDetailPage() {
                       <DialogueTimeline
                         round={turn.round}
                         transcriptSteps={turn.assistant_steps}
+                        subagents={session.subagents}
                         transcriptSegments={
                           turn.assistant_steps?.length
                             ? undefined

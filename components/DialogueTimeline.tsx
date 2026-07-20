@@ -1,6 +1,12 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
+import Link from "next/link";
+import {
+  createContext,
+  Fragment,
+  useContext,
+  type ReactNode,
+} from "react";
 import {
   DialogueTtsPlayButton,
   DialogueTtsProvider,
@@ -20,6 +26,8 @@ import {
   splitProcessAndFinalUnits,
   type ProcessTimelineUnit,
 } from "@/lib/interleave-transcript";
+import type { SessionSubagentLink } from "@/lib/sessions";
+import { resolveTaskSubagent } from "@/lib/task-subagent";
 import {
   isFileEditTool,
   toolUseLabel,
@@ -28,6 +36,7 @@ import {
   type TranscriptToolUseItem,
 } from "@/lib/transcript-content";
 
+const TaskSubagentsContext = createContext<SessionSubagentLink[] | null>(null);
 function ProcessFold({
   summary,
   children,
@@ -256,25 +265,53 @@ function TranscriptToolUseChip({
   name: string;
   input: Record<string, unknown>;
 }) {
+  const subagents = useContext(TaskSubagentsContext);
   const label = toolUseLabel(name, input);
   const fileEdit = isFileEditTool(name);
+  const linked =
+    name === "Task" && subagents
+      ? resolveTaskSubagent(input, subagents)
+      : undefined;
+  const href = linked
+    ? `/sessions/${encodeURIComponent(linked.session_id)}`
+    : undefined;
+  const title =
+    linked != null
+      ? `${linked.subagent_type ? `${linked.subagent_type} · ` : ""}${
+          linked.title ?? linked.task_description ?? linked.session_id
+        }`
+      : typeof input.path === "string"
+        ? input.path
+        : typeof input.description === "string"
+          ? input.description
+          : undefined;
+
+  const className = fileEdit
+    ? "inline-flex items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 py-0.5 font-mono text-[11px] text-success"
+    : href
+      ? "inline-flex items-center gap-1 rounded-md border border-info/40 bg-info/10 px-2 py-0.5 font-mono text-[11px] text-info underline-offset-2 hover:underline"
+      : "inline-flex items-center gap-1 rounded-md border border-base-300 bg-base-100 px-2 py-0.5 font-mono text-[11px] opacity-80";
+
+  const body = fileEdit ? (
+    <>
+      <span className="font-semibold">{name}</span>
+      <span className="opacity-70">{label}</span>
+    </>
+  ) : (
+    label
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={className} title={title}>
+        {body}
+      </Link>
+    );
+  }
+
   return (
-    <span
-      className={
-        fileEdit
-          ? "inline-flex items-center gap-1 rounded-md border border-success/40 bg-success/10 px-2 py-0.5 font-mono text-[11px] text-success"
-          : "inline-flex items-center gap-1 rounded-md border border-base-300 bg-base-100 px-2 py-0.5 font-mono text-[11px] opacity-80"
-      }
-      title={typeof input.path === "string" ? input.path : undefined}
-    >
-      {fileEdit ? (
-        <>
-          <span className="font-semibold">{name}</span>
-          <span className="opacity-70">{label}</span>
-        </>
-      ) : (
-        label
-      )}
+    <span className={className} title={title}>
+      {body}
     </span>
   );
 }
@@ -484,95 +521,97 @@ export function DialogueTimeline({
   round,
   transcriptSegments,
   transcriptSteps,
+  subagents,
   emptyMessage = "（该轮暂无助手文本）",
 }: {
   round?: TimelineRoundInput;
   transcriptSegments?: string[];
   /** When set, render from agent-transcripts (text + tool_use) instead of events-only timeline. */
   transcriptSteps?: TranscriptAssistantStep[];
+  /** Parent session's Task children — used to link Task chips to subagent pages. */
+  subagents?: SessionSubagentLink[];
   emptyMessage?: string;
 }) {
-  if (transcriptSteps && transcriptSteps.length > 0) {
-    const replyAfterTimestamp =
-      round?.response_segments?.at(-1)?.timestamp ??
-      round?.response?.timestamp;
-    return (
-      <DialogueTtsProvider>
+  const body = (() => {
+    if (transcriptSteps && transcriptSteps.length > 0) {
+      const replyAfterTimestamp =
+        round?.response_segments?.at(-1)?.timestamp ??
+        round?.response?.timestamp;
+      return (
         <TranscriptStepsTimeline
           steps={transcriptSteps}
           thinking={round?.thinking ?? []}
           tools={round?.tools ?? []}
           replyAfterTimestamp={replyAfterTimestamp}
         />
-      </DialogueTtsProvider>
-    );
-  }
-
-  if (!round) {
-    return <p className="text-sm opacity-60">{emptyMessage}</p>;
-  }
-
-  const blocks = buildDialogueTimeline(round, transcriptSegments);
-  if (blocks.length === 0) {
-    return <p className="text-sm opacity-60">{emptyMessage}</p>;
-  }
-
-  const { process, final } = splitTimelineProcessAndFinal(blocks);
-
-  const renderBlock = (
-    block: DialogueTimelineBlock,
-    idx: number,
-    nested: boolean
-  ) => {
-    const blockKey = `${block.kind}-${block.timestamp}-${idx}`;
-    if (block.kind === "thinking") {
-      return (
-        <ThinkingBlock
-          key={blockKey}
-          block={block}
-          blockKey={blockKey}
-          nested={nested}
-        />
       );
     }
-    if (block.kind === "tool-group") {
-      return (
-        <ToolGroupBlock
-          key={blockKey}
-          block={block}
-          blockKey={blockKey}
-          nested={nested}
-        />
-      );
-    }
-    if (block.kind === "response") {
-      return <ResponseBlock key={blockKey} block={block} blockKey={blockKey} />;
-    }
-    return null;
-  };
 
-  const processSummary = (() => {
-    const parts = ["过程"];
-    const thinkingCount = process.filter((b) => b.kind === "thinking").length;
-    const toolBlocks = process.filter(
-      (b): b is Extract<DialogueTimelineBlock, { kind: "tool-group" }> =>
-        b.kind === "tool-group"
-    );
-    const allTools = toolBlocks.flatMap((b) => b.tools);
-    if (thinkingCount > 0) {
-      parts.push(
-        thinkingCount === 1 ? "Thinking×1" : `Thinking×${thinkingCount}`
-      );
+    if (!round) {
+      return <p className="text-sm opacity-60">{emptyMessage}</p>;
     }
-    if (allTools.length > 0) {
-      const countLabel = allTools.length === 1 ? "1 次" : `${allTools.length} 次`;
-      parts.push(`工具 · ${countLabel} · ${summarizeToolNames(allTools)}`);
-    }
-    return parts.join(" · ");
-  })();
 
-  return (
-    <DialogueTtsProvider>
+    const blocks = buildDialogueTimeline(round, transcriptSegments);
+    if (blocks.length === 0) {
+      return <p className="text-sm opacity-60">{emptyMessage}</p>;
+    }
+
+    const { process, final } = splitTimelineProcessAndFinal(blocks);
+
+    const renderBlock = (
+      block: DialogueTimelineBlock,
+      idx: number,
+      nested: boolean
+    ) => {
+      const blockKey = `${block.kind}-${block.timestamp}-${idx}`;
+      if (block.kind === "thinking") {
+        return (
+          <ThinkingBlock
+            key={blockKey}
+            block={block}
+            blockKey={blockKey}
+            nested={nested}
+          />
+        );
+      }
+      if (block.kind === "tool-group") {
+        return (
+          <ToolGroupBlock
+            key={blockKey}
+            block={block}
+            blockKey={blockKey}
+            nested={nested}
+          />
+        );
+      }
+      if (block.kind === "response") {
+        return <ResponseBlock key={blockKey} block={block} blockKey={blockKey} />;
+      }
+      return null;
+    };
+
+    const processSummary = (() => {
+      const parts = ["过程"];
+      const thinkingCount = process.filter((b) => b.kind === "thinking").length;
+      const toolBlocks = process.filter(
+        (b): b is Extract<DialogueTimelineBlock, { kind: "tool-group" }> =>
+          b.kind === "tool-group"
+      );
+      const allTools = toolBlocks.flatMap((b) => b.tools);
+      if (thinkingCount > 0) {
+        parts.push(
+          thinkingCount === 1 ? "Thinking×1" : `Thinking×${thinkingCount}`
+        );
+      }
+      if (allTools.length > 0) {
+        const countLabel =
+          allTools.length === 1 ? "1 次" : `${allTools.length} 次`;
+        parts.push(`工具 · ${countLabel} · ${summarizeToolNames(allTools)}`);
+      }
+      return parts.join(" · ");
+    })();
+
+    return (
       <div className="space-y-2">
         {process.length > 0 ? (
           <ProcessFold summary={processSummary}>
@@ -581,6 +620,12 @@ export function DialogueTimeline({
         ) : null}
         {final.map((block, idx) => renderBlock(block, idx, false))}
       </div>
-    </DialogueTtsProvider>
+    );
+  })();
+
+  return (
+    <TaskSubagentsContext.Provider value={subagents ?? null}>
+      <DialogueTtsProvider>{body}</DialogueTtsProvider>
+    </TaskSubagentsContext.Provider>
   );
 }
