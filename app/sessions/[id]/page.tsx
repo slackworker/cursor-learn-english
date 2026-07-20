@@ -41,6 +41,17 @@ type SessionDetail = {
   parent_session_title_segments?: PromptSegment[];
   parent_session_title_body?: string;
   subagent_type?: string;
+  subagents?: Array<{
+    session_id: string;
+    title?: string;
+    title_dom_contexts?: DomContextBlock[];
+    title_segments?: PromptSegment[];
+    title_body?: string;
+    subagent_type?: string;
+    start?: string;
+    timestamp?: string;
+    is_open?: boolean;
+  }>;
   prompt_count: number;
   thinking_count: number;
   event_counts: Record<string, number>;
@@ -249,6 +260,43 @@ export default function SessionDetailPage() {
                 className="min-w-0 font-normal text-base-content/70"
               />
             </Link>
+          ) : null}
+          {session.subagents && session.subagents.length > 0 ? (
+            <span className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="shrink-0 text-xs text-base-content/60">
+                子代理
+                {session.subagents.length > 1
+                  ? `·${session.subagents.length}`
+                  : ""}
+              </span>
+              {session.subagents.map((sub) => (
+                <Link
+                  key={sub.session_id}
+                  href={`/sessions/${encodeURIComponent(sub.session_id)}`}
+                  title={
+                    sub.title
+                      ? `${sub.subagent_type ? `${sub.subagent_type} · ` : ""}${sub.title} (${sub.session_id})`
+                      : sub.session_id
+                  }
+                  className="inline-flex min-w-0 max-w-full flex-wrap items-baseline gap-1 text-xs text-base-content/60 underline-offset-2 hover:underline"
+                >
+                  {sub.subagent_type ? (
+                    <span className="shrink-0 text-base-content/45">
+                      {sub.subagent_type}
+                    </span>
+                  ) : null}
+                  <SessionTitleView
+                    title={sub.title}
+                    segments={sub.title_segments}
+                    domContexts={sub.title_dom_contexts}
+                    body={sub.title_body}
+                    fallback={`会话 ${sub.session_id.slice(0, 8)}…`}
+                    variant="wrap"
+                    className="min-w-0 font-normal text-base-content/70"
+                  />
+                </Link>
+              ))}
+            </span>
           ) : null}
         </span>
       }

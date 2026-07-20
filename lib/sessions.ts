@@ -65,6 +65,19 @@ type PromptRecord = {
   timestamp: string;
 };
 
+/** Child Task subagent link shown on a parent session detail page. */
+export type SessionSubagentLink = {
+  session_id: string;
+  title?: string;
+  title_dom_contexts?: DomContextBlock[];
+  title_segments?: PromptSegment[];
+  title_body?: string;
+  subagent_type?: string;
+  start?: string;
+  timestamp?: string;
+  is_open?: boolean;
+};
+
 export type SessionDetail = SessionSummary & {
   event_counts: Record<string, number>;
   prompt_count: number;
@@ -84,6 +97,8 @@ export type SessionDetail = SessionSummary & {
       round?: DialogueRound;
     }
   >;
+  /** Subagent children of this session (parent detail views). */
+  subagents?: SessionSubagentLink[];
 };
 
 const SESSION_EVENT_TYPES = new Set(["sessionStart", "sessionEnd"]);
@@ -929,6 +944,68 @@ function collectDetailAliasIds(
   return aliasIds;
 }
 
+/**
+ * Collect Task subagent children for a parent session.
+ * Prefers filesystem `<parent>/subagents/*.jsonl`, merges hook UUIDs with matching parent.
+ */
+function collectSubagentsForParent(
+  parentId: string,
+  events: CursorEvent[],
+  prompts: PromptRecord[]
+): SessionSubagentLink[] {
+  const sanitizedParent = sanitizeSessionId(parentId);
+  if (!sanitizedParent) return [];
+
+  const idSet = new Set(
+    listSubagentIdsForParent(sanitizedParent)
+      .map(sanitizeSessionId)
+      .filter(Boolean)
+  );
+
+  for (const e of events) {
+    if (!SUBAGENT_EVENT_TYPES.has(e.event_type)) continue;
+    const parent = sanitizeSessionId(
+      (typeof e.parent_session_id === "string" && e.parent_session_id) ||
+        (typeof e.parent_conversation_id === "string" &&
+          e.parent_conversation_id) ||
+        ""
+    );
+    if (parent !== sanitizedParent) continue;
+    const fromPath = subagentIdFromTranscriptPath(
+      (e as { agent_transcript_path?: string }).agent_transcript_path
+    );
+    const id = sanitizeSessionId(fromPath || getSubagentSessionId(e));
+    if (id && isUuidSessionId(id)) idSet.add(id);
+  }
+
+  const links: SessionSubagentLink[] = [];
+  for (const id of idSet) {
+    const aliasIds = collectDetailAliasIds(id, id, events);
+    const summary = buildSingleSessionSummary(id, events, prompts, aliasIds);
+    if (
+      summary?.parent_session_id &&
+      sanitizeSessionId(summary.parent_session_id) !== sanitizedParent
+    ) {
+      continue;
+    }
+    links.push({
+      session_id: id,
+      title: summary?.title,
+      title_dom_contexts: summary?.title_dom_contexts,
+      title_segments: summary?.title_segments,
+      title_body: summary?.title_body,
+      subagent_type: summary?.subagent_type,
+      start: summary?.start,
+      timestamp: summary?.timestamp,
+      is_open: summary?.is_open,
+    });
+  }
+
+  return links.sort((a, b) =>
+    (a.start ?? a.timestamp ?? "").localeCompare(b.start ?? b.timestamp ?? "")
+  );
+}
+
 /** Build one session summary from scoped events — no full-list / all-titles scan. */
 function buildSingleSessionSummary(
   lookupId: string,
@@ -1168,12 +1245,17 @@ export function getSessionDetail(sessionId: string): SessionDetail | null {
     ? resolveSessionDisplayTitles([parentId]).get(parentId)
     : undefined;
 
+  const subagents = summary.is_subagent
+    ? undefined
+    : collectSubagentsForParent(lookupId, events, prompts);
+
   return {
     ...summary,
     parent_session_title: parentTitle?.title,
     parent_session_title_dom_contexts: parentTitle?.title_dom_contexts,
     parent_session_title_segments: parentTitle?.title_segments,
     parent_session_title_body: parentTitle?.title_body,
+    subagents: subagents && subagents.length > 0 ? subagents : undefined,
     event_counts: {
       ...event_counts,
       _truncated_sources: Number(
