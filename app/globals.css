@@ -439,23 +439,6 @@ html[data-theme="business"] {
   @apply mb-5 inline-flex items-center gap-1 text-sm font-medium text-base-content/50 transition-colors hover:text-primary;
 }
 
-/* ── Detail meta grid ── */
-.meta-grid {
-  @apply grid gap-3 sm:grid-cols-2 lg:grid-cols-4;
-}
-
-.meta-card {
-  @apply p-4;
-}
-
-.meta-card-label {
-  @apply text-xs font-medium uppercase tracking-wide text-base-content/45;
-}
-
-.meta-card-value {
-  @apply mt-1.5 text-sm font-medium text-base-content;
-}
-
 /* ── TTS settings drawer ── */
 .tts-drawer {
   border-color: var(--surface-border);

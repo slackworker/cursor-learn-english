@@ -341,35 +341,8 @@ export default function SessionDetailPage() {
         </div>
       </div>
 
-      <section className="meta-grid mt-2">
-        {[
-          { label: "开始时间", value: formatLocalDateTime(session.start) },
-          {
-            label: "结束时间",
-            value: session.is_open ? "进行中" : formatLocalDateTime(session.timestamp),
-          },
-          {
-            label: "会话时长",
-            value: (
-              <>
-                {formatDurationMs(session.duration_ms)}
-                {session.is_open ? (
-                  <span className="mt-0.5 block text-xs text-base-content/40">自开始至最近活跃</span>
-                ) : null}
-              </>
-            ),
-          },
-          { label: "结束原因", value: session.reason ?? "—" },
-        ].map((item) => (
-          <Surface key={item.label} className="meta-card" padding="md">
-            <p className="meta-card-label">{item.label}</p>
-            <div className="meta-card-value">{item.value}</div>
-          </Surface>
-        ))}
-      </section>
-
       {sortedTurns.length > 0 ? (
-        <section className="mt-8">
+        <section className="mt-6">
           <h2 className="section-title">对话流</h2>
           <Surface padding="none">
             <ul className="dialogue-list">
@@ -419,12 +392,23 @@ export default function SessionDetailPage() {
           </Surface>
         </section>
       ) : (
-        <Surface className="mt-8">
+        <Surface className="mt-6">
           <p className="text-sm text-base-content/50">暂无 transcript 对话数据，下面展示事件聚合轮次。</p>
         </Surface>
       )}
 
-      <section className="mt-6">
+      <p className="mt-6 text-xs text-base-content/45">
+        开始 {formatLocalDateTime(session.start)}
+        {" · "}
+        结束 {session.is_open ? "进行中" : formatLocalDateTime(session.timestamp)}
+        {" · "}
+        时长 {formatDurationMs(session.duration_ms)}
+        {session.is_open ? "（至最近活跃）" : ""}
+        {" · "}
+        {session.reason ?? "—"}
+      </p>
+
+      <section className="mt-4">
         <details
           open={openDebugRounds}
           className="surface p-4"
