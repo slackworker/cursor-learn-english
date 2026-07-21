@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
+import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
 
 type VocabSource = "prompt" | "thinking" | "response";
@@ -16,6 +17,8 @@ type PhraseFreq = {
 type VocabData = {
   words: WordFreq[];
   phrases: PhraseFreq[];
+  uniqueWords?: number;
+  uniquePhrases?: number;
   totalTokens: number;
   totalRecords: number;
   bySource: Record<VocabSource, number>;
@@ -24,6 +27,8 @@ type VocabData = {
 };
 
 type Tab = "words" | "phrases";
+
+const PAGE_SIZE = 100;
 
 const SOURCE_OPTIONS: { id: VocabSource; label: string }[] = [
   { id: "prompt", label: "提问" },
@@ -111,6 +116,7 @@ export function VocabStats() {
   const [onlyStarred, setOnlyStarred] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
   const [minCount, setMinCount] = useState(1);
+  const [page, setPage] = useState(1);
   const [sources, setSources] = useState<VocabSource[]>([
     "prompt",
     "thinking",
@@ -119,9 +125,8 @@ export function VocabStats() {
 
   const fetchVocab = useCallback((selected: VocabSource[]) => {
     setLoading(true);
+    // No top-N cut — full lists; grid paginates client-side.
     const params = new URLSearchParams({
-      wordLimit: "1000",
-      phraseLimit: "1000",
       sources: selected.join(","),
     });
     fetch(`/api/vocab?${params}`)
@@ -132,6 +137,7 @@ export function VocabStats() {
   }, []);
 
   useEffect(() => {
+    setPage(1);
     fetchVocab(sources);
   }, [sources, fetchVocab]);
 
@@ -203,6 +209,24 @@ export function VocabStats() {
     return sorted;
   }, [data, search, sortAsc, minCount]);
 
+  const filteredTotal =
+    tab === "words" ? filteredWords.length : filteredPhrases.length;
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab, search, onlyStarred, minCount, sortAsc]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageItems = useMemo(() => {
+    const items = tab === "words" ? filteredWords : filteredPhrases;
+    const start = (page - 1) * PAGE_SIZE;
+    return items.slice(start, start + PAGE_SIZE);
+  }, [tab, filteredWords, filteredPhrases, page]);
+
   const toggleStar = (word: string) => {
     setStarredWords((prev) => (prev.includes(word) ? prev.filter((w) => w !== word) : [...prev, word]));
   };
@@ -268,8 +292,11 @@ export function VocabStats() {
     value: d.count,
   }));
 
-  const currentItems = tab === "words" ? filteredWords : filteredPhrases;
+  const uniqueWords = data?.uniqueWords ?? data?.words.length ?? 0;
+  const uniquePhrases = data?.uniquePhrases ?? data?.phrases.length ?? 0;
   const bySource = data?.bySource ?? { prompt: 0, thinking: 0, response: 0 };
+  const pageStart = filteredTotal === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const pageEnd = Math.min(page * PAGE_SIZE, filteredTotal);
 
   return (
     <div className={`space-y-6 ${loading ? "opacity-60" : ""}`}>
@@ -277,8 +304,8 @@ export function VocabStats() {
         {[
           { label: "语料条数", value: data?.totalRecords ?? 0 },
           { label: "总词数（含重复）", value: (data?.totalTokens ?? 0).toLocaleString() },
-          { label: "不重复单词", value: data?.words.length ?? 0 },
-          { label: "固定搭配（命中）", value: data?.phrases.length ?? 0 },
+          { label: "不重复单词", value: uniqueWords.toLocaleString() },
+          { label: "固定搭配（命中）", value: uniquePhrases.toLocaleString() },
         ].map((c) => (
           <div key={c.label} className="stat-card">
             <div className="stat-card-accent" aria-hidden />
@@ -389,7 +416,7 @@ export function VocabStats() {
             type="button"
             className="btn btn-ghost btn-sm"
             onClick={handleExport}
-            disabled={currentItems.length === 0}
+            disabled={filteredTotal === 0}
           >
             导出 CSV
           </button>
@@ -403,73 +430,90 @@ export function VocabStats() {
       )}
 
       <Surface padding="sm">
-        {currentItems.length === 0 ? (
+        {pageItems.length === 0 ? (
           <div className="py-10 text-center text-sm text-base-content/40">无匹配结果</div>
         ) : (
-          <div className="vocab-grid">
-            {currentItems.map((item, index) => {
-              const isWord = "word" in item;
-              const text = isWord ? item.word : (item as PhraseFreq).phrase;
-              const gloss = !isWord ? (item as PhraseFreq).gloss : undefined;
-              const starred = isWord && starredWords.includes(text);
-              return (
-                <div
-                  key={text}
-                  className={`vocab-card ${starred ? "vocab-card-starred" : ""}`}
-                >
-                  <div className="mb-2 flex items-start justify-between gap-1">
-                    <div className="min-w-0 flex-1">
-                      <div className="break-words font-mono text-xs md:text-sm">
-                        <span className="mr-1 text-[10px] text-base-content/35">#{index + 1}</span>
-                        {text}
+          <>
+            <div className="vocab-grid">
+              {pageItems.map((item, index) => {
+                const isWord = "word" in item;
+                const text = isWord ? item.word : (item as PhraseFreq).phrase;
+                const gloss = !isWord ? (item as PhraseFreq).gloss : undefined;
+                const starred = isWord && starredWords.includes(text);
+                const rank = pageStart + index;
+                return (
+                  <div
+                    key={text}
+                    className={`vocab-card ${starred ? "vocab-card-starred" : ""}`}
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-1">
+                      <div className="min-w-0 flex-1">
+                        <div className="break-words font-mono text-xs md:text-sm">
+                          <span className="mr-1 text-[10px] text-base-content/35">
+                            #{rank}
+                          </span>
+                          {text}
+                        </div>
+                        {gloss ? (
+                          <p className="mt-1 text-xs leading-snug text-base-content/55">
+                            {gloss}
+                          </p>
+                        ) : null}
                       </div>
-                      {gloss ? (
-                        <p className="mt-1 text-xs leading-snug text-base-content/55">
-                          {gloss}
-                        </p>
-                      ) : null}
+                      {isWord && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs px-1"
+                          onClick={() => toggleStar(text)}
+                          aria-label={starred ? "取消生词标记" : "标记为生词"}
+                        >
+                          {starred ? (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              className="h-3.5 w-3.5 text-warning"
+                            >
+                              <path d="M12 2.25l2.955 6.016 6.645.967-4.8 4.68 1.133 6.617L12 17.75l-5.933 3.12 1.133-6.617-4.8-4.68 6.645-.967L12 2.25z" />
+                            </svg>
+                          ) : (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              className="h-3.5 w-3.5 text-base-content/40"
+                            >
+                              <path d="M12 2.75l2.7 5.5 6.05.88-4.375 4.27 1.033 6.02L12 16.96l-5.408 2.91 1.033-6.02L3.25 9.13l6.05-.88L12 2.75z" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
                     </div>
-                    {isWord && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs px-1"
-                        onClick={() => toggleStar(text)}
-                        aria-label={starred ? "取消生词标记" : "标记为生词"}
-                      >
-                        {starred ? (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                            className="h-3.5 w-3.5 text-warning"
-                          >
-                            <path d="M12 2.25l2.955 6.016 6.645.967-4.8 4.68 1.133 6.617L12 17.75l-5.933 3.12 1.133-6.617-4.8-4.68 6.645-.967L12 2.25z" />
-                          </svg>
-                        ) : (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            className="h-3.5 w-3.5 text-base-content/40"
-                          >
-                            <path d="M12 2.75l2.7 5.5 6.05.88-4.375 4.27 1.033 6.02L12 16.96l-5.408 2.91 1.033-6.02L3.25 9.13l6.05-.88L12 2.75z" />
-                          </svg>
-                        )}
-                      </button>
-                    )}
+                    <div className="flex items-center justify-between text-xs text-base-content/45">
+                      <span>{tab === "words" ? "单词" : "搭配"}</span>
+                      <span className="font-semibold tabular-nums text-base-content/70">
+                        {item.count} 次
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-base-content/45">
-                    <span>{tab === "words" ? "单词" : "搭配"}</span>
-                    <span className="font-semibold tabular-nums text-base-content/70">
-                      {item.count} 次
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              disabled={loading}
+              onPrev={() => setPage((p) => Math.max(1, p - 1))}
+              onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+              summary={
+                filteredTotal === 0
+                  ? `每页 ${PAGE_SIZE} 条`
+                  : `第 ${pageStart}–${pageEnd} 条 · 共 ${filteredTotal} 条 · 每页 ${PAGE_SIZE}`
+              }
+            />
+          </>
         )}
       </Surface>
     </div>

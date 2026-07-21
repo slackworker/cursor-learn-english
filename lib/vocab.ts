@@ -35,6 +35,10 @@ export type PhraseFreq = {
 export type VocabResult = {
   words: WordFreq[];
   phrases: PhraseFreq[];
+  /** Total unique words before any optional limit slice. */
+  uniqueWords: number;
+  /** Total dictionary phrase hits before any optional limit slice. */
+  uniquePhrases: number;
   totalTokens: number;
   totalRecords: number;
   bySource: Record<VocabSource, number>;
@@ -408,8 +412,19 @@ function matchDictionaryPhrases(sequences: string[][]): PhraseFreq[] {
     .sort((a, b) => b.count - a.count || a.phrase.localeCompare(b.phrase));
 }
 
-// In-memory cache keyed by file mtime + filter params + limits
-let cache: { key: string; data: VocabResult } | null = null;
+/** Full frequency lists; optional API limits only slice the response. */
+type VocabCachePayload = {
+  words: WordFreq[];
+  phrases: PhraseFreq[];
+  totalTokens: number;
+  totalRecords: number;
+  bySource: Record<VocabSource, number>;
+  sources: VocabSource[];
+  dictionarySize: number;
+};
+
+// In-memory cache keyed by file mtime + filter params (not page limits)
+let cache: { key: string; data: VocabCachePayload } | null = null;
 
 function appendPathSignature(
   parts: string[],
@@ -433,8 +448,6 @@ function getCacheKey(opts?: {
   to?: string;
   model?: string;
   sources?: VocabSource[];
-  wordLimit?: number;
-  phraseLimit?: number;
 }): string {
   const sources = normalizeVocabSources(opts?.sources);
   const parts: string[] = [];
@@ -457,16 +470,19 @@ function getCacheKey(opts?: {
   }
 
   return [
-    "phrases-dict-v8",
+    "phrases-dict-v9",
     stems.join("+"),
     sources.slice().sort().join(","),
     parts.join(","),
     opts?.from || "",
     opts?.to || "",
     opts?.model || "",
-    String(opts?.wordLimit ?? ""),
-    String(opts?.phraseLimit ?? ""),
   ].join(":");
+}
+
+function applyLimit<T>(items: T[], limit?: number): T[] {
+  if (limit == null || limit <= 0) return items;
+  return items.slice(0, limit);
 }
 
 export function getVocabStats(opts?: {
@@ -474,40 +490,47 @@ export function getVocabStats(opts?: {
   to?: string;
   model?: string;
   sources?: VocabSource[];
+  /** Optional response slice; omit / ≤0 = return all (UI paginates). */
   wordLimit?: number;
   phraseLimit?: number;
 }): VocabResult {
   const sources = normalizeVocabSources(opts?.sources);
   const key = getCacheKey({ ...opts, sources });
-  if (cache && cache.key === key) return cache.data;
 
-  const chunks = readTextChunks({ ...opts, sources });
-  const allTokens: string[] = [];
-  const sentences: string[][] = [];
-  const bySource = emptyBySource();
+  let full = cache && cache.key === key ? cache.data : null;
+  if (!full) {
+    const chunks = readTextChunks({ ...opts, sources });
+    const allTokens: string[] = [];
+    const sentences: string[][] = [];
+    const bySource = emptyBySource();
 
-  for (const chunk of chunks) {
-    bySource[chunk.source] += 1;
-    allTokens.push(...tokenize(chunk.text));
-    sentences.push(...tokenizeSentences(chunk.text));
+    for (const chunk of chunks) {
+      bySource[chunk.source] += 1;
+      allTokens.push(...tokenize(chunk.text));
+      sentences.push(...tokenizeSentences(chunk.text));
+    }
+
+    full = {
+      words: countWords(allTokens),
+      phrases: matchDictionaryPhrases(sentences),
+      totalTokens: allTokens.length,
+      totalRecords: chunks.length,
+      bySource,
+      sources,
+      dictionarySize: getPhraseDictionary().length,
+    };
+    cache = { key, data: full };
   }
 
-  const dictSize = getPhraseDictionary().length;
-  const words = countWords(allTokens).slice(0, opts?.wordLimit ?? 200);
-  const phrases = matchDictionaryPhrases(sentences).slice(
-    0,
-    opts?.phraseLimit ?? 200
-  );
-
-  const data: VocabResult = {
-    words,
-    phrases,
-    totalTokens: allTokens.length,
-    totalRecords: chunks.length,
-    bySource,
-    sources,
-    dictionarySize: dictSize,
+  return {
+    words: applyLimit(full.words, opts?.wordLimit),
+    phrases: applyLimit(full.phrases, opts?.phraseLimit),
+    uniqueWords: full.words.length,
+    uniquePhrases: full.phrases.length,
+    totalTokens: full.totalTokens,
+    totalRecords: full.totalRecords,
+    bySource: full.bySource,
+    sources: full.sources,
+    dictionarySize: full.dictionarySize,
   };
-  cache = { key, data };
-  return data;
 }

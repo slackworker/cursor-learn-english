@@ -1,7 +1,8 @@
 export const MAX_API_PAGE_SIZE = 100;
 export const MAX_API_DATE_SPAN_DAYS = 90;
-export const MAX_API_WORD_LIMIT = 500;
-export const MAX_API_PHRASE_LIMIT = 500;
+/** Soft ceiling when a client requests truncation; omit limit = return all. */
+export const MAX_API_WORD_LIMIT = 100_000;
+export const MAX_API_PHRASE_LIMIT = 100_000;
 export const DEFAULT_SESSIONS_LOOKBACK_DAYS = 90;
 
 function parseDateKey(s: string): Date | null {

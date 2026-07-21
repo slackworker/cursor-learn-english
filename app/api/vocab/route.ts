@@ -7,6 +7,16 @@ import {
   normalizeDateRange,
 } from "@/lib/api-limits";
 
+function parseOptionalLimit(
+  raw: string | null,
+  max: number
+): number | undefined {
+  // Omit / 0 / "all" → full list (client paginates).
+  if (!raw || raw === "all" || raw === "0") return undefined;
+  const n = clampLimit(parseInt(raw, 10), 0, max);
+  return n > 0 ? n : undefined;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const { from, to } = normalizeDateRange(
@@ -15,14 +25,12 @@ export async function GET(request: NextRequest) {
   );
   const model = searchParams.get("model") ?? undefined;
   const sources = normalizeVocabSources(searchParams.get("sources"));
-  const wordLimit = clampLimit(
-    parseInt(searchParams.get("wordLimit") ?? "200", 10),
-    200,
+  const wordLimit = parseOptionalLimit(
+    searchParams.get("wordLimit"),
     MAX_API_WORD_LIMIT
   );
-  const phraseLimit = clampLimit(
-    parseInt(searchParams.get("phraseLimit") ?? "200", 10),
-    200,
+  const phraseLimit = parseOptionalLimit(
+    searchParams.get("phraseLimit"),
     MAX_API_PHRASE_LIMIT
   );
 
@@ -34,5 +42,11 @@ export async function GET(request: NextRequest) {
     wordLimit,
     phraseLimit,
   });
-  return Response.json({ ...data, from, to, wordLimit, phraseLimit });
+  return Response.json({
+    ...data,
+    from,
+    to,
+    wordLimit: wordLimit ?? null,
+    phraseLimit: phraseLimit ?? null,
+  });
 }
