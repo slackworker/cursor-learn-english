@@ -1,24 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Check, Undo2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { SlidersHorizontal, Undo2 } from "lucide-react";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
+import { VocabSettingsDrawer } from "@/components/VocabSettingsDrawer";
 import { useVocabPass } from "@/hooks/useVocabPass";
+import { lockBodyScroll } from "@/lib/body-scroll-lock";
 import type { VocabPassKind } from "@/lib/vocab-pass";
 import {
-  CEFR_HIDE_PRESETS,
   DEFAULT_DIFFICULTY_FILTER,
-  NGSL_HIDE_PRESETS,
-  ZIPF_HIDE_PRESETS,
   isBasicWord,
   loadDifficultyFilter,
   normalizeDifficultyFilter,
   saveDifficultyFilter,
   type CefrLevel,
   type DifficultyFilter,
-  type DifficultyProfile,
 } from "@/lib/word-difficulty-shared";
 
 type VocabSource = "prompt" | "thinking" | "response";
@@ -68,19 +67,6 @@ type DisplayItem = {
 };
 
 const PAGE_SIZE = 100;
-
-const SOURCE_OPTIONS: { id: VocabSource; label: string }[] = [
-  { id: "prompt", label: "提问" },
-  { id: "thinking", label: "Thinking" },
-  { id: "response", label: "回复" },
-];
-
-const PROFILE_OPTIONS: { id: DifficultyProfile; label: string }[] = [
-  { id: "off", label: "不过滤" },
-  { id: "ngsl", label: "NGSL" },
-  { id: "cefr", label: "CEFR-J" },
-  { id: "zipf", label: "Zipf" },
-];
 
 function BarChart({ items }: { items: { name: string; value: number }[] }) {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -152,36 +138,6 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
-function SourceFilters({
-  sources,
-  onToggle,
-}: {
-  sources: VocabSource[];
-  onToggle: (id: VocabSource) => void;
-}) {
-  return (
-    <div className="toolbar-filters" role="group" aria-label="语料来源">
-      {SOURCE_OPTIONS.map(({ id, label }) => {
-        const active = sources.includes(id);
-        return (
-          <button
-            key={id}
-            type="button"
-            className={`toolbar-chip ${active ? "toolbar-chip-active" : ""}`}
-            aria-pressed={active}
-            onClick={() => onToggle(id)}
-          >
-            <span className="toolbar-chip-check" aria-hidden>
-              {active ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
-            </span>
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function sortByCount<T extends { count: number }>(items: T[], asc: boolean): T[] {
   return [...items].sort((a, b) => (asc ? a.count - b.count : b.count - a.count));
 }
@@ -206,6 +162,12 @@ export function VocabStats() {
     ...DEFAULT_DIFFICULTY_FILTER,
   });
   const [diffHydrated, setDiffHydrated] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   useEffect(() => {
     setDiffFilter(loadDifficultyFilter());
@@ -216,6 +178,19 @@ export function VocabStats() {
     if (!diffHydrated) return;
     saveDifficultyFilter(diffFilter);
   }, [diffFilter, diffHydrated]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSettingsOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const unlockScroll = lockBodyScroll();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      unlockScroll();
+    };
+  }, [settingsOpen]);
 
   const updateDiffFilter = (patch: Partial<DifficultyFilter>) => {
     setDiffFilter((prev) => normalizeDifficultyFilter({ ...prev, ...patch }));
@@ -433,11 +408,39 @@ export function VocabStats() {
     return (
       <div className="space-y-6">
         <div className="toolbar">
-          <SourceFilters sources={sources} onToggle={toggleSource} />
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm gap-1.5 ml-auto"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+            筛选
+          </button>
         </div>
         <EmptyState>
           暂无数据。请确认提问、Thinking 或回复语料中有英文记录。
         </EmptyState>
+        {portalReady
+          ? createPortal(
+              <VocabSettingsDrawer
+                open={settingsOpen}
+                onClose={() => setSettingsOpen(false)}
+                sources={sources}
+                onToggleSource={toggleSource}
+                minCount={minCount}
+                onMinCountChange={setMinCount}
+                isWordTab
+                diffFilter={diffFilter}
+                onDiffFilterChange={updateDiffFilter}
+                sortAsc={sortAsc}
+                onSortAscChange={setSortAsc}
+                showChart={showChart}
+                onShowChartChange={setShowChart}
+                showPassed={showPassed}
+              />,
+              document.body
+            )
+          : null}
       </div>
     );
   }
@@ -498,13 +501,12 @@ export function VocabStats() {
         {hiddenBasicCount > 0 ? (
           <>
             <span className="mx-2 text-base-content/25">·</span>
-            已隐藏基础词 {hiddenBasicCount.toLocaleString()}
+            已排除过易词 {hiddenBasicCount.toLocaleString()}
           </>
         ) : null}
       </p>
 
       <div className="toolbar">
-        <SourceFilters sources={sources} onToggle={toggleSource} />
         <div className="toolbar-tabs" role="tablist">
           <button
             type="button"
@@ -541,133 +543,7 @@ export function VocabStats() {
             onChange={() => setShowPassed((v) => !v)}
           />
         </label>
-        <label className="label cursor-pointer gap-2 p-0">
-          <span className="label-text text-sm text-base-content/60">最小次数</span>
-          <select
-            className="select select-bordered select-sm bg-base-100"
-            value={minCount}
-            onChange={(e) => setMinCount(Number(e.target.value) || 1)}
-          >
-            <option value={1}>≥1</option>
-            <option value={2}>≥2</option>
-            <option value={3}>≥3</option>
-            <option value={5}>≥5</option>
-            <option value={10}>≥10</option>
-          </select>
-        </label>
-        {isWordTab ? (
-          <>
-            <label
-              className="label cursor-pointer gap-2 p-0"
-              title="隐藏过易单词：NGSL / CEFR-J / Zipf 三套方案可切换"
-            >
-              <span className="label-text text-sm text-base-content/60">基础词</span>
-              <select
-                className="select select-bordered select-sm bg-base-100"
-                value={diffFilter.profile}
-                onChange={(e) =>
-                  updateDiffFilter({
-                    profile: e.target.value as DifficultyProfile,
-                  })
-                }
-              >
-                {PROFILE_OPTIONS.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {diffFilter.profile === "ngsl" ? (
-              <label className="label cursor-pointer gap-2 p-0">
-                <span className="label-text text-sm text-base-content/60">
-                  隐藏 ≤
-                </span>
-                <select
-                  className="select select-bordered select-sm bg-base-100"
-                  value={diffFilter.ngslMaxRank ?? DEFAULT_DIFFICULTY_FILTER.ngslMaxRank ?? 500}
-                  onChange={(e) =>
-                    updateDiffFilter({
-                      profile: "ngsl",
-                      ngslMaxRank: Number(e.target.value),
-                    })
-                  }
-                >
-                  {NGSL_HIDE_PRESETS.map((n) => (
-                    <option key={n} value={n}>
-                      {n === 2809 ? "全部 NGSL" : `NGSL 前 ${n}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            {diffFilter.profile === "cefr" ? (
-              <label className="label cursor-pointer gap-2 p-0">
-                <span className="label-text text-sm text-base-content/60">
-                  隐藏 ≤
-                </span>
-                <select
-                  className="select select-bordered select-sm bg-base-100"
-                  value={diffFilter.cefrMax ?? "a2"}
-                  onChange={(e) =>
-                    updateDiffFilter({
-                      profile: "cefr",
-                      cefrMax: e.target.value as CefrLevel,
-                    })
-                  }
-                >
-                  {CEFR_HIDE_PRESETS.map((lv) => (
-                    <option key={lv} value={lv}>
-                      {lv.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            {diffFilter.profile === "zipf" ? (
-              <label className="label cursor-pointer gap-2 p-0">
-                <span className="label-text text-sm text-base-content/60">
-                  隐藏 ≥
-                </span>
-                <select
-                  className="select select-bordered select-sm bg-base-100"
-                  value={diffFilter.zipfMin ?? 5}
-                  onChange={(e) =>
-                    updateDiffFilter({
-                      profile: "zipf",
-                      zipfMin: Number(e.target.value),
-                    })
-                  }
-                >
-                  {ZIPF_HIDE_PRESETS.map((z) => (
-                    <option key={z} value={z}>
-                      Zipf {z.toFixed(1)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-          </>
-        ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {!showPassed && (
-            <div className="toolbar-tabs">
-              <button
-                type="button"
-                className={`toolbar-tab ${!sortAsc ? "toolbar-tab-active" : ""}`}
-                onClick={() => setSortAsc(false)}
-              >
-                次数↓
-              </button>
-              <button
-                type="button"
-                className={`toolbar-tab ${sortAsc ? "toolbar-tab-active" : ""}`}
-                onClick={() => setSortAsc(true)}
-              >
-                次数↑
-              </button>
-            </div>
-          )}
           <button
             type="button"
             className="btn btn-ghost btn-sm gap-1"
@@ -685,19 +561,39 @@ export function VocabStats() {
           {lastUndone ? (
             <span className="text-xs text-success/80">已恢复「{lastUndone}」</span>
           ) : null}
-          {!showPassed && (
-            <label className="label cursor-pointer gap-2 p-0">
-              <span className="label-text text-sm text-base-content/60">图表</span>
-              <input
-                type="checkbox"
-                className="toggle toggle-sm toggle-primary"
-                checked={showChart}
-                onChange={() => setShowChart(!showChart)}
-              />
-            </label>
-          )}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm gap-1.5"
+            onClick={() => setSettingsOpen(true)}
+            aria-expanded={settingsOpen}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+            筛选
+          </button>
         </div>
       </div>
+
+      {portalReady
+        ? createPortal(
+            <VocabSettingsDrawer
+              open={settingsOpen}
+              onClose={() => setSettingsOpen(false)}
+              sources={sources}
+              onToggleSource={toggleSource}
+              minCount={minCount}
+              onMinCountChange={setMinCount}
+              isWordTab={isWordTab}
+              diffFilter={diffFilter}
+              onDiffFilterChange={updateDiffFilter}
+              sortAsc={sortAsc}
+              onSortAscChange={setSortAsc}
+              showChart={showChart}
+              onShowChartChange={setShowChart}
+              showPassed={showPassed}
+            />,
+            document.body
+          )
+        : null}
 
       {showChart && !showPassed && (
         <Surface>
