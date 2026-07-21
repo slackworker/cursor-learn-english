@@ -185,6 +185,40 @@ const CORE_VERB_PREP = [
 ];
 
 /**
+ * High-frequency verb + to / modality patterns.
+ * Kept on purpose — learners may pass them later if too easy; do not pre-filter.
+ */
+const CORE_SEMI_AUX = [
+  ["want to", "wish or desire to do something", "collocation"],
+  ["need to", "have to; be required to", "collocation"],
+  ["have to", "must; be obliged to", "collocation"],
+  ["try to", "attempt to do something", "collocation"],
+  ["going to", "intend to; future marker (be going to)", "collocation"],
+  ["used to", "did regularly in the past; be accustomed to", "collocation"],
+  ["able to", "having the ability to", "collocation"],
+  ["supposed to", "expected or required to", "collocation"],
+  ["ought to", "should; it is advisable to", "collocation"],
+  ["about to", "on the point of doing something", "collocation"],
+  ["mean to", "intend to", "collocation"],
+  ["hope to", "wish and expect to", "collocation"],
+  ["seem to", "appear to", "collocation"],
+  ["tend to", "be inclined to; usually do", "collocation"],
+  ["fail to", "not succeed in doing", "collocation"],
+  ["prefer to", "like better to", "collocation"],
+  ["decide to", "make a choice to", "collocation"],
+  ["plan to", "intend / arrange to", "collocation"],
+  ["expect to", "believe something will happen that one will", "collocation"],
+  ["continue to", "keep doing", "collocation"],
+  ["start to", "begin to", "collocation"],
+  ["begin to", "start to", "collocation"],
+  ["refuse to", "decline to do", "collocation"],
+  ["agree to", "consent to do", "collocation"],
+  ["forget to", "fail to remember to do", "collocation"],
+  ["remember to", "not forget to do", "collocation"],
+  ["manage to", "succeed in doing (often with difficulty)", "collocation"],
+];
+
+/**
  * Learner / academic lexical collocations often absent from subtitle-derived lists.
  * Verb lemmas without articles; articles + conjugations expanded at load time.
  */
@@ -287,6 +321,8 @@ const IRREGULAR_VERBS = {
   focus: ["focuses", "focusses", "focused", "focussed", "focusing", "focussing"],
   deal: ["deals", "dealt", "dealing"],
   based: ["based"],
+  mean: ["means", "meant", "meaning"],
+  forget: ["forgets", "forgot", "forgotten", "forgetting"],
 };
 
 function normalizePhrase(raw) {
@@ -426,6 +462,36 @@ function loadCoreVerbPrep(map) {
     }
   }
   console.log(`core verb-prep (+conjugations): +${added} (map size ${map.size})`);
+}
+
+/** Surface forms for verb+to / be+adj+to patterns. */
+function expandSemiAuxPhrase(phrase) {
+  const parts = normalizePhrase(phrase).split(" ").filter(Boolean);
+  if (parts.length !== 2) return [normalizePhrase(phrase)];
+  const [a, b] = parts;
+  const be = ["be", "am", "is", "are", "was", "were", "been", "being"];
+
+  // Fixed / participle patterns — do not fan out go→went (different sense)
+  if (a === "going") {
+    return ["going to", ...be.map((x) => `${x} going to`)];
+  }
+  if (a === "able" || a === "supposed" || a === "about") {
+    return [`${a} ${b}`, ...be.map((x) => `${x} ${a} ${b}`)];
+  }
+  if (a === "ought" || a === "used") {
+    return [`${a} ${b}`];
+  }
+  return expandLexicalVariants(`${a} ${b}`, "verb-prep");
+}
+
+function loadCoreSemiAux(map) {
+  let added = 0;
+  for (const [phrase, gloss, category] of CORE_SEMI_AUX) {
+    for (const variant of expandSemiAuxPhrase(phrase)) {
+      if (addEntry(map, variant, gloss, category, "core-semi-aux")) added += 1;
+    }
+  }
+  console.log(`core semi-aux (+conjugations): +${added} (map size ${map.size})`);
 }
 
 const ADJ_NOUN_FIRST = new Set([
@@ -620,6 +686,7 @@ async function main() {
   // Discourse / PP / core first so common learner phrases keep good glosses
   loadCoreFixed(map);
   loadCoreVerbPrep(map);
+  loadCoreSemiAux(map);
   loadCoreCollocations(map);
   loadDimlex(paths.dimlex, map);
   loadPpIdioms(paths.ppBegin, map, "ppidioms");
@@ -637,6 +704,7 @@ async function main() {
     sources: {
       coreFixed: "built-in high-frequency fixed expressions",
       coreVerbPrep: "built-in verb–preposition pairs with conjugations",
+      coreSemiAux: "built-in verb+to / modality patterns (want to, need to, …)",
       coreCollocation: "built-in learner/academic collocations",
       dimlex: "https://github.com/discourse-lab/en_dimlex",
       ppidioms: "https://github.com/kenclr/ppidioms",
@@ -672,6 +740,11 @@ async function main() {
     "next step",
     "key point",
     "on behalf of",
+    "want to",
+    "wants to",
+    "need to",
+    "have to",
+    "try to",
   ]) {
     const hit = map.get(k);
     console.log(
