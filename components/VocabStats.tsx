@@ -147,7 +147,7 @@ export function VocabStats() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("words");
   const [search, setSearch] = useState("");
-  const [showChart, setShowChart] = useState(true);
+  const [showChart, setShowChart] = useState(false);
   const [showPassed, setShowPassed] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
   const [minCount, setMinCount] = useState(2);
