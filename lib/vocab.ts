@@ -16,6 +16,7 @@ import {
   type PhraseCategory,
   type PhraseDictEntry,
 } from "./phrase-dictionary";
+import { getWordDictionary, lookupWord } from "./word-dictionary";
 
 export type VocabSource = "prompt" | "thinking" | "response";
 
@@ -25,7 +26,13 @@ export const ALL_VOCAB_SOURCES: VocabSource[] = [
   "response",
 ];
 
-export type WordFreq = { word: string; count: number };
+export type WordFreq = {
+  word: string;
+  count: number;
+  gloss?: string;
+  ipa?: string;
+  pos?: string;
+};
 export type PhraseFreq = {
   phrase: string;
   count: number;
@@ -43,7 +50,10 @@ export type VocabResult = {
   totalRecords: number;
   bySource: Record<VocabSource, number>;
   sources: VocabSource[];
+  /** Phrase dictionary size. */
   dictionarySize: number;
+  /** Word dictionary size (IPA + gloss entries). */
+  wordDictionarySize: number;
 };
 
 type PromptRecord = {
@@ -235,7 +245,16 @@ function countWords(tokens: string[]): WordFreq[] {
     freq.set(t, (freq.get(t) || 0) + 1);
   }
   return Array.from(freq.entries())
-    .map(([word, count]) => ({ word, count }))
+    .map(([word, count]) => {
+      const entry = lookupWord(word);
+      return {
+        word,
+        count,
+        ...(entry?.gloss ? { gloss: entry.gloss } : {}),
+        ...(entry?.ipa ? { ipa: entry.ipa } : {}),
+        ...(entry?.pos ? { pos: entry.pos } : {}),
+      };
+    })
     .sort((a, b) => b.count - a.count);
 }
 
@@ -421,6 +440,7 @@ type VocabCachePayload = {
   bySource: Record<VocabSource, number>;
   sources: VocabSource[];
   dictionarySize: number;
+  wordDictionarySize: number;
 };
 
 // In-memory cache keyed by file mtime + filter params (not page limits)
@@ -470,7 +490,7 @@ function getCacheKey(opts?: {
   }
 
   return [
-    "phrases-dict-v9",
+    "words-dict-v1",
     stems.join("+"),
     sources.slice().sort().join(","),
     parts.join(","),
@@ -518,6 +538,7 @@ export function getVocabStats(opts?: {
       bySource,
       sources,
       dictionarySize: getPhraseDictionary().length,
+      wordDictionarySize: getWordDictionary().length,
     };
     cache = { key, data: full };
   }
@@ -532,5 +553,6 @@ export function getVocabStats(opts?: {
     bySource: full.bySource,
     sources: full.sources,
     dictionarySize: full.dictionarySize,
+    wordDictionarySize: full.wordDictionarySize,
   };
 }

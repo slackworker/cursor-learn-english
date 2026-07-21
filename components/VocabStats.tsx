@@ -7,7 +7,13 @@ import { Surface } from "@/components/ui/Surface";
 
 type VocabSource = "prompt" | "thinking" | "response";
 
-type WordFreq = { word: string; count: number };
+type WordFreq = {
+  word: string;
+  count: number;
+  gloss?: string;
+  ipa?: string;
+  pos?: string;
+};
 type PhraseFreq = {
   phrase: string;
   count: number;
@@ -24,6 +30,7 @@ type VocabData = {
   bySource: Record<VocabSource, number>;
   sources: VocabSource[];
   dictionarySize?: number;
+  wordDictionarySize?: number;
 };
 
 type Tab = "words" | "phrases";
@@ -179,7 +186,13 @@ export function VocabStats() {
     let items = data.words;
     if (search) {
       const q = search.toLowerCase();
-      items = items.filter((w) => w.word.includes(q));
+      items = items.filter(
+        (w) =>
+          w.word.includes(q) ||
+          (w.gloss && w.gloss.toLowerCase().includes(q)) ||
+          (w.ipa && w.ipa.toLowerCase().includes(q)) ||
+          (w.pos && w.pos.toLowerCase().includes(q))
+      );
     }
     if (onlyStarred) {
       items = items.filter((w) => starredWords.includes(w.word));
@@ -236,11 +249,17 @@ export function VocabStats() {
     if (items.length === 0) return;
 
     const lines = [
-      tab === "words" ? "rank,word,count" : "rank,phrase,count,gloss,category",
+      tab === "words"
+        ? "rank,word,ipa,gloss,pos,count"
+        : "rank,phrase,count,gloss,category",
       ...items.map((item, index) => {
         if ("word" in item) {
-          const safeText = `"${item.word.replace(/"/g, '""')}"`;
-          return `${index + 1},${safeText},${item.count}`;
+          const w = item as WordFreq;
+          const safeText = `"${w.word.replace(/"/g, '""')}"`;
+          const safeIpa = `"${(w.ipa ?? "").replace(/"/g, '""')}"`;
+          const safeGloss = `"${(w.gloss ?? "").replace(/"/g, '""')}"`;
+          const safePos = `"${(w.pos ?? "").replace(/"/g, '""')}"`;
+          return `${index + 1},${safeText},${safeIpa},${safeGloss},${safePos},${w.count}`;
         }
         const p = item as PhraseFreq;
         const safePhrase = `"${p.phrase.replace(/"/g, '""')}"`;
@@ -318,8 +337,11 @@ export function VocabStats() {
       <p className="text-sm text-base-content/50">
         来源：提问 {bySource.prompt} · Thinking {bySource.thinking} · 回复{" "}
         {bySource.response}
+        {data?.wordDictionarySize != null ? (
+          <> · 单词词典 {data.wordDictionarySize.toLocaleString()} 条</>
+        ) : null}
         {data?.dictionarySize != null ? (
-          <> · 词典 {data.dictionarySize} 条</>
+          <> · 搭配词典 {data.dictionarySize.toLocaleString()} 条</>
         ) : null}
       </p>
 
@@ -438,7 +460,12 @@ export function VocabStats() {
               {pageItems.map((item, index) => {
                 const isWord = "word" in item;
                 const text = isWord ? item.word : (item as PhraseFreq).phrase;
-                const gloss = !isWord ? (item as PhraseFreq).gloss : undefined;
+                const wordItem = isWord ? (item as WordFreq) : null;
+                const gloss = isWord
+                  ? wordItem?.gloss
+                  : (item as PhraseFreq).gloss;
+                const ipa = wordItem?.ipa;
+                const pos = wordItem?.pos;
                 const starred = isWord && starredWords.includes(text);
                 const rank = pageStart + index;
                 return (
@@ -454,8 +481,16 @@ export function VocabStats() {
                           </span>
                           {text}
                         </div>
+                        {ipa ? (
+                          <p className="vocab-ipa text-primary/80">{ipa}</p>
+                        ) : null}
                         {gloss ? (
                           <p className="mt-1 text-xs leading-snug text-base-content/55">
+                            {pos ? (
+                              <span className="mr-1 text-base-content/35">
+                                {pos}.
+                              </span>
+                            ) : null}
                             {gloss}
                           </p>
                         ) : null}

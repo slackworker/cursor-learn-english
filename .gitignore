@@ -21,7 +21,7 @@ next-env.d.ts
 /data/*.jsonl
 /data/.*-jsonl-prune
 
-# 词典构建缓存（原始下载，体积大；生成结果 phrase-dictionary.generated.json 可入库）
+# 词典构建缓存（原始下载，体积大；生成结果 *.generated.json 可入库）
 /data/.dict-cache/
 
 # orphan-cleanup 脚本备份（体积大，仅本地保留）

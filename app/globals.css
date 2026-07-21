@@ -434,6 +434,18 @@ html[data-theme="business"] {
   @apply border-warning/50 bg-warning/5;
 }
 
+.vocab-ipa {
+  @apply mt-0.5 text-[11px] leading-snug;
+  /* Prefer faces with full IPA coverage; avoid mono (often missing ɪ/ə/ː). */
+  font-family:
+    "Noto Sans",
+    "Segoe UI",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  font-feature-settings: "kern" 1;
+}
+
 /* ── Back link ── */
 .back-link {
   @apply mb-5 inline-flex items-center gap-1 text-sm font-medium text-base-content/50 transition-colors hover:text-primary;
