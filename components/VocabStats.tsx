@@ -43,17 +43,25 @@ function BarChart({ items }: { items: { name: string; value: number }[] }) {
       const top30 = items.slice(0, 30).reverse();
       chart.setOption({
         tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-        grid: { left: 120, right: 30, top: 10, bottom: 30 },
+        grid: { left: 130, right: 30, top: 8, bottom: 24 },
         xAxis: { type: "value" },
         yAxis: {
           type: "category",
           data: top30.map((d) => d.name),
-          axisLabel: { fontSize: 12 },
+          axisLabel: {
+            fontSize: 11,
+            interval: 0,
+            hideOverlap: false,
+            width: 118,
+            overflow: "truncate",
+          },
+          axisTick: { alignWithLabel: true },
         },
         series: [
           {
             type: "bar",
             data: top30.map((d) => d.value),
+            barCategoryGap: "20%",
             itemStyle: { borderRadius: [0, 4, 4, 0] },
           },
         ],
@@ -72,7 +80,7 @@ function BarChart({ items }: { items: { name: string; value: number }[] }) {
   }, [items]);
 
   if (items.length === 0) return null;
-  return <div ref={chartRef} className="h-[500px] w-full" />;
+  return <div ref={chartRef} className="h-[640px] w-full" />;
 }
 
 function SearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
