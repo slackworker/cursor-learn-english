@@ -426,43 +426,18 @@ export function VocabStats() {
 
   return (
     <div className={`space-y-6 ${loading ? "opacity-60" : ""}`}>
-      <div className="stat-grid md:grid-cols-4 lg:grid-cols-4">
-        {[
-          { label: "语料条数", value: String(data?.totalRecords ?? 0) },
-          {
-            label: "总词数（含重复）",
-            value: (data?.totalTokens ?? 0).toLocaleString(),
-          },
-          {
-            label: "待学单词",
-            value: `${remainingWords.toLocaleString()} / ${uniqueWords.toLocaleString()}`,
-          },
-          {
-            label: "待学搭配",
-            value: `${remainingPhrases.toLocaleString()} / ${uniquePhrases.toLocaleString()}`,
-          },
-        ].map((c) => (
-          <div key={c.label} className="stat-card">
-            <div className="stat-card-accent" aria-hidden />
-            <p className="stat-card-label">{c.label}</p>
-            <p className="stat-card-value text-lg md:text-xl">{c.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <p className="text-sm text-base-content/50">
-        来源：提问 {bySource.prompt} · Thinking {bySource.thinking} · 回复{" "}
-        {bySource.response}
-        {data?.wordDictionarySize != null ? (
-          <> · 单词词典 {data.wordDictionarySize.toLocaleString()} 条</>
-        ) : null}
-        {data?.dictionarySize != null ? (
-          <> · 搭配词典 {data.dictionarySize.toLocaleString()} 条</>
-        ) : null}
-        <>
-          {" "}
-          · 已 Pass 单词 {passedWords.length} · 搭配 {passedPhrases.length}
-        </>
+      <p className="text-sm text-base-content/60">
+        待学单词{" "}
+        <span className="tabular-nums text-base-content/80">
+          {remainingWords.toLocaleString()} / {uniqueWords.toLocaleString()}
+        </span>
+        <span className="mx-2 text-base-content/25">·</span>
+        待学搭配{" "}
+        <span className="tabular-nums text-base-content/80">
+          {remainingPhrases.toLocaleString()} / {uniquePhrases.toLocaleString()}
+        </span>
+        <span className="mx-2 text-base-content/25">·</span>
+        已 Pass 单词 {passedWords.length} · 搭配 {passedPhrases.length}
       </p>
 
       <div className="toolbar">
@@ -688,6 +663,18 @@ export function VocabStats() {
           </>
         )}
       </Surface>
+
+      <p className="text-xs text-base-content/40">
+        语料 {(data?.totalRecords ?? 0).toLocaleString()} 条 · 总词数{" "}
+        {(data?.totalTokens ?? 0).toLocaleString()} · 来源：提问 {bySource.prompt}{" "}
+        · Thinking {bySource.thinking} · 回复 {bySource.response}
+        {data?.wordDictionarySize != null ? (
+          <> · 单词词典 {data.wordDictionarySize.toLocaleString()} 条</>
+        ) : null}
+        {data?.dictionarySize != null ? (
+          <> · 搭配词典 {data.dictionarySize.toLocaleString()} 条</>
+        ) : null}
+      </p>
     </div>
   );
 }
