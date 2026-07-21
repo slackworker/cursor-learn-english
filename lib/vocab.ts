@@ -68,6 +68,70 @@ const STOP_WORDS = new Set([
   "file","code","error","value","data","name","param","args","src","app",
 ]);
 
+/** UI / CSS / DOM chrome that forms strong but useless collocations. */
+const PHRASE_NOISE = new Set([
+  "px","em","rem","vh","vw","div","span","html","dom","css","svg","btn","nav",
+  "img","ul","ol","li","tr","td","th","tbody","thead","href","src","style",
+  "width","height","border","rounded","flex","grid","gap","col","row","left",
+  "top","right","bottom","position","absolute","relative","fixed","sticky",
+  "overflow","hidden","auto","react","component","element","path","root",
+  "cursor","rgba","rgb","hsl","webkit","moz","tap","highlight","select",
+  "none","canvas","xl","sm","md","lg","2xl","max","min","box","block",
+  "inline","opacity","shadow","ring","outline","transition","transform",
+  "scale","rotate","translate","justify","items","content","self","place",
+  "whitespace","truncate","pointer","events","user","zr","el","aapppage",
+  "xmlns","viewbox","currentcolor","stroke","fill","button","tcp","dial",
+  "durationms","clientip","treeglyph","bcfe","openclaw","openclaw-gateway",
+]);
+
+/** Short tech acronyms kept despite no vowels. */
+const SHORT_TECH_OK = new Set([
+  "git","npm","api","url","sql","xml","ssh","ftp","cli","cmd","png","jpg",
+  "pdf","svg","css","dom","json","yaml","http","ts","js","py","ui","ux","db",
+]);
+
+/** Tailwind-ish utility class prefixes. */
+const TW_PREFIX =
+  /^(max|min|w|h|p|m|px|py|pt|pb|pl|pr|mx|my|mt|mb|ml|mr|gap|space|text|bg|border|rounded|flex|grid|col|row|items|justify|font|leading|tracking|opacity|z|inset|ring|shadow|outline|transition|duration|ease|scale|rotate|translate|overflow|object|from|via|to|backdrop|blur|brightness)-/;
+
+const HEX_WORD_OK = new Set([
+  "dead","face","cafe","beef","feed","fade","deed","bead","deaf","bade","aced",
+]);
+
+function isNoiseToken(w: string): boolean {
+  if (w.startsWith("-") || w.endsWith("-")) return true;
+  if (PHRASE_NOISE.has(w)) return true;
+  if (TW_PREFIX.test(w)) return true;
+  // single-letter BEM / daisy prefix: a-stage, a-check
+  if (/^[a-z]-/.test(w)) return true;
+  // hex / hash fragments
+  if (/^[a-f0-9]+$/.test(w) && /\d/.test(w)) return true;
+  if (w.length === 2 && /^[a-f]{2}$/.test(w) && w !== "be" && w !== "ad") {
+    return true;
+  }
+  if (/^[a-f]{4}$/.test(w) && !HEX_WORD_OK.has(w)) return true;
+  // short consonant soup (keep git/npm/...)
+  if (
+    w.length <= 3 &&
+    !/[aeiouy]/.test(w) &&
+    !SHORT_TECH_OK.has(w)
+  ) {
+    return true;
+  }
+  // opaque ids / base64-ish blobs (low vowel density)
+  const vowels = (w.match(/[aeiouy]/g) || []).length;
+  if (w.length >= 5 && vowels === 0) return true;
+  if (w.length >= 5 && vowels / w.length < 0.3) return true;
+  if (w.length >= 14 && !w.includes("-")) return true;
+  // aria-/data-/stroke- style attributes
+  if (/^(aria|data|stroke|btn|fill|view|xmlns|collapse|user|tcp)-/.test(w)) {
+    return true;
+  }
+  // multi-hyphen tech identifiers (keep single-hyphen English like real-time)
+  if ((w.match(/-/g) || []).length >= 2) return true;
+  return false;
+}
+
 function stripMarkdown(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ")
@@ -75,6 +139,7 @@ function stripMarkdown(text: string): string {
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/[a-zA-Z_][a-zA-Z0-9_]*\/[a-zA-Z0-9_/.\-]+/g, " ") // file paths
     .replace(/\b[A-Z][a-z]+[A-Z]\w*/g, " ") // camelCase identifiers
+    .replace(/\.[a-z][a-z0-9_-]*/gi, " ") // CSS class selectors (.page-shell)
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^\s*-{3,}\s*$/gm, " ")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -88,14 +153,55 @@ function stripMarkdown(text: string): string {
     .replace(/^\s*>\s?/gm, "");
 }
 
+function isToken(w: string): boolean {
+  return (
+    w.length >= 2 &&
+    w.length <= 30 &&
+    /[a-z]/.test(w) &&
+    !/^\d+$/.test(w) &&
+    !w.startsWith("'") &&
+    !w.endsWith("'")
+  );
+}
+
+/** Flat token stream (for word counts). Keeps short particles like "to"/"up". */
 function tokenize(text: string): string[] {
-  const cleaned = stripMarkdown(text).toLowerCase();
-  return cleaned
+  return stripMarkdown(text)
+    .toLowerCase()
     .split(/[^a-z'-]+/)
-    .filter((w) => w.length >= 3 && w.length <= 30)
-    .filter((w) => /[a-z]/.test(w))
-    .filter((w) => !/^\d+$/.test(w))
-    .filter((w) => !w.startsWith("'") && !w.endsWith("'"));
+    .filter(isToken);
+}
+
+/**
+ * Sentence-bounded token sequences so n-grams never cross ".!?".
+ * Short function words are kept so phrasal verbs / prep collocations survive.
+ */
+/**
+ * Sentence-bounded token sequences so n-grams never cross ".!?".
+ * Noise tokens become hard boundaries (not deleted) so we don't
+ * invent fake collocations like "the is asking".
+ */
+function tokenizeSequences(text: string): string[][] {
+  const cleaned = stripMarkdown(text).toLowerCase();
+  const sequences: string[][] = [];
+
+  for (const sentence of cleaned.split(/[.!?]+/)) {
+    const raw = sentence.split(/[^a-z'-]+/).filter(isToken);
+    let cur: string[] = [];
+    const flush = () => {
+      if (cur.length >= 2) sequences.push(cur);
+      cur = [];
+    };
+    for (const t of raw) {
+      if (isNoiseToken(t)) {
+        flush();
+      } else {
+        cur.push(t);
+      }
+    }
+    flush();
+  }
+  return sequences;
 }
 
 function emptyBySource(): Record<VocabSource, number> {
@@ -217,6 +323,7 @@ function readTextChunks(opts?: {
 function countWords(tokens: string[]): WordFreq[] {
   const freq = new Map<string, number>();
   for (const t of tokens) {
+    if (t.length < 3) continue;
     if (STOP_WORDS.has(t)) continue;
     freq.set(t, (freq.get(t) || 0) + 1);
   }
@@ -225,29 +332,103 @@ function countWords(tokens: string[]): WordFreq[] {
     .sort((a, b) => b.count - a.count);
 }
 
-function extractPhrases(tokens: string[], minCount = 2): PhraseFreq[] {
-  const freq2 = new Map<string, number>();
-  const freq3 = new Map<string, number>();
+/** At least one content word; reject identical repeats / hex soup / weak det+noun. */
+function phraseHasContent(words: string[]): boolean {
+  if (new Set(words).size === 1) return false;
+  if (words.every((w) => /^[a-f0-9]+$/.test(w))) return false;
+  const first = words[0];
+  const last = words[words.length - 1];
+  // "the header" / "within the" / "to update the"
+  if (
+    first === "the" ||
+    first === "a" ||
+    first === "an" ||
+    last === "the" ||
+    last === "a" ||
+    last === "an"
+  ) {
+    return false;
+  }
+  // "everything is"
+  if (
+    words.length === 2 &&
+    (last === "is" || last === "are" || last === "was" || last === "were")
+  ) {
+    return false;
+  }
+  return words.some(
+    (w) => !STOP_WORDS.has(w) && !PHRASE_NOISE.has(w) && w.length >= 3
+  );
+}
 
-  const meaningful = tokens.filter((t) => !STOP_WORDS.has(t));
+/**
+ * Contiguous bigrams/trigrams scored by PMI.
+ * Higher PMI = words co-occur more than by chance (real collocations).
+ */
+function extractPhrases(
+  sequences: string[][],
+  minCount = 3,
+  minPmi = 2.5
+): PhraseFreq[] {
+  const unigram = new Map<string, number>();
+  const bigram = new Map<string, number>();
+  const trigram = new Map<string, number>();
+  let N = 0;
 
-  for (let i = 0; i < meaningful.length - 1; i++) {
-    const bigram = `${meaningful[i]} ${meaningful[i + 1]}`;
-    freq2.set(bigram, (freq2.get(bigram) || 0) + 1);
-  }
-  for (let i = 0; i < meaningful.length - 2; i++) {
-    const trigram = `${meaningful[i]} ${meaningful[i + 1]} ${meaningful[i + 2]}`;
-    freq3.set(trigram, (freq3.get(trigram) || 0) + 1);
+  for (const toks of sequences) {
+    for (const t of toks) {
+      unigram.set(t, (unigram.get(t) || 0) + 1);
+      N += 1;
+    }
+    for (let i = 0; i < toks.length - 1; i++) {
+      const key = `${toks[i]} ${toks[i + 1]}`;
+      bigram.set(key, (bigram.get(key) || 0) + 1);
+    }
+    for (let i = 0; i < toks.length - 2; i++) {
+      const key = `${toks[i]} ${toks[i + 1]} ${toks[i + 2]}`;
+      trigram.set(key, (trigram.get(key) || 0) + 1);
+    }
   }
 
-  const result: PhraseFreq[] = [];
-  for (const [phrase, count] of freq2) {
-    if (count >= minCount) result.push({ phrase, count });
+  if (N === 0) return [];
+
+  type Scored = PhraseFreq & { score: number };
+  const scored: Scored[] = [];
+
+  for (const [phrase, count] of bigram) {
+    if (count < minCount) continue;
+    const parts = phrase.split(" ");
+    if (!phraseHasContent(parts)) continue;
+    const [a, b] = parts;
+    const ca = unigram.get(a) || 0;
+    const cb = unigram.get(b) || 0;
+    if (ca === 0 || cb === 0) continue;
+    // PMI = log2( P(ab) / (P(a)P(b)) ) = log2( N * c(ab) / (c(a)c(b)) )
+    const pmi = Math.log2((N * count) / (ca * cb));
+    if (pmi < minPmi) continue;
+    // Rank by frequency among PMI-qualified collocations (not raw PMI —
+    // rare opaque co-occurrences otherwise dominate the list).
+    scored.push({ phrase, count, score: count * Math.log2(2 + pmi) });
   }
-  for (const [phrase, count] of freq3) {
-    if (count >= minCount) result.push({ phrase, count });
+
+  for (const [phrase, count] of trigram) {
+    if (count < minCount) continue;
+    const parts = phrase.split(" ");
+    if (!phraseHasContent(parts)) continue;
+    const [a, b, c] = parts;
+    const ca = unigram.get(a) || 0;
+    const cb = unigram.get(b) || 0;
+    const cc = unigram.get(c) || 0;
+    if (ca === 0 || cb === 0 || cc === 0) continue;
+    // Approx trigram PMI vs independent unigrams
+    const pmi = Math.log2((N * N * count) / (ca * cb * cc));
+    if (pmi < minPmi) continue;
+    scored.push({ phrase, count, score: count * Math.log2(2 + pmi) });
   }
-  return result.sort((a, b) => b.count - a.count);
+
+  return scored
+    .sort((a, b) => b.score - a.score || b.count - a.count)
+    .map(({ phrase, count }) => ({ phrase, count }));
 }
 
 // In-memory cache keyed by file mtime + filter params + limits
@@ -299,6 +480,7 @@ function getCacheKey(opts?: {
   }
 
   return [
+    "phrases-pmi-v11",
     stems.join("+"),
     sources.slice().sort().join(","),
     parts.join(","),
@@ -324,15 +506,17 @@ export function getVocabStats(opts?: {
 
   const chunks = readTextChunks({ ...opts, sources });
   const allTokens: string[] = [];
+  const sequences: string[][] = [];
   const bySource = emptyBySource();
 
   for (const chunk of chunks) {
     bySource[chunk.source] += 1;
     allTokens.push(...tokenize(chunk.text));
+    sequences.push(...tokenizeSequences(chunk.text));
   }
 
   const words = countWords(allTokens).slice(0, opts?.wordLimit ?? 200);
-  const phrases = extractPhrases(allTokens, 2).slice(
+  const phrases = extractPhrases(sequences).slice(
     0,
     opts?.phraseLimit ?? 200
   );
