@@ -5,7 +5,20 @@ import {
   readMergedJsonlLines,
   stemFromBasePath,
 } from "./jsonl-daily";
-import { getCorpusPath, type ThinkingRecord } from "./thinking";
+import { getEvents, getEventsPath } from "./events";
+import {
+  getCorpusPath,
+  getPromptCorpusPath,
+  type ThinkingRecord,
+} from "./thinking";
+
+export type VocabSource = "prompt" | "thinking" | "response";
+
+export const ALL_VOCAB_SOURCES: VocabSource[] = [
+  "prompt",
+  "thinking",
+  "response",
+];
 
 export type WordFreq = { word: string; count: number };
 export type PhraseFreq = { phrase: string; count: number };
@@ -14,6 +27,21 @@ export type VocabResult = {
   phrases: PhraseFreq[];
   totalTokens: number;
   totalRecords: number;
+  bySource: Record<VocabSource, number>;
+  sources: VocabSource[];
+};
+
+type PromptRecord = {
+  conversation_id: string;
+  prompt: string;
+  timestamp: string;
+};
+
+type TextChunk = {
+  source: VocabSource;
+  text: string;
+  timestamp: string;
+  model?: string;
 };
 
 const STOP_WORDS = new Set([
@@ -48,6 +76,7 @@ function stripMarkdown(text: string): string {
     .replace(/[a-zA-Z_][a-zA-Z0-9_]*\/[a-zA-Z0-9_/.\-]+/g, " ") // file paths
     .replace(/\b[A-Z][a-z]+[A-Z]\w*/g, " ") // camelCase identifiers
     .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*-{3,}\s*$/gm, " ")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
@@ -64,27 +93,125 @@ function tokenize(text: string): string[] {
   return cleaned
     .split(/[^a-z'-]+/)
     .filter((w) => w.length >= 3 && w.length <= 30)
+    .filter((w) => /[a-z]/.test(w))
     .filter((w) => !/^\d+$/.test(w))
     .filter((w) => !w.startsWith("'") && !w.endsWith("'"));
 }
 
-function readRecords(opts?: {
+function emptyBySource(): Record<VocabSource, number> {
+  return { prompt: 0, thinking: 0, response: 0 };
+}
+
+export function normalizeVocabSources(
+  sources?: VocabSource[] | string | null
+): VocabSource[] {
+  const raw =
+    typeof sources === "string"
+      ? sources.split(/[,+\s]+/)
+      : Array.isArray(sources)
+        ? sources
+        : [];
+  const selected = raw
+    .map((s) => s.trim().toLowerCase())
+    .filter((s): s is VocabSource =>
+      s === "prompt" || s === "thinking" || s === "response"
+    );
+  const unique = Array.from(new Set(selected));
+  return unique.length > 0 ? unique : [...ALL_VOCAB_SOURCES];
+}
+
+function inDateRange(
+  timestamp: string,
+  from?: string,
+  to?: string
+): boolean {
+  const day = timestamp.slice(0, 10);
+  if (from && day < from) return false;
+  if (to && day > to) return false;
+  return true;
+}
+
+function readTextChunks(opts?: {
   from?: string;
   to?: string;
   model?: string;
-}): ThinkingRecord[] {
-  const filePath = getCorpusPath();
-  let records = readMergedJsonlLines(filePath, (line) => {
-    try {
-      return JSON.parse(line) as ThinkingRecord;
-    } catch {
-      return null;
+  sources?: VocabSource[];
+}): TextChunk[] {
+  const sources = normalizeVocabSources(opts?.sources);
+  const chunks: TextChunk[] = [];
+
+  if (sources.includes("thinking")) {
+    const records = readMergedJsonlLines(
+      getCorpusPath(),
+      (line) => {
+        try {
+          return JSON.parse(line) as ThinkingRecord;
+        } catch {
+          return null;
+        }
+      },
+      { from: opts?.from, to: opts?.to }
+    ).items;
+
+    for (const r of records) {
+      if (!inDateRange(r.timestamp, opts?.from, opts?.to)) continue;
+      if (opts?.model && r.model !== opts.model) continue;
+      const text = r.text?.trim();
+      if (!text) continue;
+      chunks.push({
+        source: "thinking",
+        text,
+        timestamp: r.timestamp,
+        model: r.model,
+      });
     }
-  }, { from: opts?.from, to: opts?.to }).items;
-  if (opts?.from) records = records.filter((r) => r.timestamp.slice(0, 10) >= opts.from!);
-  if (opts?.to) records = records.filter((r) => r.timestamp.slice(0, 10) <= opts.to!);
-  if (opts?.model) records = records.filter((r) => r.model === opts.model);
-  return records;
+  }
+
+  if (sources.includes("prompt")) {
+    const records = readMergedJsonlLines(
+      getPromptCorpusPath(),
+      (line) => {
+        try {
+          return JSON.parse(line) as PromptRecord;
+        } catch {
+          return null;
+        }
+      },
+      { from: opts?.from, to: opts?.to }
+    ).items;
+
+    for (const r of records) {
+      if (!inDateRange(r.timestamp, opts?.from, opts?.to)) continue;
+      // prompts have no model; skip when a model filter is active
+      if (opts?.model) continue;
+      const text = r.prompt?.trim();
+      if (!text) continue;
+      chunks.push({
+        source: "prompt",
+        text,
+        timestamp: r.timestamp,
+      });
+    }
+  }
+
+  if (sources.includes("response")) {
+    const { events } = getEvents(opts?.from, opts?.to, "afterAgentResponse");
+    for (const e of events) {
+      if (!inDateRange(e.timestamp, opts?.from, opts?.to)) continue;
+      if (opts?.model && e.model !== opts.model) continue;
+      const text =
+        typeof e.response_text === "string" ? e.response_text.trim() : "";
+      if (!text) continue;
+      chunks.push({
+        source: "response",
+        text,
+        timestamp: e.timestamp,
+        model: e.model ?? undefined,
+      });
+    }
+  }
+
+  return chunks;
 }
 
 function countWords(tokens: string[]): WordFreq[] {
@@ -126,20 +253,13 @@ function extractPhrases(tokens: string[], minCount = 2): PhraseFreq[] {
 // In-memory cache keyed by file mtime + filter params + limits
 let cache: { key: string; data: VocabResult } | null = null;
 
-function getCacheKey(opts?: {
-  from?: string;
-  to?: string;
-  model?: string;
-  wordLimit?: number;
-  phraseLimit?: number;
-}): string {
-  const filePath = getCorpusPath();
-  const parts: string[] = [];
-  const paths = [
-    filePath,
-    ...listDailyPaths(filePath, opts?.from, opts?.to),
-  ];
-  const { stem } = stemFromBasePath(filePath);
+function appendPathSignature(
+  parts: string[],
+  filePath: string,
+  from?: string,
+  to?: string
+) {
+  const paths = [filePath, ...listDailyPaths(filePath, from, to)];
   for (const p of paths) {
     try {
       const s = fs.statSync(p);
@@ -148,8 +268,39 @@ function getCacheKey(opts?: {
       parts.push(`${p}:missing`);
     }
   }
+}
+
+function getCacheKey(opts?: {
+  from?: string;
+  to?: string;
+  model?: string;
+  sources?: VocabSource[];
+  wordLimit?: number;
+  phraseLimit?: number;
+}): string {
+  const sources = normalizeVocabSources(opts?.sources);
+  const parts: string[] = [];
+  const stems: string[] = [];
+
+  if (sources.includes("thinking")) {
+    const filePath = getCorpusPath();
+    stems.push(stemFromBasePath(filePath).stem);
+    appendPathSignature(parts, filePath, opts?.from, opts?.to);
+  }
+  if (sources.includes("prompt")) {
+    const filePath = getPromptCorpusPath();
+    stems.push(stemFromBasePath(filePath).stem);
+    appendPathSignature(parts, filePath, opts?.from, opts?.to);
+  }
+  if (sources.includes("response")) {
+    const filePath = getEventsPath();
+    stems.push(stemFromBasePath(filePath).stem);
+    appendPathSignature(parts, filePath, opts?.from, opts?.to);
+  }
+
   return [
-    stem,
+    stems.join("+"),
+    sources.slice().sort().join(","),
     parts.join(","),
     opts?.from || "",
     opts?.to || "",
@@ -163,26 +314,36 @@ export function getVocabStats(opts?: {
   from?: string;
   to?: string;
   model?: string;
+  sources?: VocabSource[];
   wordLimit?: number;
   phraseLimit?: number;
 }): VocabResult {
-  const key = getCacheKey(opts);
+  const sources = normalizeVocabSources(opts?.sources);
+  const key = getCacheKey({ ...opts, sources });
   if (cache && cache.key === key) return cache.data;
 
-  const records = readRecords(opts);
+  const chunks = readTextChunks({ ...opts, sources });
   const allTokens: string[] = [];
-  for (const r of records) {
-    allTokens.push(...tokenize(r.text));
+  const bySource = emptyBySource();
+
+  for (const chunk of chunks) {
+    bySource[chunk.source] += 1;
+    allTokens.push(...tokenize(chunk.text));
   }
 
   const words = countWords(allTokens).slice(0, opts?.wordLimit ?? 200);
-  const phrases = extractPhrases(allTokens, 2).slice(0, opts?.phraseLimit ?? 200);
+  const phrases = extractPhrases(allTokens, 2).slice(
+    0,
+    opts?.phraseLimit ?? 200
+  );
 
   const data: VocabResult = {
     words,
     phrases,
     totalTokens: allTokens.length,
-    totalRecords: records.length,
+    totalRecords: chunks.length,
+    bySource,
+    sources,
   };
   cache = { key, data };
   return data;

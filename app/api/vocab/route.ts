@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { getVocabStats } from "@/lib/vocab";
+import { getVocabStats, normalizeVocabSources } from "@/lib/vocab";
 import {
   clampLimit,
   MAX_API_PHRASE_LIMIT,
@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     searchParams.get("to") ?? undefined
   );
   const model = searchParams.get("model") ?? undefined;
+  const sources = normalizeVocabSources(searchParams.get("sources"));
   const wordLimit = clampLimit(
     parseInt(searchParams.get("wordLimit") ?? "200", 10),
     200,
@@ -25,6 +26,13 @@ export async function GET(request: NextRequest) {
     MAX_API_PHRASE_LIMIT
   );
 
-  const data = getVocabStats({ from, to, model, wordLimit, phraseLimit });
+  const data = getVocabStats({
+    from,
+    to,
+    model,
+    sources,
+    wordLimit,
+    phraseLimit,
+  });
   return Response.json({ ...data, from, to, wordLimit, phraseLimit });
 }

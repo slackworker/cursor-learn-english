@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { Surface } from "@/components/ui/Surface";
+
+type VocabSource = "prompt" | "thinking" | "response";
 
 type WordFreq = { word: string; count: number };
 type PhraseFreq = { phrase: string; count: number };
@@ -11,9 +13,17 @@ type VocabData = {
   phrases: PhraseFreq[];
   totalTokens: number;
   totalRecords: number;
+  bySource: Record<VocabSource, number>;
+  sources: VocabSource[];
 };
 
 type Tab = "words" | "phrases";
+
+const SOURCE_OPTIONS: { id: VocabSource; label: string }[] = [
+  { id: "prompt", label: "提问" },
+  { id: "thinking", label: "Thinking" },
+  { id: "response", label: "回复" },
+];
 
 function BarChart({ items }: { items: { name: string; value: number }[] }) {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -87,15 +97,29 @@ export function VocabStats() {
   const [onlyStarred, setOnlyStarred] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
   const [minCount, setMinCount] = useState(1);
+  const [sources, setSources] = useState<VocabSource[]>([
+    "prompt",
+    "thinking",
+    "response",
+  ]);
 
-  useEffect(() => {
+  const fetchVocab = useCallback((selected: VocabSource[]) => {
     setLoading(true);
-    fetch("/api/vocab?wordLimit=1000&phraseLimit=1000")
+    const params = new URLSearchParams({
+      wordLimit: "1000",
+      phraseLimit: "1000",
+      sources: selected.join(","),
+    });
+    fetch(`/api/vocab?${params}`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchVocab(sources);
+  }, [sources, fetchVocab]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -119,6 +143,16 @@ export function VocabStats() {
       // ignore
     }
   }, [starredWords]);
+
+  const toggleSource = (id: VocabSource) => {
+    setSources((prev) => {
+      if (prev.includes(id)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((s) => s !== id);
+      }
+      return [...prev, id];
+    });
+  };
 
   const filteredWords = useMemo(() => {
     if (!data) return [];
@@ -178,15 +212,31 @@ export function VocabStats() {
     URL.revokeObjectURL(url);
   };
 
-  if (loading) {
+  if (loading && !data) {
     return <LoadingState>正在分析词频…</LoadingState>;
   }
 
-  if (!data || (data.words.length === 0 && data.phrases.length === 0)) {
+  if (!loading && (!data || (data.words.length === 0 && data.phrases.length === 0))) {
     return (
-      <EmptyState>
-        暂无数据。请确认 thinking-corpus.jsonl 中有记录。
-      </EmptyState>
+      <div className="space-y-6">
+        <div className="toolbar">
+          <div className="toolbar-tabs" role="group" aria-label="语料来源">
+            {SOURCE_OPTIONS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                className={`toolbar-tab ${sources.includes(id) ? "toolbar-tab-active" : ""}`}
+                onClick={() => toggleSource(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <EmptyState>
+          暂无数据。请确认提问、Thinking 或回复语料中有英文记录。
+        </EmptyState>
+      </div>
     );
   }
 
@@ -196,15 +246,16 @@ export function VocabStats() {
   }));
 
   const currentItems = tab === "words" ? filteredWords : filteredPhrases;
+  const bySource = data?.bySource ?? { prompt: 0, thinking: 0, response: 0 };
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${loading ? "opacity-60" : ""}`}>
       <div className="stat-grid md:grid-cols-4 lg:grid-cols-4">
         {[
-          { label: "Thinking 条数", value: data.totalRecords },
-          { label: "总词数（含重复）", value: data.totalTokens.toLocaleString() },
-          { label: "不重复单词", value: data.words.length },
-          { label: "高频短语", value: data.phrases.length },
+          { label: "语料条数", value: data?.totalRecords ?? 0 },
+          { label: "总词数（含重复）", value: (data?.totalTokens ?? 0).toLocaleString() },
+          { label: "不重复单词", value: data?.words.length ?? 0 },
+          { label: "高频短语", value: data?.phrases.length ?? 0 },
         ].map((c) => (
           <div key={c.label} className="stat-card">
             <div className="stat-card-accent" aria-hidden />
@@ -214,7 +265,24 @@ export function VocabStats() {
         ))}
       </div>
 
+      <p className="text-sm text-base-content/50">
+        来源：提问 {bySource.prompt} · Thinking {bySource.thinking} · 回复{" "}
+        {bySource.response}
+      </p>
+
       <div className="toolbar">
+        <div className="toolbar-tabs" role="group" aria-label="语料来源">
+          {SOURCE_OPTIONS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              className={`toolbar-tab ${sources.includes(id) ? "toolbar-tab-active" : ""}`}
+              onClick={() => toggleSource(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="toolbar-tabs" role="tablist">
           <button
             type="button"

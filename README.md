@@ -8,7 +8,6 @@
 [B站视频-使用录屏](https://www.bilibili.com/video/BV1hMNFz1Emx/?spm_id_from=333.1007.top_right_bar_window_history.content.click&vd_source=e136dbd0b0286f6018f6e08b5fffa4b4)
 ## 预览图片
 <img src="./public/preview/preview2.png" alt="仪表盘示例2" width="600" style="margin-bottom: 12px;" />
-<img src="./public/preview/preview3.png" alt="Thinking语料列表" width="600" style="margin-bottom: 12px;" />
 <img src="./public/preview/preview4.jpg" alt="仪表表格统计" width="600" style="margin-bottom: 12px;" />
 <img src="./public/preview/preview5.jpg" alt="词频柱状图" width="600" style="margin-bottom: 12px;" />
 <img src="./public/preview/preview1.png" alt="仪表盘示例1" width="600" style="margin-bottom: 12px;" />
@@ -91,7 +90,7 @@
 | 数据 | 默认文件 | 变量（优先级从高到低） | 读/写方 |
 |------|----------|------------------------|---------|
 | 事件 | `~/projects/cursor-learn-english/data/cursor-events.jsonl` | `EVENTS_JSONL_PATH` → `CURSOR_EVENTS_PATH` | `capture-event.mjs`、Web API |
-| Thinking 语料 | `~/projects/cursor-learn-english/data/thinking-corpus.jsonl` | `CORPUS_JSONL_PATH` → `THINKING_CORPUS_PATH` | `capture-thinking.mjs`、Web API |
+| Thinking 语料 | `~/projects/cursor-learn-english/data/thinking-corpus.jsonl` | `CORPUS_JSONL_PATH` → `THINKING_CORPUS_PATH` | `capture-thinking.mjs`、会话/词汇页 |
 | 用户提问 | `~/projects/cursor-learn-english/data/prompt-corpus.jsonl` | `PROMPT_CORPUS_PATH` | `capture-prompt.mjs`、Web API |
 | 关键词（可选） | — | `KEYWORD_JSONL_PATH` | 仅 Web `/api/keyword`；未配置时返回 503 |
 
@@ -167,20 +166,18 @@ thinking-get-hook/
 │   ├── globals.css
 │   ├── api/
 │   │   ├── events/route.ts      # GET 事件聚合（按日/类型）
-│   │   ├── thinking/route.ts    # GET Thinking 语料分页
-│   │   ├── vocab/route.ts       # GET 词频统计
+│   │   ├── vocab/route.ts       # GET 词频统计（提问/Thinking/回复）
 │   │   └── sessions/route.ts    # GET 会话列表
-│   ├── thinking/page.tsx        # Thinking 语料页
 │   ├── vocab/page.tsx           # 词频统计页
-│   └── sessions/page.tsx       # 会话列表页
+│   └── sessions/page.tsx       # 会话列表与轮次详情
 ├── components/
-│   ├── ThinkingList.tsx         # Thinking 列表（Markdown 渲染）
 │   ├── VocabStats.tsx           # 词频图表与表格
 │   └── SessionTable.tsx         # 会话表格
 ├── lib/
 │   ├── events.ts                # 读 cursor-events.jsonl、按日聚合
-│   ├── thinking.ts              # 读 thinking-corpus.jsonl、分页
-│   └── vocab.ts                 # 词频聚合
+│   ├── thinking.ts              # thinking / prompt 语料路径与类型
+│   ├── dialogue.ts              # 轮次语料拼接（会话详情用）
+│   └── vocab.ts                 # 多源词频聚合
 ├── .vscode/
 │   └── tasks.json               # Cursor/VS Code 一键任务
 ├── hooks/

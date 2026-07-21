@@ -94,16 +94,18 @@ thinking-get-hook/
 │   ├── globals.css
 │   ├── api/
 │   │   ├── events/route.ts      # GET events aggregated by day/type
-│   │   ├── thinking/route.ts    # GET thinking corpus (paginated)
+│   │   ├── vocab/route.ts       # GET vocab stats (prompt/thinking/response)
 │   │   └── sessions/route.ts    # GET sessions list
-│   ├── thinking/page.tsx       # Thinking corpus page
-│   └── sessions/page.tsx       # Sessions list page
+│   ├── vocab/page.tsx           # Vocabulary frequency page
+│   └── sessions/page.tsx       # Sessions list and round detail
 ├── components/
-│   ├── ThinkingList.tsx        # Thinking list (Markdown rendered)
+│   ├── VocabStats.tsx           # Vocab charts and grid
 │   └── SessionTable.tsx         # Sessions table
 ├── lib/
 │   ├── events.ts                # Read cursor-events.jsonl, aggregate by day
-│   └── thinking.ts              # Read thinking-corpus.jsonl, paginate
+│   ├── thinking.ts              # Thinking/prompt corpus paths and types
+│   ├── dialogue.ts              # Dialogue rounds (used by session detail)
+│   └── vocab.ts                 # Multi-source vocab aggregation
 ├── hooks/
 │   └── hooks.json               # Hooks config (copy to ~/.cursor)
 ├── scripts/
