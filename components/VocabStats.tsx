@@ -7,7 +7,12 @@ import { Surface } from "@/components/ui/Surface";
 type VocabSource = "prompt" | "thinking" | "response";
 
 type WordFreq = { word: string; count: number };
-type PhraseFreq = { phrase: string; count: number };
+type PhraseFreq = {
+  phrase: string;
+  count: number;
+  gloss?: string;
+  category?: string;
+};
 type VocabData = {
   words: WordFreq[];
   phrases: PhraseFreq[];
@@ -15,6 +20,7 @@ type VocabData = {
   totalRecords: number;
   bySource: Record<VocabSource, number>;
   sources: VocabSource[];
+  dictionarySize?: number;
 };
 
 type Tab = "words" | "phrases";
@@ -184,7 +190,11 @@ export function VocabStats() {
     let items = data.phrases;
     if (search) {
       const q = search.toLowerCase();
-      items = items.filter((p) => p.phrase.includes(q));
+      items = items.filter(
+        (p) =>
+          p.phrase.includes(q) ||
+          (p.gloss && p.gloss.toLowerCase().includes(q))
+      );
     }
     if (minCount > 1) {
       items = items.filter((p) => p.count >= minCount);
@@ -202,11 +212,16 @@ export function VocabStats() {
     if (items.length === 0) return;
 
     const lines = [
-      tab === "words" ? "rank,word,count" : "rank,phrase,count",
+      tab === "words" ? "rank,word,count" : "rank,phrase,count,gloss,category",
       ...items.map((item, index) => {
-        const text = "word" in item ? item.word : (item as PhraseFreq).phrase;
-        const safeText = `"${text.replace(/\"/g, '\"\"')}"`;
-        return `${index + 1},${safeText},${item.count}`;
+        if ("word" in item) {
+          const safeText = `"${item.word.replace(/"/g, '""')}"`;
+          return `${index + 1},${safeText},${item.count}`;
+        }
+        const p = item as PhraseFreq;
+        const safePhrase = `"${p.phrase.replace(/"/g, '""')}"`;
+        const safeGloss = `"${(p.gloss ?? "").replace(/"/g, '""')}"`;
+        return `${index + 1},${safePhrase},${p.count},${safeGloss},${p.category ?? ""}`;
       }),
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -263,7 +278,7 @@ export function VocabStats() {
           { label: "语料条数", value: data?.totalRecords ?? 0 },
           { label: "总词数（含重复）", value: (data?.totalTokens ?? 0).toLocaleString() },
           { label: "不重复单词", value: data?.words.length ?? 0 },
-          { label: "高频短语", value: data?.phrases.length ?? 0 },
+          { label: "固定搭配（命中）", value: data?.phrases.length ?? 0 },
         ].map((c) => (
           <div key={c.label} className="stat-card">
             <div className="stat-card-accent" aria-hidden />
@@ -276,6 +291,9 @@ export function VocabStats() {
       <p className="text-sm text-base-content/50">
         来源：提问 {bySource.prompt} · Thinking {bySource.thinking} · 回复{" "}
         {bySource.response}
+        {data?.dictionarySize != null ? (
+          <> · 词典 {data.dictionarySize} 条</>
+        ) : null}
       </p>
 
       <div className="toolbar">
@@ -312,7 +330,7 @@ export function VocabStats() {
               setSearch("");
             }}
           >
-            短语频次
+            固定搭配
           </button>
         </div>
         <SearchInput value={search} onChange={setSearch} />
@@ -392,6 +410,7 @@ export function VocabStats() {
             {currentItems.map((item, index) => {
               const isWord = "word" in item;
               const text = isWord ? item.word : (item as PhraseFreq).phrase;
+              const gloss = !isWord ? (item as PhraseFreq).gloss : undefined;
               const starred = isWord && starredWords.includes(text);
               return (
                 <div
@@ -399,9 +418,16 @@ export function VocabStats() {
                   className={`vocab-card ${starred ? "vocab-card-starred" : ""}`}
                 >
                   <div className="mb-2 flex items-start justify-between gap-1">
-                    <div className="break-words font-mono text-xs md:text-sm">
-                      <span className="mr-1 text-[10px] text-base-content/35">#{index + 1}</span>
-                      {text}
+                    <div className="min-w-0 flex-1">
+                      <div className="break-words font-mono text-xs md:text-sm">
+                        <span className="mr-1 text-[10px] text-base-content/35">#{index + 1}</span>
+                        {text}
+                      </div>
+                      {gloss ? (
+                        <p className="mt-1 text-xs leading-snug text-base-content/55">
+                          {gloss}
+                        </p>
+                      ) : null}
                     </div>
                     {isWord && (
                       <button
@@ -435,7 +461,7 @@ export function VocabStats() {
                     )}
                   </div>
                   <div className="flex items-center justify-between text-xs text-base-content/45">
-                    <span>{tab === "words" ? "单词" : "短语"}</span>
+                    <span>{tab === "words" ? "单词" : "搭配"}</span>
                     <span className="font-semibold tabular-nums text-base-content/70">
                       {item.count} 次
                     </span>
