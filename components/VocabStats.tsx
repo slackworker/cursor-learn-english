@@ -341,41 +341,6 @@ export function VocabStats() {
     if (undone) setLastUndone(undone);
   };
 
-  const handleExport = () => {
-    if (displayItems.length === 0) return;
-    const isWords = tab === "words";
-    const lines = [
-      isWords ? "rank,word,ipa,gloss,pos,count" : "rank,phrase,count,gloss,category",
-      ...displayItems.map((item, index) => {
-        if (isWords) {
-          const safeText = `"${item.text.replace(/"/g, '""')}"`;
-          const safeIpa = `"${(item.ipa ?? "").replace(/"/g, '""')}"`;
-          const safeGloss = `"${(item.gloss ?? "").replace(/"/g, '""')}"`;
-          const safePos = `"${(item.pos ?? "").replace(/"/g, '""')}"`;
-          return `${index + 1},${safeText},${safeIpa},${safeGloss},${safePos},${item.count ?? ""}`;
-        }
-        const safePhrase = `"${item.text.replace(/"/g, '""')}"`;
-        const safeGloss = `"${(item.gloss ?? "").replace(/"/g, '""')}"`;
-        return `${index + 1},${safePhrase},${item.count ?? ""},${safeGloss},${item.category ?? ""}`;
-      }),
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = showPassed
-      ? isWords
-        ? "vocab_passed_words.csv"
-        : "vocab_passed_phrases.csv"
-      : isWords
-        ? "vocab_words.csv"
-        : "vocab_phrases.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   if (loading && !data) {
     return <LoadingState>正在分析词频…</LoadingState>;
   }
@@ -550,14 +515,6 @@ export function VocabStats() {
               />
             </label>
           )}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={handleExport}
-            disabled={filteredTotal === 0}
-          >
-            导出 CSV
-          </button>
         </div>
       </div>
 
