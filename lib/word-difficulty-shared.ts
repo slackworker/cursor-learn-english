@@ -42,12 +42,18 @@ export const ZIPF_HIDE_PRESETS = [5.5, 5.0, 4.5, 4.0] as const;
 
 export type DifficultyFilter = {
   profile: DifficultyProfile;
-  /** Hide NGSL when rank ≤ this (default 2809 = full list). */
+  /** Hide NGSL when rank ≤ this (default 500 = top 500). */
   ngslMaxRank?: number;
   /** Hide CEFR when level ≤ this (default a2). */
   cefrMax?: CefrLevel;
   /** Hide Zipf when score ≥ this (default 5.0). */
   zipfMin?: number;
+};
+
+/** Default: hide NGSL top 500. */
+export const DEFAULT_DIFFICULTY_FILTER: DifficultyFilter = {
+  profile: "ngsl",
+  ngslMaxRank: 500,
 };
 
 function isCefrLevel(v: string): v is CefrLevel {
@@ -57,14 +63,16 @@ function isCefrLevel(v: string): v is CefrLevel {
 export function normalizeDifficultyFilter(
   raw?: Partial<DifficultyFilter> | null
 ): DifficultyFilter {
-  const profile = raw?.profile ?? "off";
+  const profile = raw?.profile ?? DEFAULT_DIFFICULTY_FILTER.profile;
   if (profile !== "ngsl" && profile !== "cefr" && profile !== "zipf") {
     return { profile: "off" };
   }
   if (profile === "ngsl") {
     const n = Number(raw?.ngslMaxRank);
     const ngslMaxRank =
-      Number.isFinite(n) && n > 0 ? Math.floor(n) : 2809;
+      Number.isFinite(n) && n > 0
+        ? Math.floor(n)
+        : (DEFAULT_DIFFICULTY_FILTER.ngslMaxRank ?? 500);
     return { profile, ngslMaxRank };
   }
   if (profile === "cefr") {
@@ -87,7 +95,7 @@ export function isBasicWord(
 ): boolean {
   if (filter.profile === "off") return false;
   if (filter.profile === "ngsl") {
-    const max = filter.ngslMaxRank ?? 2809;
+    const max = filter.ngslMaxRank ?? DEFAULT_DIFFICULTY_FILTER.ngslMaxRank ?? 500;
     return diff.ngslRank != null && diff.ngslRank <= max;
   }
   if (filter.profile === "cefr") {
@@ -102,13 +110,13 @@ export function isBasicWord(
 export const DIFFICULTY_STORAGE_KEY = "vocab_difficulty_filter_v1";
 
 export function loadDifficultyFilter(): DifficultyFilter {
-  if (typeof window === "undefined") return { profile: "off" };
+  if (typeof window === "undefined") return { ...DEFAULT_DIFFICULTY_FILTER };
   try {
     const raw = localStorage.getItem(DIFFICULTY_STORAGE_KEY);
-    if (!raw) return { profile: "off" };
+    if (!raw) return { ...DEFAULT_DIFFICULTY_FILTER };
     return normalizeDifficultyFilter(JSON.parse(raw));
   } catch {
-    return { profile: "off" };
+    return { ...DEFAULT_DIFFICULTY_FILTER };
   }
 }
 

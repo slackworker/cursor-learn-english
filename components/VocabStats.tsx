@@ -9,6 +9,7 @@ import { useVocabPass } from "@/hooks/useVocabPass";
 import type { VocabPassKind } from "@/lib/vocab-pass";
 import {
   CEFR_HIDE_PRESETS,
+  DEFAULT_DIFFICULTY_FILTER,
   NGSL_HIDE_PRESETS,
   ZIPF_HIDE_PRESETS,
   isBasicWord,
@@ -193,7 +194,7 @@ export function VocabStats() {
   const [showChart, setShowChart] = useState(true);
   const [showPassed, setShowPassed] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
-  const [minCount, setMinCount] = useState(1);
+  const [minCount, setMinCount] = useState(2);
   const [page, setPage] = useState(1);
   const [sources, setSources] = useState<VocabSource[]>([
     "prompt",
@@ -202,7 +203,7 @@ export function VocabStats() {
   ]);
   const [lastUndone, setLastUndone] = useState<string | null>(null);
   const [diffFilter, setDiffFilter] = useState<DifficultyFilter>({
-    profile: "off",
+    ...DEFAULT_DIFFICULTY_FILTER,
   });
   const [diffHydrated, setDiffHydrated] = useState(false);
 
@@ -584,7 +585,7 @@ export function VocabStats() {
                 </span>
                 <select
                   className="select select-bordered select-sm bg-base-100"
-                  value={diffFilter.ngslMaxRank ?? 2809}
+                  value={diffFilter.ngslMaxRank ?? DEFAULT_DIFFICULTY_FILTER.ngslMaxRank ?? 500}
                   onChange={(e) =>
                     updateDiffFilter({
                       profile: "ngsl",
