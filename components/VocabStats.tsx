@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Undo2 } from "lucide-react";
+import { Check, Undo2 } from "lucide-react";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
@@ -123,6 +123,36 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
       value={value}
       onChange={(e) => onChange(e.target.value)}
     />
+  );
+}
+
+function SourceFilters({
+  sources,
+  onToggle,
+}: {
+  sources: VocabSource[];
+  onToggle: (id: VocabSource) => void;
+}) {
+  return (
+    <div className="toolbar-filters" role="group" aria-label="语料来源">
+      {SOURCE_OPTIONS.map(({ id, label }) => {
+        const active = sources.includes(id);
+        return (
+          <button
+            key={id}
+            type="button"
+            className={`toolbar-chip ${active ? "toolbar-chip-active" : ""}`}
+            aria-pressed={active}
+            onClick={() => onToggle(id)}
+          >
+            <span className="toolbar-chip-check" aria-hidden>
+              {active ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
+            </span>
+            {label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -349,18 +379,7 @@ export function VocabStats() {
     return (
       <div className="space-y-6">
         <div className="toolbar">
-          <div className="toolbar-tabs" role="group" aria-label="语料来源">
-            {SOURCE_OPTIONS.map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                className={`toolbar-tab ${sources.includes(id) ? "toolbar-tab-active" : ""}`}
-                onClick={() => toggleSource(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <SourceFilters sources={sources} onToggle={toggleSource} />
         </div>
         <EmptyState>
           暂无数据。请确认提问、Thinking 或回复语料中有英文记录。
@@ -406,18 +425,7 @@ export function VocabStats() {
       </p>
 
       <div className="toolbar">
-        <div className="toolbar-tabs" role="group" aria-label="语料来源">
-          {SOURCE_OPTIONS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              className={`toolbar-tab ${sources.includes(id) ? "toolbar-tab-active" : ""}`}
-              onClick={() => toggleSource(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SourceFilters sources={sources} onToggle={toggleSource} />
         <div className="toolbar-tabs" role="tablist">
           <button
             type="button"

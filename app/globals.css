@@ -402,6 +402,27 @@ html[data-theme="business"] {
   @apply bg-base-100 text-base-content shadow-sm;
 }
 
+/* Multi-select filter chips (distinct from single-select toolbar-tabs) */
+.toolbar-filters {
+  @apply inline-flex flex-wrap items-center gap-1.5;
+}
+
+.toolbar-chip {
+  @apply inline-flex items-center gap-1.5 rounded-lg border border-base-300 bg-base-100 px-2.5 py-1.5 text-sm font-medium text-base-content/55 transition-colors hover:border-primary/30 hover:text-base-content;
+}
+
+.toolbar-chip-active {
+  @apply border-primary/40 bg-primary/10 text-primary;
+}
+
+.toolbar-chip-check {
+  @apply flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border border-current/40 text-[0.65rem] leading-none;
+}
+
+.toolbar-chip-active .toolbar-chip-check {
+  @apply border-primary/50 bg-primary text-primary-content;
+}
+
 .toolbar-input {
   @apply h-8 w-full max-w-xs rounded-lg border border-base-300 bg-base-100 px-3 text-sm outline-none transition-colors focus:border-primary/50;
 }
