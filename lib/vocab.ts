@@ -17,6 +17,11 @@ import {
   type PhraseDictEntry,
 } from "./phrase-dictionary";
 import { getWordDictionary, lookupWord } from "./word-dictionary";
+import {
+  difficultyReady,
+  lookupDifficulty,
+  type CefrLevel,
+} from "./word-difficulty";
 
 export type VocabSource = "prompt" | "thinking" | "response";
 
@@ -32,6 +37,12 @@ export type WordFreq = {
   gloss?: string;
   ipa?: string;
   pos?: string;
+  /** NGSL 1.2 rank (1 = most frequent); omit if unknown. */
+  ngslRank?: number;
+  /** CEFR-J / Octanove level; omit if unknown. */
+  cefr?: CefrLevel;
+  /** Approx Zipf (OpenSubtitles FrequencyWords); omit if unknown. */
+  zipf?: number;
 };
 export type PhraseFreq = {
   phrase: string;
@@ -241,18 +252,22 @@ function readTextChunks(opts?: {
 function countWords(tokens: string[]): WordFreq[] {
   const freq = new Map<string, number>();
   for (const t of tokens) {
-    // No stop-word / short-word cuts — users pass items themselves.
+    // No hard stop-word cuts — UI can hide basics via difficulty profiles.
     freq.set(t, (freq.get(t) || 0) + 1);
   }
   return Array.from(freq.entries())
     .map(([word, count]) => {
       const entry = lookupWord(word);
+      const diff = lookupDifficulty(word);
       return {
         word,
         count,
         ...(entry?.gloss ? { gloss: entry.gloss } : {}),
         ...(entry?.ipa ? { ipa: entry.ipa } : {}),
         ...(entry?.pos ? { pos: entry.pos } : {}),
+        ...(diff.ngslRank != null ? { ngslRank: diff.ngslRank } : {}),
+        ...(diff.cefr ? { cefr: diff.cefr } : {}),
+        ...(diff.zipf != null ? { zipf: diff.zipf } : {}),
       };
     })
     .sort((a, b) => b.count - a.count);
@@ -490,13 +505,14 @@ function getCacheKey(opts?: {
   }
 
   return [
-    "words-dict-v1",
+    "words-dict-v2-diff",
     stems.join("+"),
     sources.slice().sort().join(","),
     parts.join(","),
     opts?.from || "",
     opts?.to || "",
     opts?.model || "",
+    difficultyReady() ? "diff-on" : "diff-off",
   ].join(":");
 }
 

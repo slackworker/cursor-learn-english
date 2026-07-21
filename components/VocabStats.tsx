@@ -7,6 +7,18 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
 import { useVocabPass } from "@/hooks/useVocabPass";
 import type { VocabPassKind } from "@/lib/vocab-pass";
+import {
+  CEFR_HIDE_PRESETS,
+  NGSL_HIDE_PRESETS,
+  ZIPF_HIDE_PRESETS,
+  isBasicWord,
+  loadDifficultyFilter,
+  normalizeDifficultyFilter,
+  saveDifficultyFilter,
+  type CefrLevel,
+  type DifficultyFilter,
+  type DifficultyProfile,
+} from "@/lib/word-difficulty-shared";
 
 type VocabSource = "prompt" | "thinking" | "response";
 
@@ -16,6 +28,9 @@ type WordFreq = {
   gloss?: string;
   ipa?: string;
   pos?: string;
+  ngslRank?: number;
+  cefr?: CefrLevel;
+  zipf?: number;
 };
 type PhraseFreq = {
   phrase: string;
@@ -46,6 +61,9 @@ type DisplayItem = {
   pos?: string;
   category?: string;
   orphan?: boolean;
+  ngslRank?: number;
+  cefr?: CefrLevel;
+  zipf?: number;
 };
 
 const PAGE_SIZE = 100;
@@ -54,6 +72,13 @@ const SOURCE_OPTIONS: { id: VocabSource; label: string }[] = [
   { id: "prompt", label: "提问" },
   { id: "thinking", label: "Thinking" },
   { id: "response", label: "回复" },
+];
+
+const PROFILE_OPTIONS: { id: DifficultyProfile; label: string }[] = [
+  { id: "off", label: "不过滤" },
+  { id: "ngsl", label: "NGSL" },
+  { id: "cefr", label: "CEFR-J" },
+  { id: "zipf", label: "Zipf" },
 ];
 
 function BarChart({ items }: { items: { name: string; value: number }[] }) {
@@ -176,6 +201,24 @@ export function VocabStats() {
     "response",
   ]);
   const [lastUndone, setLastUndone] = useState<string | null>(null);
+  const [diffFilter, setDiffFilter] = useState<DifficultyFilter>({
+    profile: "off",
+  });
+  const [diffHydrated, setDiffHydrated] = useState(false);
+
+  useEffect(() => {
+    setDiffFilter(loadDifficultyFilter());
+    setDiffHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!diffHydrated) return;
+    saveDifficultyFilter(diffFilter);
+  }, [diffFilter, diffHydrated]);
+
+  const updateDiffFilter = (patch: Partial<DifficultyFilter>) => {
+    setDiffFilter((prev) => normalizeDifficultyFilter({ ...prev, ...patch }));
+  };
 
   const {
     passedWords,
@@ -260,6 +303,9 @@ export function VocabStats() {
             gloss: hit.gloss,
             ipa: hit.ipa,
             pos: hit.pos,
+            ngslRank: hit.ngslRank,
+            cefr: hit.cefr,
+            zipf: hit.zipf,
           });
         }
         return out;
@@ -292,6 +338,9 @@ export function VocabStats() {
 
     if (tab === "words") {
       let items = data.words.filter((w) => !passedWordSet.has(w.word));
+      if (diffFilter.profile !== "off") {
+        items = items.filter((w) => !isBasicWord(w, diffFilter));
+      }
       if (q) {
         items = items.filter(
           (w) =>
@@ -308,6 +357,9 @@ export function VocabStats() {
         gloss: w.gloss,
         ipa: w.ipa,
         pos: w.pos,
+        ngslRank: w.ngslRank,
+        cefr: w.cefr,
+        zipf: w.zipf,
       }));
     }
 
@@ -333,6 +385,7 @@ export function VocabStats() {
     showPassed,
     minCount,
     sortAsc,
+    diffFilter,
     passedWords,
     passedPhrases,
     passedWordSet,
@@ -346,7 +399,7 @@ export function VocabStats() {
 
   useEffect(() => {
     setPage(1);
-  }, [tab, search, showPassed, minCount, sortAsc]);
+  }, [tab, search, showPassed, minCount, sortAsc, diffFilter]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -398,10 +451,29 @@ export function VocabStats() {
   const uniqueWords = data?.uniqueWords ?? data?.words.length ?? 0;
   const uniquePhrases = data?.uniquePhrases ?? data?.phrases.length ?? 0;
   const remainingWords = data
-    ? data.words.filter((w) => !passedWordSet.has(w.word)).length
+    ? data.words.filter((w) => {
+        if (passedWordSet.has(w.word)) return false;
+        if (minCount > 1 && w.count < minCount) return false;
+        if (diffFilter.profile !== "off" && isBasicWord(w, diffFilter)) {
+          return false;
+        }
+        return true;
+      }).length
     : 0;
   const remainingPhrases = data
-    ? data.phrases.filter((p) => !passedPhraseSet.has(p.phrase)).length
+    ? data.phrases.filter((p) => {
+        if (passedPhraseSet.has(p.phrase)) return false;
+        if (minCount > 1 && p.count < minCount) return false;
+        return true;
+      }).length
+    : 0;
+  const hiddenBasicCount = data
+    ? data.words.filter(
+        (w) =>
+          !passedWordSet.has(w.word) &&
+          diffFilter.profile !== "off" &&
+          isBasicWord(w, diffFilter)
+      ).length
     : 0;
   const bySource = data?.bySource ?? { prompt: 0, thinking: 0, response: 0 };
   const pageStart = filteredTotal === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
@@ -422,6 +494,12 @@ export function VocabStats() {
         </span>
         <span className="mx-2 text-base-content/25">·</span>
         已 Pass 单词 {passedWords.length} · 搭配 {passedPhrases.length}
+        {hiddenBasicCount > 0 ? (
+          <>
+            <span className="mx-2 text-base-content/25">·</span>
+            已隐藏基础词 {hiddenBasicCount.toLocaleString()}
+          </>
+        ) : null}
       </p>
 
       <div className="toolbar">
@@ -476,6 +554,100 @@ export function VocabStats() {
             <option value={10}>≥10</option>
           </select>
         </label>
+        {isWordTab ? (
+          <>
+            <label
+              className="label cursor-pointer gap-2 p-0"
+              title="隐藏过易单词：NGSL / CEFR-J / Zipf 三套方案可切换"
+            >
+              <span className="label-text text-sm text-base-content/60">基础词</span>
+              <select
+                className="select select-bordered select-sm bg-base-100"
+                value={diffFilter.profile}
+                onChange={(e) =>
+                  updateDiffFilter({
+                    profile: e.target.value as DifficultyProfile,
+                  })
+                }
+              >
+                {PROFILE_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {diffFilter.profile === "ngsl" ? (
+              <label className="label cursor-pointer gap-2 p-0">
+                <span className="label-text text-sm text-base-content/60">
+                  隐藏 ≤
+                </span>
+                <select
+                  className="select select-bordered select-sm bg-base-100"
+                  value={diffFilter.ngslMaxRank ?? 2809}
+                  onChange={(e) =>
+                    updateDiffFilter({
+                      profile: "ngsl",
+                      ngslMaxRank: Number(e.target.value),
+                    })
+                  }
+                >
+                  {NGSL_HIDE_PRESETS.map((n) => (
+                    <option key={n} value={n}>
+                      {n === 2809 ? "全部 NGSL" : `NGSL 前 ${n}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {diffFilter.profile === "cefr" ? (
+              <label className="label cursor-pointer gap-2 p-0">
+                <span className="label-text text-sm text-base-content/60">
+                  隐藏 ≤
+                </span>
+                <select
+                  className="select select-bordered select-sm bg-base-100"
+                  value={diffFilter.cefrMax ?? "a2"}
+                  onChange={(e) =>
+                    updateDiffFilter({
+                      profile: "cefr",
+                      cefrMax: e.target.value as CefrLevel,
+                    })
+                  }
+                >
+                  {CEFR_HIDE_PRESETS.map((lv) => (
+                    <option key={lv} value={lv}>
+                      {lv.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {diffFilter.profile === "zipf" ? (
+              <label className="label cursor-pointer gap-2 p-0">
+                <span className="label-text text-sm text-base-content/60">
+                  隐藏 ≥
+                </span>
+                <select
+                  className="select select-bordered select-sm bg-base-100"
+                  value={diffFilter.zipfMin ?? 5}
+                  onChange={(e) =>
+                    updateDiffFilter({
+                      profile: "zipf",
+                      zipfMin: Number(e.target.value),
+                    })
+                  }
+                >
+                  {ZIPF_HIDE_PRESETS.map((z) => (
+                    <option key={z} value={z}>
+                      Zipf {z.toFixed(1)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </>
+        ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {!showPassed && (
             <div className="toolbar-tabs">
@@ -574,6 +746,28 @@ export function VocabStats() {
                         {!isWordTab && item.category ? (
                           <p className="mt-1 text-[10px] uppercase tracking-wide text-base-content/35">
                             {item.category}
+                          </p>
+                        ) : null}
+                        {isWordTab &&
+                        (item.cefr ||
+                          item.ngslRank != null ||
+                          item.zipf != null) ? (
+                          <p className="mt-1 flex flex-wrap gap-1.5 text-[10px] tabular-nums text-base-content/40">
+                            {item.cefr ? (
+                              <span title="CEFR-J / Octanove">
+                                {item.cefr.toUpperCase()}
+                              </span>
+                            ) : null}
+                            {item.ngslRank != null ? (
+                              <span title="NGSL 1.2 rank">
+                                NGSL#{item.ngslRank}
+                              </span>
+                            ) : null}
+                            {item.zipf != null ? (
+                              <span title="Approx Zipf (OpenSubtitles)">
+                                z{item.zipf.toFixed(1)}
+                              </span>
+                            ) : null}
                           </p>
                         ) : null}
                       </div>

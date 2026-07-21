@@ -10,7 +10,8 @@
     "open:dashboard": "bash scripts/open-dashboard.sh",
     "dict:build": "node scripts/build-phrase-dict.mjs",
     "dict:build:words": "node scripts/build-word-dict.mjs",
-    "dict:build:all": "npm run dict:build && npm run dict:build:words",
+    "dict:build:difficulty": "node scripts/build-word-difficulty.mjs",
+    "dict:build:all": "npm run dict:build && npm run dict:build:words && npm run dict:build:difficulty",
     "lint": "eslint"
   },
   "dependencies": {
