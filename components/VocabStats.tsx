@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { Undo2 } from "lucide-react";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
+import { useVocabPass } from "@/hooks/useVocabPass";
+import type { VocabPassKind } from "@/lib/vocab-pass";
 
 type VocabSource = "prompt" | "thinking" | "response";
 
@@ -34,6 +37,16 @@ type VocabData = {
 };
 
 type Tab = "words" | "phrases";
+
+type DisplayItem = {
+  text: string;
+  count?: number;
+  gloss?: string;
+  ipa?: string;
+  pos?: string;
+  category?: string;
+  orphan?: boolean;
+};
 
 const PAGE_SIZE = 100;
 
@@ -113,14 +126,17 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
+function sortByCount<T extends { count: number }>(items: T[], asc: boolean): T[] {
+  return [...items].sort((a, b) => (asc ? a.count - b.count : b.count - a.count));
+}
+
 export function VocabStats() {
   const [data, setData] = useState<VocabData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("words");
   const [search, setSearch] = useState("");
   const [showChart, setShowChart] = useState(true);
-  const [starredWords, setStarredWords] = useState<string[]>([]);
-  const [onlyStarred, setOnlyStarred] = useState(false);
+  const [showPassed, setShowPassed] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
   const [minCount, setMinCount] = useState(1);
   const [page, setPage] = useState(1);
@@ -129,10 +145,23 @@ export function VocabStats() {
     "thinking",
     "response",
   ]);
+  const [lastUndone, setLastUndone] = useState<string | null>(null);
+
+  const {
+    passedWords,
+    passedPhrases,
+    passedWordSet,
+    passedPhraseSet,
+    pass,
+    unpass,
+    undo,
+  } = useVocabPass();
+
+  const passKind: VocabPassKind = tab === "words" ? "words" : "phrases";
+  const passedList = tab === "words" ? passedWords : passedPhrases;
 
   const fetchVocab = useCallback((selected: VocabSource[]) => {
     setLoading(true);
-    // No top-N cut — full lists; grid paginates client-side.
     const params = new URLSearchParams({
       sources: selected.join(","),
     });
@@ -148,29 +177,6 @@ export function VocabStats() {
     fetchVocab(sources);
   }, [sources, fetchVocab]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem("vocab_new_words_v1");
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setStarredWords(parsed.filter((w): w is string => typeof w === "string"));
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem("vocab_new_words_v1", JSON.stringify(starredWords));
-    } catch {
-      // ignore
-    }
-  }, [starredWords]);
-
   const toggleSource = (id: VocabSource) => {
     setSources((prev) => {
       if (prev.includes(id)) {
@@ -181,97 +187,189 @@ export function VocabStats() {
     });
   };
 
-  const filteredWords = useMemo(() => {
-    if (!data) return [];
-    let items = data.words;
-    if (search) {
-      const q = search.toLowerCase();
-      items = items.filter(
-        (w) =>
-          w.word.includes(q) ||
-          (w.gloss && w.gloss.toLowerCase().includes(q)) ||
-          (w.ipa && w.ipa.toLowerCase().includes(q)) ||
-          (w.pos && w.pos.toLowerCase().includes(q))
-      );
-    }
-    if (onlyStarred) {
-      items = items.filter((w) => starredWords.includes(w.word));
-    }
-    if (minCount > 1) {
-      items = items.filter((w) => w.count >= minCount);
-    }
-    const sorted = [...items].sort((a, b) => (sortAsc ? a.count - b.count : b.count - a.count));
-    return sorted;
-  }, [data, search, onlyStarred, starredWords, sortAsc, minCount]);
+  const wordByKey = useMemo(() => {
+    const map = new Map<string, WordFreq>();
+    if (!data) return map;
+    for (const w of data.words) map.set(w.word, w);
+    return map;
+  }, [data]);
 
-  const filteredPhrases = useMemo(() => {
+  const phraseByKey = useMemo(() => {
+    const map = new Map<string, PhraseFreq>();
+    if (!data) return map;
+    for (const p of data.phrases) map.set(p.phrase, p);
+    return map;
+  }, [data]);
+
+  const displayItems = useMemo((): DisplayItem[] => {
     if (!data) return [];
-    let items = data.phrases;
-    if (search) {
-      const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
+
+    if (showPassed) {
+      if (tab === "words") {
+        const out: DisplayItem[] = [];
+        for (const text of [...passedWords].reverse()) {
+          const hit = wordByKey.get(text);
+          if (!hit) {
+            if (!q || text.includes(q)) out.push({ text, orphan: true });
+            continue;
+          }
+          if (minCount > 1 && hit.count < minCount) continue;
+          if (
+            q &&
+            !hit.word.includes(q) &&
+            !(hit.gloss && hit.gloss.toLowerCase().includes(q)) &&
+            !(hit.ipa && hit.ipa.toLowerCase().includes(q)) &&
+            !(hit.pos && hit.pos.toLowerCase().includes(q))
+          ) {
+            continue;
+          }
+          out.push({
+            text: hit.word,
+            count: hit.count,
+            gloss: hit.gloss,
+            ipa: hit.ipa,
+            pos: hit.pos,
+          });
+        }
+        return out;
+      }
+
+      const out: DisplayItem[] = [];
+      for (const text of [...passedPhrases].reverse()) {
+        const hit = phraseByKey.get(text);
+        if (!hit) {
+          if (!q || text.includes(q)) out.push({ text, orphan: true });
+          continue;
+        }
+        if (minCount > 1 && hit.count < minCount) continue;
+        if (
+          q &&
+          !hit.phrase.includes(q) &&
+          !(hit.gloss && hit.gloss.toLowerCase().includes(q))
+        ) {
+          continue;
+        }
+        out.push({
+          text: hit.phrase,
+          count: hit.count,
+          gloss: hit.gloss,
+          category: hit.category,
+        });
+      }
+      return out;
+    }
+
+    if (tab === "words") {
+      let items = data.words.filter((w) => !passedWordSet.has(w.word));
+      if (q) {
+        items = items.filter(
+          (w) =>
+            w.word.includes(q) ||
+            Boolean(w.gloss && w.gloss.toLowerCase().includes(q)) ||
+            Boolean(w.ipa && w.ipa.toLowerCase().includes(q)) ||
+            Boolean(w.pos && w.pos.toLowerCase().includes(q))
+        );
+      }
+      if (minCount > 1) items = items.filter((w) => w.count >= minCount);
+      return sortByCount(items, sortAsc).map((w) => ({
+        text: w.word,
+        count: w.count,
+        gloss: w.gloss,
+        ipa: w.ipa,
+        pos: w.pos,
+      }));
+    }
+
+    let items = data.phrases.filter((p) => !passedPhraseSet.has(p.phrase));
+    if (q) {
       items = items.filter(
         (p) =>
           p.phrase.includes(q) ||
-          (p.gloss && p.gloss.toLowerCase().includes(q))
+          Boolean(p.gloss && p.gloss.toLowerCase().includes(q))
       );
     }
-    if (minCount > 1) {
-      items = items.filter((p) => p.count >= minCount);
-    }
-    const sorted = [...items].sort((a, b) => (sortAsc ? a.count - b.count : b.count - a.count));
-    return sorted;
-  }, [data, search, sortAsc, minCount]);
+    if (minCount > 1) items = items.filter((p) => p.count >= minCount);
+    return sortByCount(items, sortAsc).map((p) => ({
+      text: p.phrase,
+      count: p.count,
+      gloss: p.gloss,
+      category: p.category,
+    }));
+  }, [
+    data,
+    tab,
+    search,
+    showPassed,
+    minCount,
+    sortAsc,
+    passedWords,
+    passedPhrases,
+    passedWordSet,
+    passedPhraseSet,
+    wordByKey,
+    phraseByKey,
+  ]);
 
-  const filteredTotal =
-    tab === "words" ? filteredWords.length : filteredPhrases.length;
+  const filteredTotal = displayItems.length;
   const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
 
   useEffect(() => {
     setPage(1);
-  }, [tab, search, onlyStarred, minCount, sortAsc]);
+  }, [tab, search, showPassed, minCount, sortAsc]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
   const pageItems = useMemo(() => {
-    const items = tab === "words" ? filteredWords : filteredPhrases;
     const start = (page - 1) * PAGE_SIZE;
-    return items.slice(start, start + PAGE_SIZE);
-  }, [tab, filteredWords, filteredPhrases, page]);
+    return displayItems.slice(start, start + PAGE_SIZE);
+  }, [displayItems, page]);
 
-  const toggleStar = (word: string) => {
-    setStarredWords((prev) => (prev.includes(word) ? prev.filter((w) => w !== word) : [...prev, word]));
+  const handlePass = (text: string) => {
+    pass(passKind, text);
+    setLastUndone(null);
+  };
+
+  const handleUnpass = (text: string) => {
+    unpass(passKind, text);
+  };
+
+  const handleUndo = () => {
+    const undone = undo(passKind);
+    if (undone) setLastUndone(undone);
   };
 
   const handleExport = () => {
-    const items = tab === "words" ? filteredWords : filteredPhrases;
-    if (items.length === 0) return;
-
+    if (displayItems.length === 0) return;
+    const isWords = tab === "words";
     const lines = [
-      tab === "words"
-        ? "rank,word,ipa,gloss,pos,count"
-        : "rank,phrase,count,gloss,category",
-      ...items.map((item, index) => {
-        if ("word" in item) {
-          const w = item as WordFreq;
-          const safeText = `"${w.word.replace(/"/g, '""')}"`;
-          const safeIpa = `"${(w.ipa ?? "").replace(/"/g, '""')}"`;
-          const safeGloss = `"${(w.gloss ?? "").replace(/"/g, '""')}"`;
-          const safePos = `"${(w.pos ?? "").replace(/"/g, '""')}"`;
-          return `${index + 1},${safeText},${safeIpa},${safeGloss},${safePos},${w.count}`;
+      isWords ? "rank,word,ipa,gloss,pos,count" : "rank,phrase,count,gloss,category",
+      ...displayItems.map((item, index) => {
+        if (isWords) {
+          const safeText = `"${item.text.replace(/"/g, '""')}"`;
+          const safeIpa = `"${(item.ipa ?? "").replace(/"/g, '""')}"`;
+          const safeGloss = `"${(item.gloss ?? "").replace(/"/g, '""')}"`;
+          const safePos = `"${(item.pos ?? "").replace(/"/g, '""')}"`;
+          return `${index + 1},${safeText},${safeIpa},${safeGloss},${safePos},${item.count ?? ""}`;
         }
-        const p = item as PhraseFreq;
-        const safePhrase = `"${p.phrase.replace(/"/g, '""')}"`;
-        const safeGloss = `"${(p.gloss ?? "").replace(/"/g, '""')}"`;
-        return `${index + 1},${safePhrase},${p.count},${safeGloss},${p.category ?? ""}`;
+        const safePhrase = `"${item.text.replace(/"/g, '""')}"`;
+        const safeGloss = `"${(item.gloss ?? "").replace(/"/g, '""')}"`;
+        return `${index + 1},${safePhrase},${item.count ?? ""},${safeGloss},${item.category ?? ""}`;
       }),
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = tab === "words" ? "vocab_words.csv" : "vocab_phrases.csv";
+    a.download = showPassed
+      ? isWords
+        ? "vocab_passed_words.csv"
+        : "vocab_passed_phrases.csv"
+      : isWords
+        ? "vocab_words.csv"
+        : "vocab_phrases.csv";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -306,30 +404,48 @@ export function VocabStats() {
     );
   }
 
-  const chartItems = (tab === "words" ? filteredWords : filteredPhrases).map((d) => ({
-    name: "word" in d ? d.word : (d as PhraseFreq).phrase,
-    value: d.count,
-  }));
+  const chartItems = showPassed
+    ? []
+    : displayItems.map((d) => ({
+        name: d.text,
+        value: d.count ?? 0,
+      }));
 
   const uniqueWords = data?.uniqueWords ?? data?.words.length ?? 0;
   const uniquePhrases = data?.uniquePhrases ?? data?.phrases.length ?? 0;
+  const remainingWords = data
+    ? data.words.filter((w) => !passedWordSet.has(w.word)).length
+    : 0;
+  const remainingPhrases = data
+    ? data.phrases.filter((p) => !passedPhraseSet.has(p.phrase)).length
+    : 0;
   const bySource = data?.bySource ?? { prompt: 0, thinking: 0, response: 0 };
   const pageStart = filteredTotal === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const pageEnd = Math.min(page * PAGE_SIZE, filteredTotal);
+  const isWordTab = tab === "words";
 
   return (
     <div className={`space-y-6 ${loading ? "opacity-60" : ""}`}>
       <div className="stat-grid md:grid-cols-4 lg:grid-cols-4">
         {[
-          { label: "语料条数", value: data?.totalRecords ?? 0 },
-          { label: "总词数（含重复）", value: (data?.totalTokens ?? 0).toLocaleString() },
-          { label: "不重复单词", value: uniqueWords.toLocaleString() },
-          { label: "固定搭配（命中）", value: uniquePhrases.toLocaleString() },
+          { label: "语料条数", value: String(data?.totalRecords ?? 0) },
+          {
+            label: "总词数（含重复）",
+            value: (data?.totalTokens ?? 0).toLocaleString(),
+          },
+          {
+            label: "待学单词",
+            value: `${remainingWords.toLocaleString()} / ${uniqueWords.toLocaleString()}`,
+          },
+          {
+            label: "待学搭配",
+            value: `${remainingPhrases.toLocaleString()} / ${uniquePhrases.toLocaleString()}`,
+          },
         ].map((c) => (
           <div key={c.label} className="stat-card">
             <div className="stat-card-accent" aria-hidden />
             <p className="stat-card-label">{c.label}</p>
-            <p className="stat-card-value">{c.value}</p>
+            <p className="stat-card-value text-lg md:text-xl">{c.value}</p>
           </div>
         ))}
       </div>
@@ -343,6 +459,10 @@ export function VocabStats() {
         {data?.dictionarySize != null ? (
           <> · 搭配词典 {data.dictionarySize.toLocaleString()} 条</>
         ) : null}
+        <>
+          {" "}
+          · 已 Pass 单词 {passedWords.length} · 搭配 {passedPhrases.length}
+        </>
       </p>
 
       <div className="toolbar">
@@ -366,9 +486,10 @@ export function VocabStats() {
             onClick={() => {
               setTab("words");
               setSearch("");
+              setLastUndone(null);
             }}
           >
-            单词频次
+            单词
           </button>
           <button
             type="button"
@@ -377,23 +498,22 @@ export function VocabStats() {
             onClick={() => {
               setTab("phrases");
               setSearch("");
+              setLastUndone(null);
             }}
           >
             固定搭配
           </button>
         </div>
         <SearchInput value={search} onChange={setSearch} />
-        {tab === "words" && (
-          <label className="label cursor-pointer gap-2 p-0">
-            <span className="label-text text-sm text-base-content/60">只看生词</span>
-            <input
-              type="checkbox"
-              className="toggle toggle-sm toggle-primary"
-              checked={onlyStarred}
-              onChange={() => setOnlyStarred((v) => !v)}
-            />
-          </label>
-        )}
+        <label className="label cursor-pointer gap-2 p-0">
+          <span className="label-text text-sm text-base-content/60">已 Pass</span>
+          <input
+            type="checkbox"
+            className="toggle toggle-sm toggle-primary"
+            checked={showPassed}
+            onChange={() => setShowPassed((v) => !v)}
+          />
+        </label>
         <label className="label cursor-pointer gap-2 p-0">
           <span className="label-text text-sm text-base-content/60">最小次数</span>
           <select
@@ -409,31 +529,52 @@ export function VocabStats() {
           </select>
         </label>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div className="toolbar-tabs">
-            <button
-              type="button"
-              className={`toolbar-tab ${!sortAsc ? "toolbar-tab-active" : ""}`}
-              onClick={() => setSortAsc(false)}
-            >
-              次数↓
-            </button>
-            <button
-              type="button"
-              className={`toolbar-tab ${sortAsc ? "toolbar-tab-active" : ""}`}
-              onClick={() => setSortAsc(true)}
-            >
-              次数↑
-            </button>
-          </div>
-          <label className="label cursor-pointer gap-2 p-0">
-            <span className="label-text text-sm text-base-content/60">图表</span>
-            <input
-              type="checkbox"
-              className="toggle toggle-sm toggle-primary"
-              checked={showChart}
-              onChange={() => setShowChart(!showChart)}
-            />
-          </label>
+          {!showPassed && (
+            <div className="toolbar-tabs">
+              <button
+                type="button"
+                className={`toolbar-tab ${!sortAsc ? "toolbar-tab-active" : ""}`}
+                onClick={() => setSortAsc(false)}
+              >
+                次数↓
+              </button>
+              <button
+                type="button"
+                className={`toolbar-tab ${sortAsc ? "toolbar-tab-active" : ""}`}
+                onClick={() => setSortAsc(true)}
+              >
+                次数↑
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm gap-1"
+            onClick={handleUndo}
+            disabled={passedList.length === 0}
+            title={
+              passedList.length > 0
+                ? `撤销最近一次 Pass：${passedList[passedList.length - 1]}`
+                : "暂无可回退的 Pass"
+            }
+          >
+            <Undo2 className="h-3.5 w-3.5" aria-hidden />
+            回退
+          </button>
+          {lastUndone ? (
+            <span className="text-xs text-success/80">已恢复「{lastUndone}」</span>
+          ) : null}
+          {!showPassed && (
+            <label className="label cursor-pointer gap-2 p-0">
+              <span className="label-text text-sm text-base-content/60">图表</span>
+              <input
+                type="checkbox"
+                className="toggle toggle-sm toggle-primary"
+                checked={showChart}
+                onChange={() => setShowChart(!showChart)}
+              />
+            </label>
+          )}
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -445,7 +586,7 @@ export function VocabStats() {
         </div>
       </div>
 
-      {showChart && (
+      {showChart && !showPassed && (
         <Surface>
           <BarChart items={chartItems} />
         </Surface>
@@ -453,84 +594,80 @@ export function VocabStats() {
 
       <Surface padding="sm">
         {pageItems.length === 0 ? (
-          <div className="py-10 text-center text-sm text-base-content/40">无匹配结果</div>
+          <div className="py-10 text-center text-sm text-base-content/40">
+            {showPassed
+              ? `还没有 Pass 过任何${isWordTab ? "单词" : "搭配"}`
+              : "无匹配结果（或已全部 Pass）"}
+          </div>
         ) : (
           <>
             <div className="vocab-grid">
               {pageItems.map((item, index) => {
-                const isWord = "word" in item;
-                const text = isWord ? item.word : (item as PhraseFreq).phrase;
-                const wordItem = isWord ? (item as WordFreq) : null;
-                const gloss = isWord
-                  ? wordItem?.gloss
-                  : (item as PhraseFreq).gloss;
-                const ipa = wordItem?.ipa;
-                const pos = wordItem?.pos;
-                const starred = isWord && starredWords.includes(text);
                 const rank = pageStart + index;
                 return (
                   <div
-                    key={text}
-                    className={`vocab-card ${starred ? "vocab-card-starred" : ""}`}
+                    key={item.text}
+                    className={`vocab-card ${showPassed ? "vocab-card-passed" : ""}`}
                   >
-                    <div className="mb-2 flex items-start justify-between gap-1">
+                    <div className="mb-2 flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="break-words font-mono text-xs md:text-sm">
-                          <span className="mr-1 text-[10px] text-base-content/35">
-                            #{rank}
-                          </span>
-                          {text}
+                          {item.text}
                         </div>
-                        {ipa ? (
-                          <p className="vocab-ipa text-primary/80">{ipa}</p>
+                        {item.ipa ? (
+                          <p className="vocab-ipa text-primary/80">{item.ipa}</p>
                         ) : null}
-                        {gloss ? (
+                        {item.gloss ? (
                           <p className="mt-1 text-xs leading-snug text-base-content/55">
-                            {pos ? (
+                            {item.pos ? (
                               <span className="mr-1 text-base-content/35">
-                                {pos}.
+                                {item.pos}.
                               </span>
                             ) : null}
-                            {gloss}
+                            {item.gloss}
+                          </p>
+                        ) : item.orphan ? (
+                          <p className="mt-1 text-xs text-base-content/40">
+                            当前语料未命中
+                          </p>
+                        ) : null}
+                        {!isWordTab && item.category ? (
+                          <p className="mt-1 text-[10px] uppercase tracking-wide text-base-content/35">
+                            {item.category}
                           </p>
                         ) : null}
                       </div>
-                      {isWord && (
+                      {showPassed ? (
                         <button
                           type="button"
-                          className="btn btn-ghost btn-xs px-1"
-                          onClick={() => toggleStar(text)}
-                          aria-label={starred ? "取消生词标记" : "标记为生词"}
+                          className="btn btn-ghost btn-xs shrink-0"
+                          onClick={() => handleUnpass(item.text)}
+                          aria-label="从 Pass 列表恢复"
                         >
-                          {starred ? (
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              className="h-3.5 w-3.5 text-warning"
-                            >
-                              <path d="M12 2.25l2.955 6.016 6.645.967-4.8 4.68 1.133 6.617L12 17.75l-5.933 3.12 1.133-6.617-4.8-4.68 6.645-.967L12 2.25z" />
-                            </svg>
-                          ) : (
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.5"
-                              className="h-3.5 w-3.5 text-base-content/40"
-                            >
-                              <path d="M12 2.75l2.7 5.5 6.05.88-4.375 4.27 1.033 6.02L12 16.96l-5.408 2.91 1.033-6.02L3.25 9.13l6.05-.88L12 2.75z" />
-                            </svg>
-                          )}
+                          恢复
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs shrink-0 text-base-content/50 hover:text-success"
+                          onClick={() => handlePass(item.text)}
+                          aria-label="Pass：已学会，不再显示"
+                        >
+                          Pass
                         </button>
                       )}
                     </div>
                     <div className="flex items-center justify-between text-xs text-base-content/45">
-                      <span>{tab === "words" ? "单词" : "搭配"}</span>
-                      <span className="font-semibold tabular-nums text-base-content/70">
-                        {item.count} 次
+                      <span className="select-none tabular-nums text-[10px] text-base-content/35">
+                        #{rank}
                       </span>
+                      {item.count != null ? (
+                        <span className="font-semibold tabular-nums text-base-content/70">
+                          {item.count} 次
+                        </span>
+                      ) : (
+                        <span className="text-base-content/35">—</span>
+                      )}
                     </div>
                   </div>
                 );

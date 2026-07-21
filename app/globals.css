@@ -430,8 +430,8 @@ html[data-theme="business"] {
   @apply flex flex-col justify-between rounded-xl border border-base-300/60 bg-base-100 p-3 text-sm;
 }
 
-.vocab-card-starred {
-  @apply border-warning/50 bg-warning/5;
+.vocab-card-passed {
+  @apply border-success/35 bg-success/5;
 }
 
 .vocab-ipa {
