@@ -636,96 +636,100 @@ export function VocabStats() {
                     key={item.text}
                     className={`vocab-card ${showPassed ? "vocab-card-passed" : ""}`}
                   >
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="break-words font-mono text-xs md:text-sm">
-                          {item.text}
-                        </div>
-                        {item.ipa ? (
-                          <p className="vocab-ipa text-primary/80">{item.ipa}</p>
-                        ) : null}
-                        {item.gloss ? (
-                          <div className="mt-1 text-xs leading-snug text-base-content/55">
-                            <p>
-                              {item.pos ? (
-                                <span className="mr-1 text-base-content/35">
-                                  {item.pos}.
-                                </span>
-                              ) : null}
-                              {item.gloss}
-                            </p>
-                            {item.glosses && item.glosses.length > 1 ? (
-                              <details className="vocab-gloss-more mt-0.5">
-                                <summary className="cursor-pointer select-none text-[10px] text-base-content/40 hover:text-base-content/60">
-                                  另有 {item.glosses.length - 1} 义
-                                </summary>
-                                <ul className="mt-1 space-y-0.5 text-[11px] text-base-content/45">
-                                  {item.glosses.slice(1).map((g) => (
-                                    <li key={`${g.pos ?? ""}:${g.gloss}`}>
-                                      {g.pos ? (
-                                        <span className="mr-1 text-base-content/30">
-                                          {g.pos}.
-                                        </span>
-                                      ) : null}
-                                      {g.gloss}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </details>
-                            ) : null}
+                    <div className="mb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="break-words font-mono text-xs md:text-sm">
+                            {item.text}
                           </div>
-                        ) : item.orphan ? (
-                          <p className="mt-1 text-xs text-base-content/40">
-                            当前语料未命中
-                          </p>
-                        ) : null}
-                        {!isWordTab && item.category ? (
-                          <p className="mt-1 text-[10px] uppercase tracking-wide text-base-content/35">
-                            {item.category}
-                          </p>
-                        ) : null}
-                        {isWordTab &&
-                        (item.cefr ||
-                          item.ngslRank != null ||
-                          item.zipf != null) ? (
-                          <p className="mt-1 flex flex-wrap gap-1.5 text-[10px] tabular-nums text-base-content/40">
-                            {item.cefr ? (
-                              <span title="CEFR-J / Octanove">
-                                {item.cefr.toUpperCase()}
-                              </span>
-                            ) : null}
-                            {item.ngslRank != null ? (
-                              <span title="NGSL 1.2 rank">
-                                NGSL#{item.ngslRank}
-                              </span>
-                            ) : null}
-                            {item.zipf != null ? (
-                              <span title="Approx Zipf (OpenSubtitles)">
-                                z{item.zipf.toFixed(1)}
-                              </span>
-                            ) : null}
-                          </p>
-                        ) : null}
+                          {item.ipa ? (
+                            <p className="vocab-ipa text-primary/80">
+                              {item.ipa}
+                            </p>
+                          ) : null}
+                        </div>
+                        {showPassed ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs shrink-0"
+                            onClick={() => handleUnpass(item.text)}
+                            aria-label="从 Pass 列表恢复"
+                          >
+                            恢复
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs shrink-0 text-base-content/50 hover:text-success"
+                            onClick={() => handlePass(item.text)}
+                            aria-label="Pass：已学会，不再显示"
+                          >
+                            Pass
+                          </button>
+                        )}
                       </div>
-                      {showPassed ? (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs shrink-0"
-                          onClick={() => handleUnpass(item.text)}
-                          aria-label="从 Pass 列表恢复"
-                        >
-                          恢复
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs shrink-0 text-base-content/50 hover:text-success"
-                          onClick={() => handlePass(item.text)}
-                          aria-label="Pass：已学会，不再显示"
-                        >
-                          Pass
-                        </button>
-                      )}
+                      {item.gloss ? (
+                        <div className="mt-1 text-xs leading-snug text-base-content/55">
+                          <p>
+                            {item.pos ? (
+                              <span className="mr-1 text-base-content/35">
+                                {item.pos}.
+                              </span>
+                            ) : null}
+                            {item.gloss}
+                          </p>
+                          {item.glosses && item.glosses.length > 1 ? (
+                            <details className="vocab-gloss-more mt-0.5">
+                              <summary className="cursor-pointer select-none text-[10px] text-base-content/40 hover:text-base-content/60">
+                                另有 {item.glosses.length - 1} 义
+                              </summary>
+                              <ul className="mt-1 space-y-0.5 text-[11px] text-base-content/45">
+                                {item.glosses.slice(1).map((g) => (
+                                  <li key={`${g.pos ?? ""}:${g.gloss}`}>
+                                    {g.pos ? (
+                                      <span className="mr-1 text-base-content/30">
+                                        {g.pos}.
+                                      </span>
+                                    ) : null}
+                                    {g.gloss}
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
+                          ) : null}
+                        </div>
+                      ) : item.orphan ? (
+                        <p className="mt-1 text-xs text-base-content/40">
+                          当前语料未命中
+                        </p>
+                      ) : null}
+                      {!isWordTab && item.category ? (
+                        <p className="mt-1 text-[10px] uppercase tracking-wide text-base-content/35">
+                          {item.category}
+                        </p>
+                      ) : null}
+                      {isWordTab &&
+                      (item.cefr ||
+                        item.ngslRank != null ||
+                        item.zipf != null) ? (
+                        <p className="mt-1 flex flex-wrap gap-1.5 text-[10px] tabular-nums text-base-content/40">
+                          {item.cefr ? (
+                            <span title="CEFR-J / Octanove">
+                              {item.cefr.toUpperCase()}
+                            </span>
+                          ) : null}
+                          {item.ngslRank != null ? (
+                            <span title="NGSL 1.2 rank">
+                              NGSL#{item.ngslRank}
+                            </span>
+                          ) : null}
+                          {item.zipf != null ? (
+                            <span title="Approx Zipf (OpenSubtitles)">
+                              z{item.zipf.toFixed(1)}
+                            </span>
+                          ) : null}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex items-center justify-between text-xs text-base-content/45">
                       <span className="select-none tabular-nums text-[10px] text-base-content/35">

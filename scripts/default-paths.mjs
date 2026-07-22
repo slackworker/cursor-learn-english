@@ -64,3 +64,7 @@ export function defaultThinkingCorpusPath() {
 export function defaultPromptCorpusPath() {
   return path.join(getDataDir(), 'prompt-corpus.jsonl');
 }
+
+export function defaultVocabPassedPath() {
+  return path.join(getDataDir(), 'vocab-passed.json');
+}

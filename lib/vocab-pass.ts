@@ -1,6 +1,7 @@
 /**
- * Client-side "passed" vocab lists — items the learner already knows.
- * Two ordered arrays (words / phrases); append on pass, pop for undo.
+ * Passed vocab lists — items the learner already knows.
+ * Server persists to data/vocab-passed.json; browser localStorage is only
+ * used once to migrate older client-side data.
  */
 
 export const PASSED_WORDS_KEY = "vocab_passed_words_v1";
@@ -10,8 +11,29 @@ export const LEGACY_STARRED_WORDS_KEY = "vocab_new_words_v1";
 
 export type VocabPassKind = "words" | "phrases";
 
+export type VocabPassState = {
+  words: string[];
+  phrases: string[];
+  updatedAt: string | null;
+};
+
 export function storageKeyFor(kind: VocabPassKind): string {
   return kind === "words" ? PASSED_WORDS_KEY : PASSED_PHRASES_KEY;
+}
+
+/** Normalize + dedupe; preserves first-seen order. */
+export function normalizePassedList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const t = item.trim().toLowerCase();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
 }
 
 export function loadPassedList(key: string): string[] {
@@ -19,18 +41,7 @@ export function loadPassedList(key: string): string[] {
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const item of parsed) {
-      if (typeof item !== "string") continue;
-      const t = item.trim().toLowerCase();
-      if (!t || seen.has(t)) continue;
-      seen.add(t);
-      out.push(t);
-    }
-    return out;
+    return normalizePassedList(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -66,10 +77,30 @@ export function popPassed(list: string[]): [string[], string | null] {
   return [next, list[list.length - 1] ?? null];
 }
 
+/** Merge `extra` onto `base`, keeping base order and appending new items. */
+export function mergePassedLists(base: string[], extra: string[]): string[] {
+  let out = base;
+  for (const item of normalizePassedList(extra)) {
+    out = appendPassed(out, item);
+  }
+  return out;
+}
+
 export function clearLegacyStarredWords(): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(LEGACY_STARRED_WORDS_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Clear browser pass keys after a successful server migrate. */
+export function clearBrowserPassedLists(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(PASSED_WORDS_KEY);
+    window.localStorage.removeItem(PASSED_PHRASES_KEY);
   } catch {
     // ignore
   }

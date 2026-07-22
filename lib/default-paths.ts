@@ -65,3 +65,8 @@ export function defaultThinkingCorpusPath(): string {
 export function defaultPromptCorpusPath(): string {
   return path.join(getDataDir(), "prompt-corpus.jsonl");
 }
+
+/** Learner "passed" vocab (words + phrases); shared across LAN devices via the dashboard server. */
+export function defaultVocabPassedPath(): string {
+  return path.join(getDataDir(), "vocab-passed.json");
+}

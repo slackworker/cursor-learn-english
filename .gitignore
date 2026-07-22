@@ -21,6 +21,9 @@ next-env.d.ts
 /data/*.jsonl
 /data/.*-jsonl-prune
 
+# 学习者 Pass 词汇进度（本机 / 局域网共享，不入库）
+/data/vocab-passed.json
+
 # 词典构建缓存（原始下载，体积大；生成结果 *.generated.json 可入库）
 /data/.dict-cache/
 
