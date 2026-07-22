@@ -121,11 +121,14 @@ export function SetupPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-base-content/50">
-          运行时 {envLabel} · Node {data.runtime.node} ·{" "}
-          {new Date(data.generatedAt).toLocaleString()}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="section-title mb-0">环境诊断</h2>
+          <p className="mt-1 text-xs text-base-content/50">
+            运行时 {envLabel} · Node {data.runtime.node} ·{" "}
+            {new Date(data.generatedAt).toLocaleString()}
+          </p>
+        </div>
         <button
           type="button"
           className="btn btn-ghost btn-sm gap-1"

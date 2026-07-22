@@ -135,16 +135,6 @@ html[data-font-size="lg"] {
   @apply ml-auto hidden items-center gap-0.5 md:flex md:gap-1;
 }
 
-.nav-actions {
-  @apply flex shrink-0 items-center gap-1 sm:gap-2 md:ml-0;
-}
-
-@media (max-width: 767px) {
-  .nav-actions {
-    margin-left: auto;
-  }
-}
-
 .nav-link {
   @apply inline-flex flex-row flex-nowrap items-center gap-2 rounded-lg py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content sm:pl-2 sm:pr-3;
 }
@@ -182,34 +172,7 @@ html[data-font-size="lg"] {
   color: color-mix(in oklab, var(--color-primary) 78%, var(--color-base-content));
 }
 
-/* ── Server status ── */
-.server-status-badge {
-  @apply inline-flex items-center gap-1.5 px-1.5 py-1 text-xs font-medium text-base-content/55;
-}
-
-.server-status-dot {
-  @apply h-2 w-2 shrink-0 rounded-sm;
-}
-
-.server-status-dot-on {
-  background: var(--color-success, oklch(65% 0.15 145));
-}
-
-.server-status-dot-off {
-  background: var(--color-error, oklch(60% 0.2 25));
-  animation: server-status-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes server-status-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-
+/* ── Server offline banner ── */
 .server-offline-banner {
   @apply flex flex-wrap items-center justify-center gap-3 border-b px-4 py-2.5 text-sm;
   border-color: color-mix(in oklab, var(--color-error, oklch(60% 0.2 25)) 35%, var(--surface-border));
@@ -410,10 +373,6 @@ html[data-theme="business"] {
   --contrib-l2: #006d32;
   --contrib-l3: #26a641;
   --contrib-l4: #39d353;
-}
-
-.theme-toggle {
-  @apply flex h-9 w-9 items-center justify-center rounded-lg text-base-content/60 transition-colors hover:bg-base-200 hover:text-base-content sm:h-8 sm:w-8;
 }
 
 /* ── Tables ── */

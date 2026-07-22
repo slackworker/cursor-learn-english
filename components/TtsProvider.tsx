@@ -9,11 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import { TTS_PREVIEW_ID, useTTS } from "@/hooks/useTTS";
 import { useSpeechVoices } from "@/hooks/useSpeechVoices";
-import { TtsSettingsDrawer } from "@/components/TtsSettingsDrawer";
-import { lockBodyScroll } from "@/lib/body-scroll-lock";
 import {
   DEFAULT_TTS_SETTINGS,
   getTtsPreviewText,
@@ -23,6 +20,8 @@ import {
   type TtsSettings,
 } from "@/lib/tts-settings";
 
+export { TTS_PREVIEW_ID };
+
 type TtsContextValue = {
   settings: TtsSettings;
   updateSettings: (patch: Partial<TtsSettings>) => void;
@@ -31,10 +30,8 @@ type TtsContextValue = {
   voicesForLang: SpeechSynthesisVoice[];
   speakingId: string | null;
   speak: (id: string, text: string) => void;
+  stop: () => void;
   preview: () => void;
-  drawerOpen: boolean;
-  openDrawer: () => void;
-  closeDrawer: () => void;
   speechSupported: boolean;
 };
 
@@ -43,14 +40,11 @@ const TtsContext = createContext<TtsContextValue | null>(null);
 export function TtsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<TtsSettings>(DEFAULT_TTS_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const voices = useSpeechVoices();
   const { speakingId, speak, stop } = useTTS(settings, voices);
 
   useEffect(() => {
-    setMounted(true);
     setSpeechSupported(typeof window.speechSynthesis !== "undefined");
     setSettings(loadTtsSettings());
     setHydrated(true);
@@ -66,41 +60,32 @@ export function TtsProvider({ children }: { children: ReactNode }) {
     [voices, settings.lang]
   );
 
-  const updateSettings = useCallback((patch: Partial<TtsSettings>) => {
-    setSettings((prev) => {
-      const next = { ...prev, ...patch };
-      if (patch.lang !== undefined && patch.lang !== prev.lang) {
-        const stillValid =
-          !next.voiceURI || voices.some((v) => v.voiceURI === next.voiceURI && voiceMatchesLang(v, next.lang));
-        if (!stillValid) next.voiceURI = "";
-      }
-      return next;
-    });
-  }, [voices]);
+  const updateSettings = useCallback(
+    (patch: Partial<TtsSettings>) => {
+      setSettings((prev) => {
+        const next = { ...prev, ...patch };
+        if (patch.lang !== undefined && patch.lang !== prev.lang) {
+          const stillValid =
+            !next.voiceURI ||
+            voices.some(
+              (v) =>
+                v.voiceURI === next.voiceURI && voiceMatchesLang(v, next.lang)
+            );
+          if (!stillValid) next.voiceURI = "";
+        }
+        return next;
+      });
+    },
+    [voices]
+  );
 
   const resetSettings = useCallback(() => {
     setSettings(DEFAULT_TTS_SETTINGS);
   }, []);
 
-  const openDrawer = useCallback(() => setDrawerOpen(true), []);
-  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-
   const preview = useCallback(() => {
     speak(TTS_PREVIEW_ID, getTtsPreviewText(settings.lang), { raw: true });
   }, [speak, settings.lang]);
-
-  useEffect(() => {
-    if (!drawerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeDrawer();
-    };
-    document.addEventListener("keydown", onKey);
-    const unlockScroll = lockBodyScroll();
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      unlockScroll();
-    };
-  }, [drawerOpen, closeDrawer]);
 
   const value: TtsContextValue = {
     settings,
@@ -110,38 +95,12 @@ export function TtsProvider({ children }: { children: ReactNode }) {
     voicesForLang,
     speakingId,
     speak: (id, text) => speak(id, text),
+    stop,
     preview,
-    drawerOpen,
-    openDrawer,
-    closeDrawer,
     speechSupported,
   };
 
-  const drawer =
-    mounted &&
-    createPortal(
-      <TtsSettingsDrawer
-        open={drawerOpen}
-        onClose={closeDrawer}
-        settings={settings}
-        onChange={updateSettings}
-        onReset={resetSettings}
-        voicesForLang={voicesForLang}
-        allVoicesCount={voices.length}
-        speechSupported={speechSupported}
-        previewPlaying={speakingId === TTS_PREVIEW_ID}
-        onPreview={preview}
-        onPreviewStop={stop}
-      />,
-      document.body
-    );
-
-  return (
-    <TtsContext.Provider value={value}>
-      {children}
-      {drawer}
-    </TtsContext.Provider>
-  );
+  return <TtsContext.Provider value={value}>{children}</TtsContext.Provider>;
 }
 
 export function useTts(): TtsContextValue {

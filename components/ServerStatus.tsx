@@ -26,7 +26,7 @@ export function useServerStatus() {
   return useContext(ServerStatusContext);
 }
 
-/** 定期心跳：刷新闲置计时，并暴露在线状态给顶栏徽章 / 离线横幅 */
+/** 定期心跳：刷新闲置计时，并暴露在线状态给离线横幅 */
 export function ServerStatusProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState(true);
 
@@ -78,25 +78,5 @@ export function ServerOfflineBanner() {
         重试连接
       </button>
     </div>
-  );
-}
-
-/** 顶栏状态点：运行中 / 已停止 */
-export function ServerStatusBadge() {
-  const { online } = useServerStatus();
-  return (
-    <span
-      className="server-status-badge"
-      title={online ? "后台服务运行中" : "后台服务已停止"}
-      aria-label={online ? "后台服务运行中" : "后台服务已停止"}
-    >
-      <span
-        className={`server-status-dot ${online ? "server-status-dot-on" : "server-status-dot-off"}`}
-        aria-hidden
-      />
-      <span className="server-status-label hidden sm:inline">
-        {online ? "运行中" : "已停止"}
-      </span>
-    </span>
   );
 }
