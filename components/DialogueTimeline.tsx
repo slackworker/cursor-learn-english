@@ -498,7 +498,7 @@ function ShellToolLine({
     return (
       <div className="process-shell-line">
         <span className="process-shell-prompt" aria-hidden>
-          {">_ "}
+          {">_"}
         </span>
         <span className="process-shell-label">{label}</span>
       </div>
@@ -509,7 +509,7 @@ function ShellToolLine({
     <details className="process-shell-line process-shell-fold">
       <summary className="process-shell-summary">
         <span className="process-shell-prompt" aria-hidden>
-          {">_ "}
+          {">_"}
         </span>
         <span className="process-shell-label">{label}</span>
       </summary>

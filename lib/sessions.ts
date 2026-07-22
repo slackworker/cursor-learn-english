@@ -1,3 +1,4 @@
+import fs from "fs";
 import { getEvents, getEventsPath, type CursorEvent } from "./events";
 import { getCursorConversationTitles } from "./cursor-conversation-titles";
 import {
@@ -8,7 +9,11 @@ import {
 } from "./session-titles";
 import type { DomContextBlock, PromptSegment } from "./parse-dom-context";
 import { getCorpusPath, getPromptCorpusPath, type ThinkingRecord } from "./thinking";
-import { getMergedReadSignature, readMergedJsonlLinesCached } from "./jsonl-daily";
+import {
+  getMergedReadSignature,
+  readMergedJsonlLinesCached,
+  resolveReadPaths,
+} from "./jsonl-daily";
 import { getDialogueRounds, type DialogueRound } from "./dialogue";
 import { spanDurationMs } from "./format-duration";
 import { compareTimestamps } from "./format-datetime";
@@ -231,7 +236,7 @@ let latestSubagentAliases = new Map<string, string>();
  * While today's events JSONL is appending, serve a briefly-stale list instead of
  * rebuilding for multiple seconds on every poll.
  */
-const SUMMARIES_SOFT_STALE_MS = 20_000;
+const SUMMARIES_SOFT_STALE_MS = 60_000;
 
 /** conversation ids that ever emitted sessionStart / subagentStart (unfiltered corpus). */
 let globalLifecycleStarts: {
@@ -239,6 +244,99 @@ let globalLifecycleStarts: {
   subagentStart: Set<string>;
 } | null = null;
 let globalLifecycleStartSignature = "";
+let globalLifecycleStartsBuiltAt = 0;
+/** Serve briefly-stale global starts while today's events JSONL keeps appending. */
+const LIFECYCLE_STARTS_SOFT_STALE_MS = 60_000;
+
+type LifecycleStartHit = { kind: "sessionStart" | "subagentStart"; id: string };
+
+type LifecycleFileCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  sessionStart: Set<string>;
+  subagentStart: Set<string>;
+};
+
+/** Per-file start-id sets — only re-parse a shard when it changes (not the full corpus). */
+const lifecycleFileCache = new Map<string, LifecycleFileCacheEntry>();
+
+/**
+ * Extract only sessionStart / subagentStart ids from a line.
+ * Cheap reject avoids JSON.parse on the vast majority of event rows.
+ */
+function parseLifecycleStartLine(line: string): LifecycleStartHit | null {
+  if (!line.includes("sessionStart") && !line.includes("subagentStart")) {
+    return null;
+  }
+  try {
+    const event = JSON.parse(line) as CursorEvent;
+    if (event.event_type === "sessionStart") {
+      const id = getSessionIdFromEvent(event);
+      return id ? { kind: "sessionStart", id } : null;
+    }
+    if (event.event_type === "subagentStart") {
+      const id = getSubagentSessionId(event);
+      return id ? { kind: "subagentStart", id } : null;
+    }
+  } catch {
+    // ignore malformed
+  }
+  return null;
+}
+
+function readLifecycleStartsFromFile(filePath: string): {
+  sessionStart: Set<string>;
+  subagentStart: Set<string>;
+} {
+  let st: fs.Stats;
+  try {
+    st = fs.statSync(filePath);
+  } catch {
+    return { sessionStart: new Set(), subagentStart: new Set() };
+  }
+
+  const hit = lifecycleFileCache.get(filePath);
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) {
+    return { sessionStart: hit.sessionStart, subagentStart: hit.subagentStart };
+  }
+
+  const sessionStart = new Set<string>(hit?.sessionStart);
+  const subagentStart = new Set<string>(hit?.subagentStart);
+
+  // Append-only fast path: keep prior ids and scan only the new tail.
+  let offset = 0;
+  if (hit && st.size > hit.size) {
+    offset = hit.size;
+  } else {
+    sessionStart.clear();
+    subagentStart.clear();
+  }
+
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buf = Buffer.alloc(st.size - offset);
+    if (buf.length > 0) {
+      fs.readSync(fd, buf, 0, buf.length, offset);
+      for (const line of buf.toString("utf-8").split("\n")) {
+        if (!line.trim()) continue;
+        const parsed = parseLifecycleStartLine(line);
+        if (!parsed) continue;
+        if (parsed.kind === "sessionStart") sessionStart.add(parsed.id);
+        else subagentStart.add(parsed.id);
+      }
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  lifecycleFileCache.set(filePath, {
+    mtimeMs: st.mtimeMs,
+    size: st.size,
+    sessionStart,
+    subagentStart,
+  });
+  return { sessionStart, subagentStart };
+}
 
 function getGlobalLifecycleStarts(): {
   sessionStart: Set<string>;
@@ -248,20 +346,25 @@ function getGlobalLifecycleStarts(): {
   if (globalLifecycleStarts && globalLifecycleStartSignature === signature) {
     return globalLifecycleStarts;
   }
-  const { events } = getEvents();
+  if (
+    globalLifecycleStarts &&
+    Date.now() - globalLifecycleStartsBuiltAt < LIFECYCLE_STARTS_SOFT_STALE_MS
+  ) {
+    return globalLifecycleStarts;
+  }
+
   const sessionStart = new Set<string>();
   const subagentStart = new Set<string>();
-  for (const e of events) {
-    if (e.event_type === "sessionStart") {
-      const id = getSessionIdFromEvent(e);
-      if (id) sessionStart.add(id);
-    } else if (e.event_type === "subagentStart") {
-      const id = getSubagentSessionId(e);
-      if (id) subagentStart.add(id);
-    }
+  // Per-shard extract: when only today grows, older days stay cached.
+  for (const filePath of resolveReadPaths(getEventsPath())) {
+    const part = readLifecycleStartsFromFile(filePath);
+    for (const id of part.sessionStart) sessionStart.add(id);
+    for (const id of part.subagentStart) subagentStart.add(id);
   }
+
   globalLifecycleStarts = { sessionStart, subagentStart };
   globalLifecycleStartSignature = signature;
+  globalLifecycleStartsBuiltAt = Date.now();
   return globalLifecycleStarts;
 }
 
@@ -967,6 +1070,23 @@ function buildSessionSummaries(
   return { sessions, truncated: truncated || promptsTruncated, aliases };
 }
 
+function summariesCacheKey(
+  from: string | undefined,
+  to: string | undefined,
+  includeSubagents: boolean
+): string {
+  return `${from ?? ""}::${to ?? ""}::sub:${includeSubagents ? 1 : 0}`;
+}
+
+function isSummariesCacheUsable(
+  hit: SummariesCacheEntry | undefined,
+  signature: string
+): hit is SummariesCacheEntry {
+  if (!hit) return false;
+  if (hit.signature === signature) return true;
+  return Date.now() - hit.builtAt < SUMMARIES_SOFT_STALE_MS;
+}
+
 export function getSessionSummaries(
   from?: string,
   to?: string,
@@ -976,29 +1096,56 @@ export function getSessionSummaries(
   truncated: boolean;
 } {
   const includeSubagents = Boolean(options?.includeSubagents);
-  const cacheKey = `${from ?? ""}::${to ?? ""}::sub:${includeSubagents ? 1 : 0}`;
+  const cacheKey = summariesCacheKey(from, to, includeSubagents);
   const signature = getSummariesCacheSignature(from, to);
   const hit = summariesCache.get(cacheKey);
-  if (hit) {
-    const fresh = hit.signature === signature;
-    const softStale =
-      !fresh && Date.now() - hit.builtAt < SUMMARIES_SOFT_STALE_MS;
-    if (fresh || softStale) {
-      if (includeSubagents) latestSubagentAliases = hit.aliases;
-      return hit.result;
+  if (isSummariesCacheUsable(hit, signature)) {
+    if (includeSubagents) latestSubagentAliases = hit.aliases;
+    return hit.result;
+  }
+
+  // Prefer deriving the main-only list from a warm includeSubagents=true entry
+  // so home + sessions page do not each pay for a full rebuild.
+  if (!includeSubagents) {
+    const fullKey = summariesCacheKey(from, to, true);
+    const fullHit = summariesCache.get(fullKey);
+    if (isSummariesCacheUsable(fullHit, signature)) {
+      const mainOnly = {
+        sessions: fullHit.result.sessions.filter((s) => !s.is_subagent),
+        truncated: fullHit.result.truncated,
+      };
+      summariesCache.set(cacheKey, {
+        signature: fullHit.signature,
+        result: mainOnly,
+        aliases: new Map(),
+        builtAt: fullHit.builtAt,
+      });
+      return mainOnly;
     }
   }
 
-  const built = buildSessionSummaries(from, to, options);
-  const result = { sessions: built.sessions, truncated: built.truncated };
-  summariesCache.set(cacheKey, {
+  // Always build the full list once; populate both cache keys.
+  const built = buildSessionSummaries(from, to, { includeSubagents: true });
+  const fullResult = { sessions: built.sessions, truncated: built.truncated };
+  const mainResult = {
+    sessions: built.sessions.filter((s) => !s.is_subagent),
+    truncated: built.truncated,
+  };
+  const builtAt = Date.now();
+  summariesCache.set(summariesCacheKey(from, to, true), {
     signature,
-    result,
+    result: fullResult,
     aliases: built.aliases,
-    builtAt: Date.now(),
+    builtAt,
   });
-  if (includeSubagents) latestSubagentAliases = built.aliases;
-  return result;
+  summariesCache.set(summariesCacheKey(from, to, false), {
+    signature,
+    result: mainResult,
+    aliases: new Map(),
+    builtAt,
+  });
+  latestSubagentAliases = built.aliases;
+  return includeSubagents ? fullResult : mainResult;
 }
 
 /** Resolve call-* / whitespace-corrupted ids to the listed canonical session id. */
@@ -1016,6 +1163,8 @@ export function clearSessionSummariesCache(): void {
   latestSubagentAliases = new Map();
   globalLifecycleStarts = null;
   globalLifecycleStartSignature = "";
+  globalLifecycleStartsBuiltAt = 0;
+  lifecycleFileCache.clear();
 }
 
 /**

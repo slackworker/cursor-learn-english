@@ -176,6 +176,7 @@
 
 .process-shell-prompt {
   flex-shrink: 0;
+  margin-inline-end: 1ch;
   opacity: 0.55;
   user-select: none;
 }

@@ -8,9 +8,42 @@ function getHomeDir(): string {
     : process.env.HOME || os.homedir();
 }
 
-/** WSL: Windows profile dirs under /mnt/c/Users (same idea as conversation titles). */
+/**
+ * WSL: Windows profile dirs that may hold Cursor transcripts.
+ * Prefer the current user (USERPROFILE / common env) — scanning every
+ * /mnt/c/Users/* on every index rebuild is very slow on 9p mounts.
+ */
 function windowsUserDirs(): string[] {
   const dirs: string[] = [];
+  const seen = new Set<string>();
+  const push = (dir: string | null | undefined) => {
+    if (!dir) return;
+    const resolved = path.resolve(dir);
+    if (seen.has(resolved)) return;
+    try {
+      if (!fs.statSync(resolved).isDirectory()) return;
+    } catch {
+      return;
+    }
+    seen.add(resolved);
+    dirs.push(resolved);
+  };
+
+  const profile =
+    process.env.USERPROFILE ||
+    (process.env.HOMEDRIVE && process.env.HOMEPATH
+      ? `${process.env.HOMEDRIVE}${process.env.HOMEPATH}`
+      : "");
+  if (profile) {
+    // USERPROFILE is like C:\Users\Name — map to /mnt/c/Users/Name on WSL.
+    const mnt = profile
+      .replace(/^([A-Za-z]):\\/, (_, d: string) => `/mnt/${d.toLowerCase()}/`)
+      .replace(/\\/g, "/");
+    push(mnt);
+    push(profile);
+  }
+
+  // Prefer profiles that actually have Cursor project transcripts.
   try {
     const usersRoot = "/mnt/c/Users";
     for (const name of fs.readdirSync(usersRoot)) {
@@ -23,11 +56,18 @@ function windowsUserDirs(): string[] {
       ) {
         continue;
       }
-      dirs.push(path.join(usersRoot, name));
+      const userDir = path.join(usersRoot, name);
+      const projects = path.join(userDir, ".cursor", "projects");
+      try {
+        if (fs.statSync(projects).isDirectory()) push(userDir);
+      } catch {
+        // no Cursor projects for this profile
+      }
     }
   } catch {
     // not on WSL / no mount
   }
+
   return dirs;
 }
 
@@ -103,8 +143,10 @@ export type ResolvedTranscript = {
   parentSessionId?: string;
 };
 
-/** sessionId → resolved transcript（命中缓存；未命中不永久缓存负结果） */
+/** sessionId → resolved transcript（命中缓存；短负缓存避免同一次 list 重建反复扫盘） */
 const pathCache = new Map<string, ResolvedTranscript>();
+const negativePathCache = new Map<string, number>();
+const NEGATIVE_TTL_MS = 5_000;
 
 type TranscriptIndex = {
   byId: Map<string, ResolvedTranscript>;
@@ -115,7 +157,9 @@ type TranscriptIndex = {
 
 let transcriptIndex: TranscriptIndex | null = null;
 const INDEX_TTL_MS = 60_000;
-const INDEX_MISS_REBUILD_MS = 2_000;
+/** At most one forced miss-rebuild per window — avoid N full /mnt/c scans per list rebuild. */
+const INDEX_MISS_REBUILD_MS = 15_000;
+let lastForcedIndexRebuildAt = 0;
 
 function rootsSignature(roots: string[]): string {
   return roots
@@ -193,15 +237,26 @@ function buildTranscriptIndex(roots: string[]): Omit<TranscriptIndex, "signature
 }
 
 function getTranscriptIndex(force = false): TranscriptIndex {
-  const roots = getTranscriptRoots();
-  const signature = rootsSignature(roots);
   const now = Date.now();
+  // Trust the in-memory index for the TTL window — do NOT re-stat every
+  // transcript root on each resolveTranscript call (list rebuilds resolve
+  // thousands of ids; root signatures are expensive on /mnt/c).
   if (
     !force &&
     transcriptIndex &&
-    transcriptIndex.signature === signature &&
     now - transcriptIndex.builtAt < INDEX_TTL_MS
   ) {
+    return transcriptIndex;
+  }
+
+  const roots = getTranscriptRoots();
+  const signature = rootsSignature(roots);
+  if (
+    !force &&
+    transcriptIndex &&
+    transcriptIndex.signature === signature
+  ) {
+    transcriptIndex.builtAt = now;
     return transcriptIndex;
   }
 
@@ -212,6 +267,7 @@ function getTranscriptIndex(force = false): TranscriptIndex {
     builtAt: now,
   };
   pathCache.clear();
+  negativePathCache.clear();
   for (const [id, resolved] of built.byId) {
     pathCache.set(id, resolved);
   }
@@ -241,11 +297,22 @@ export function resolveTranscript(sessionId: string): ResolvedTranscript | null 
   if (!sessionId) return null;
   const cached = pathCache.get(sessionId);
   if (cached) return cached;
+  const negUntil = negativePathCache.get(sessionId);
+  if (negUntil && Date.now() < negUntil) return null;
 
-  const indexed = getTranscriptIndex().byId.get(sessionId);
+  const index = getTranscriptIndex();
+  const indexed = index.byId.get(sessionId);
   if (indexed) {
     pathCache.set(sessionId, indexed);
     return indexed;
+  }
+
+  const indexAge = Date.now() - index.builtAt;
+  // A freshly built index already walked every transcript file — do not probe
+  // all roots again for each miss (session list resolves thousands of ids).
+  if (indexAge < INDEX_MISS_REBUILD_MS) {
+    negativePathCache.set(sessionId, Date.now() + NEGATIVE_TTL_MS);
+    return null;
   }
 
   // Cheap main-path probe for sessions created after the last index build.
@@ -258,11 +325,11 @@ export function resolveTranscript(sessionId: string): ResolvedTranscript | null 
     }
   }
 
-  // Subagent files live in nested dirs; rebuild index if it is more than a moment stale.
-  if (
-    transcriptIndex &&
-    Date.now() - transcriptIndex.builtAt >= INDEX_MISS_REBUILD_MS
-  ) {
+  // Subagent files live in nested dirs; allow one forced rebuild per window when
+  // the root signature may not reflect nested writes — not once per miss id.
+  const now = Date.now();
+  if (now - lastForcedIndexRebuildAt >= INDEX_MISS_REBUILD_MS) {
+    lastForcedIndexRebuildAt = now;
     const again = getTranscriptIndex(true).byId.get(sessionId);
     if (again) {
       pathCache.set(sessionId, again);
@@ -270,6 +337,7 @@ export function resolveTranscript(sessionId: string): ResolvedTranscript | null 
     }
   }
 
+  negativePathCache.set(sessionId, Date.now() + NEGATIVE_TTL_MS);
   return null;
 }
 
@@ -312,7 +380,9 @@ export function listSubagentIdsForParent(parentSessionId: string): string[] {
 /** 测试或路径变更后可调用 */
 export function clearTranscriptPathCache(): void {
   pathCache.clear();
+  negativePathCache.clear();
   transcriptIndex = null;
   cachedRoots = null;
   cachedRootsAt = 0;
+  lastForcedIndexRebuildAt = 0;
 }
