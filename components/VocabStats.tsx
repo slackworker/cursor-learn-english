@@ -510,12 +510,12 @@ export function VocabStats() {
           {remainingWords.toLocaleString()} / {uniqueWords.toLocaleString()}
         </span>
         <span className="mx-2 text-base-content/25">·</span>
-        待学搭配{" "}
+        待学短语{" "}
         <span className="tabular-nums text-base-content/80">
           {remainingPhrases.toLocaleString()} / {uniquePhrases.toLocaleString()}
         </span>
         <span className="mx-2 text-base-content/25">·</span>
-        已 Pass 单词 {passedWords.length} · 搭配 {passedPhrases.length}
+        已 Pass 单词 {passedWords.length} · 短语 {passedPhrases.length}
         {hiddenBasicCount > 0 ? (
           <>
             <span className="mx-2 text-base-content/25">·</span>
@@ -548,7 +548,7 @@ export function VocabStats() {
               setLastUndone(null);
             }}
           >
-            固定搭配
+            短语
           </button>
         </div>
         <SearchInput value={search} onChange={setSearch} />
@@ -623,7 +623,7 @@ export function VocabStats() {
         {pageItems.length === 0 ? (
           <div className="py-10 text-center text-sm text-base-content/40">
             {showPassed
-              ? `还没有 Pass 过任何${isWordTab ? "单词" : "搭配"}`
+              ? `还没有 Pass 过任何${isWordTab ? "单词" : "短语"}`
               : "无匹配结果（或已全部 Pass）"}
           </div>
         ) : (
@@ -767,7 +767,7 @@ export function VocabStats() {
           <> · 单词词典 {data.wordDictionarySize.toLocaleString()} 条</>
         ) : null}
         {data?.dictionarySize != null ? (
-          <> · 搭配词典 {data.dictionarySize.toLocaleString()} 条</>
+          <> · 短语词典 {data.dictionarySize.toLocaleString()} 条</>
         ) : null}
       </p>
     </div>
