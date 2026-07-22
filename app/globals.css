@@ -10,20 +10,20 @@
 
 html {
   scrollbar-gutter: stable;
-  /* Default "中"：略大于浏览器 16px，改善 1080P / 平板阅读 */
-  font-size: 106.25%;
+  /* Default "中"：约 19px，改善 1080P / 平板阅读 */
+  font-size: 118.75%;
 }
 
 html[data-font-size="sm"] {
-  font-size: 100%;
-}
-
-html[data-font-size="md"] {
   font-size: 106.25%;
 }
 
-html[data-font-size="lg"] {
+html[data-font-size="md"] {
   font-size: 118.75%;
+}
+
+html[data-font-size="lg"] {
+  font-size: 131.25%;
 }
 
 /* ── Theme refinements ── */
