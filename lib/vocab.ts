@@ -35,6 +35,8 @@ export type WordFreq = {
   word: string;
   count: number;
   gloss?: string;
+  /** Alternate senses when the dictionary kept more than one. */
+  glosses?: Array<{ gloss: string; pos?: string }>;
   ipa?: string;
   pos?: string;
   /** NGSL 1.2 rank (1 = most frequent); omit if unknown. */
@@ -263,6 +265,9 @@ function countWords(tokens: string[]): WordFreq[] {
         word,
         count,
         ...(entry?.gloss ? { gloss: entry.gloss } : {}),
+        ...(entry?.glosses && entry.glosses.length > 1
+          ? { glosses: entry.glosses }
+          : {}),
         ...(entry?.ipa ? { ipa: entry.ipa } : {}),
         ...(entry?.pos ? { pos: entry.pos } : {}),
         ...(diff.ngslRank != null ? { ngslRank: diff.ngslRank } : {}),

@@ -467,6 +467,14 @@ html[data-theme="business"] {
   font-feature-settings: "kern" 1;
 }
 
+.vocab-gloss-more > summary {
+  list-style: none;
+}
+
+.vocab-gloss-more > summary::-webkit-details-marker {
+  display: none;
+}
+
 /* ── Back link ── */
 .back-link {
   @apply mb-5 inline-flex items-center gap-1 text-sm font-medium text-base-content/50 transition-colors hover:text-primary;

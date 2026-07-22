@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Build offline word dictionary (IPA + English gloss) from open datasets:
- * - Wordset Dictionary (definitions / POS)
+ * - Wordset Dictionary (definitions / POS; keep up to 3 senses, auto-pick primary)
  * - open-dict-data/ipa-dict en_US (IPA phonetics)
  *
  * Output: data/word-dictionary.generated.json
@@ -338,12 +338,74 @@ function loadIpa(filePath) {
   return map;
 }
 
-/** Prefer senses with examples (usually more common / pedagogical). */
-function pickMeaning(meanings) {
-  const valid = meanings.filter((m) => m?.def);
-  if (valid.length === 0) return null;
-  const withExample = valid.find((m) => m.example);
-  return withExample || valid[0];
+/**
+ * Niche / marked senses that should not win as the card primary.
+ * Keep this list narrow — broad domain labels (biology, anatomy…) often
+ * mark the *main* sense and must not trigger recovery.
+ */
+const NICHE_SENSE_RE =
+  /\b(drug|drugs|narcotic|heroin|cocaine|opium|slang|vulgar|archaic|obsolete|heraldry|nautical|theology|dialect|offensive|derogatory|taboo|hebrew alphabet|greek alphabet|letter of the|taxonomic|indehiscent|spermatozoa|semen)\b/i;
+const MARKED_SENSE_RE =
+  /\b(selfishly|unethically|immorally|illegally|vulgarly)\b/i;
+
+const MAX_GLOSSES = 3;
+
+function isBadPrimarySense(meaning) {
+  const def = String(meaning?.def || "");
+  return NICHE_SENSE_RE.test(def) || MARKED_SENSE_RE.test(def);
+}
+
+function sensePos(meaning) {
+  const pos = String(meaning?.speech_part || "").toLowerCase();
+  return pos || undefined;
+}
+
+/**
+ * Primary = first Wordset sense, unless it is clearly niche/marked.
+ * Wordset examples often sit on rare senses, so we do not prefer them.
+ * When recovering, prefer a surviving noun (common for content words).
+ */
+function pickPrimaryMeaning(meanings) {
+  if (meanings.length === 0) return null;
+  const first = meanings[0];
+  if (!isBadPrimarySense(first)) return first;
+  const good = meanings.filter((m) => !isBadPrimarySense(m));
+  if (good.length === 0) return first;
+  return (
+    good.find((m) => sensePos(m) === "noun") || good[0]
+  );
+}
+
+/** Primary first, then other senses (same POS → other non-niche → rest), capped. */
+function pickGlossList(meanings, primary) {
+  const out = [];
+  const primaryPos = sensePos(primary);
+  const push = (m) => {
+    const gloss = cleanGloss(m?.def);
+    if (!gloss) return;
+    if (out.some((x) => x.gloss === gloss)) return;
+    out.push({ gloss, ...(sensePos(m) ? { pos: sensePos(m) } : {}) });
+  };
+
+  push(primary);
+
+  for (const m of meanings) {
+    if (out.length >= MAX_GLOSSES) break;
+    if (m === primary || isBadPrimarySense(m)) continue;
+    if (primaryPos && sensePos(m) !== primaryPos) continue;
+    push(m);
+  }
+  for (const m of meanings) {
+    if (out.length >= MAX_GLOSSES) break;
+    if (m === primary || isBadPrimarySense(m)) continue;
+    push(m);
+  }
+  for (const m of meanings) {
+    if (out.length >= MAX_GLOSSES) break;
+    if (out.some((x) => x.gloss === cleanGloss(m?.def))) continue;
+    push(m);
+  }
+  return out;
 }
 
 function loadWordsetLetter(filePath, map) {
@@ -352,15 +414,18 @@ function loadWordsetLetter(filePath, map) {
   for (const entry of Object.values(data)) {
     const word = normalizeWord(entry?.word);
     if (!isSingleWord(word) || map.has(word)) continue;
-    const meanings = Array.isArray(entry?.meanings) ? entry.meanings : [];
-    const picked = pickMeaning(meanings);
+    const meanings = (Array.isArray(entry?.meanings) ? entry.meanings : []).filter(
+      (m) => m?.def
+    );
+    const picked = pickPrimaryMeaning(meanings);
     if (!picked) continue;
-    const gloss = cleanGloss(picked.def);
-    if (!gloss) continue;
+    const glosses = pickGlossList(meanings, picked);
+    if (glosses.length === 0) continue;
     map.set(word, {
       word,
-      gloss,
-      pos: String(picked.speech_part || "").toLowerCase() || undefined,
+      gloss: glosses[0].gloss,
+      glosses: glosses.length > 1 ? glosses : undefined,
+      pos: glosses[0].pos || sensePos(picked),
       source: "wordset",
     });
     added += 1;
@@ -375,9 +440,12 @@ function applyCoreRows(rows, map, ipaMap, { override }) {
     if (!key || !isSingleWord(key)) continue;
     if (!override && map.has(key)) continue;
     const resolvedIpa = cleanIpa(ipa) || ipaMap.get(key) || undefined;
+    const cleaned = cleanGloss(gloss);
     map.set(key, {
       word: key,
-      gloss: cleanGloss(gloss),
+      gloss: cleaned,
+      // Local rows are intentional single-sense overrides.
+      glosses: undefined,
       ipa: resolvedIpa,
       pos,
       source: "local",
@@ -422,6 +490,9 @@ async function run() {
     .map((e) => ({
       word: e.word,
       gloss: e.gloss,
+      ...(Array.isArray(e.glosses) && e.glosses.length > 1
+        ? { glosses: e.glosses }
+        : {}),
       ...(e.ipa ? { ipa: e.ipa } : {}),
       ...(e.pos ? { pos: e.pos } : {}),
       ...(e.source ? { source: e.source } : {}),
@@ -429,6 +500,9 @@ async function run() {
     .sort((a, b) => a.word.localeCompare(b.word));
 
   const withIpa = entries.filter((e) => e.ipa).length;
+  const withGlosses = entries.filter(
+    (e) => Array.isArray(e.glosses) && e.glosses.length > 1
+  ).length;
   const payload = {
     generatedAt: new Date().toISOString(),
     sources: {
@@ -439,12 +513,13 @@ async function run() {
     },
     count: entries.length,
     withIpa,
+    withGlosses,
     entries,
   };
 
   fs.writeFileSync(outPath, JSON.stringify(payload));
   console.log(
-    `wrote ${outPath} (${entries.length} entries, ${withIpa} with IPA)`
+    `wrote ${outPath} (${entries.length} entries, ${withIpa} with IPA, ${withGlosses} multi-gloss)`
   );
 
   for (const k of [
@@ -457,13 +532,19 @@ async function run() {
     "prompt",
     "deploy",
     "are",
+    "user",
+    "key",
   ]) {
     const hit = map.get(k);
-    console.log(
-      hit
-        ? `OK  ${k} ${hit.ipa || "—"} | ${hit.gloss}`
-        : `MISS ${k}`
-    );
+    if (!hit) {
+      console.log(`MISS ${k}`);
+      continue;
+    }
+    const alt =
+      Array.isArray(hit.glosses) && hit.glosses.length > 1
+        ? ` (+${hit.glosses.length - 1} alts)`
+        : "";
+    console.log(`OK  ${k} ${hit.ipa || "—"} | ${hit.gloss}${alt}`);
   }
 }
 

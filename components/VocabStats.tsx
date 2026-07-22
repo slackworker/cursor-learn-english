@@ -26,6 +26,7 @@ type WordFreq = {
   word: string;
   count: number;
   gloss?: string;
+  glosses?: Array<{ gloss: string; pos?: string }>;
   ipa?: string;
   pos?: string;
   ngslRank?: number;
@@ -57,6 +58,7 @@ type DisplayItem = {
   text: string;
   count?: number;
   gloss?: string;
+  glosses?: Array<{ gloss: string; pos?: string }>;
   ipa?: string;
   pos?: string;
   category?: string;
@@ -67,6 +69,20 @@ type DisplayItem = {
 };
 
 const PAGE_SIZE = 100;
+
+function glossMatchesQuery(
+  gloss: string | undefined,
+  glosses: Array<{ gloss: string; pos?: string }> | undefined,
+  q: string
+): boolean {
+  if (gloss && gloss.toLowerCase().includes(q)) return true;
+  if (!glosses) return false;
+  return glosses.some(
+    (g) =>
+      g.gloss.toLowerCase().includes(q) ||
+      Boolean(g.pos && g.pos.toLowerCase().includes(q))
+  );
+}
 
 function BarChart({ items }: { items: { name: string; value: number }[] }) {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -267,7 +283,7 @@ export function VocabStats() {
           if (
             q &&
             !hit.word.includes(q) &&
-            !(hit.gloss && hit.gloss.toLowerCase().includes(q)) &&
+            !glossMatchesQuery(hit.gloss, hit.glosses, q) &&
             !(hit.ipa && hit.ipa.toLowerCase().includes(q)) &&
             !(hit.pos && hit.pos.toLowerCase().includes(q))
           ) {
@@ -277,6 +293,7 @@ export function VocabStats() {
             text: hit.word,
             count: hit.count,
             gloss: hit.gloss,
+            glosses: hit.glosses,
             ipa: hit.ipa,
             pos: hit.pos,
             ngslRank: hit.ngslRank,
@@ -321,7 +338,7 @@ export function VocabStats() {
         items = items.filter(
           (w) =>
             w.word.includes(q) ||
-            Boolean(w.gloss && w.gloss.toLowerCase().includes(q)) ||
+            glossMatchesQuery(w.gloss, w.glosses, q) ||
             Boolean(w.ipa && w.ipa.toLowerCase().includes(q)) ||
             Boolean(w.pos && w.pos.toLowerCase().includes(q))
         );
@@ -331,6 +348,7 @@ export function VocabStats() {
         text: w.word,
         count: w.count,
         gloss: w.gloss,
+        glosses: w.glosses,
         ipa: w.ipa,
         pos: w.pos,
         ngslRank: w.ngslRank,
@@ -627,14 +645,35 @@ export function VocabStats() {
                           <p className="vocab-ipa text-primary/80">{item.ipa}</p>
                         ) : null}
                         {item.gloss ? (
-                          <p className="mt-1 text-xs leading-snug text-base-content/55">
-                            {item.pos ? (
-                              <span className="mr-1 text-base-content/35">
-                                {item.pos}.
-                              </span>
+                          <div className="mt-1 text-xs leading-snug text-base-content/55">
+                            <p>
+                              {item.pos ? (
+                                <span className="mr-1 text-base-content/35">
+                                  {item.pos}.
+                                </span>
+                              ) : null}
+                              {item.gloss}
+                            </p>
+                            {item.glosses && item.glosses.length > 1 ? (
+                              <details className="vocab-gloss-more mt-0.5">
+                                <summary className="cursor-pointer select-none text-[10px] text-base-content/40 hover:text-base-content/60">
+                                  另有 {item.glosses.length - 1} 义
+                                </summary>
+                                <ul className="mt-1 space-y-0.5 text-[11px] text-base-content/45">
+                                  {item.glosses.slice(1).map((g) => (
+                                    <li key={`${g.pos ?? ""}:${g.gloss}`}>
+                                      {g.pos ? (
+                                        <span className="mr-1 text-base-content/30">
+                                          {g.pos}.
+                                        </span>
+                                      ) : null}
+                                      {g.gloss}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
                             ) : null}
-                            {item.gloss}
-                          </p>
+                          </div>
                         ) : item.orphan ? (
                           <p className="mt-1 text-xs text-base-content/40">
                             当前语料未命中

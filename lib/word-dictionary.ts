@@ -7,9 +7,17 @@
 import fs from "fs";
 import path from "path";
 
+export type WordGlossSense = {
+  gloss: string;
+  pos?: string;
+};
+
 export type WordDictEntry = {
   word: string;
+  /** Primary learner-facing gloss. */
   gloss: string;
+  /** Up to a few senses when Wordset has multiples (primary first). */
+  glosses?: WordGlossSense[];
   ipa?: string;
   pos?: string;
   source?: string;
@@ -98,11 +106,42 @@ type GeneratedFile = {
   entries: Array<{
     word: string;
     gloss: string;
+    glosses?: WordGlossSense[];
     ipa?: string;
     pos?: string;
     source?: string;
   }>;
 };
+
+function normalizeGlosses(
+  gloss: string,
+  glosses?: WordGlossSense[]
+): WordGlossSense[] | undefined {
+  if (!Array.isArray(glosses) || glosses.length <= 1) return undefined;
+  const out: WordGlossSense[] = [];
+  for (const g of glosses) {
+    const text = String(g?.gloss || "").trim();
+    if (!text) continue;
+    if (out.some((x) => x.gloss === text)) continue;
+    out.push({
+      gloss: text,
+      ...(g.pos ? { pos: String(g.pos).toLowerCase() } : {}),
+    });
+  }
+  if (out.length <= 1) return undefined;
+  // Ensure primary gloss stays first.
+  const primary = gloss.trim();
+  if (primary && out[0]?.gloss !== primary) {
+    const idx = out.findIndex((x) => x.gloss === primary);
+    if (idx > 0) {
+      const [hit] = out.splice(idx, 1);
+      out.unshift(hit);
+    } else {
+      out.unshift({ gloss: primary });
+    }
+  }
+  return out.slice(0, 3);
+}
 
 let cachedList: WordDictEntry[] | null = null;
 let cachedMap: Map<string, WordDictEntry> | null = null;
@@ -120,6 +159,7 @@ function loadGeneratedEntries(): WordDictEntry[] {
     return data.entries.map((e) => ({
       word: e.word,
       gloss: e.gloss,
+      glosses: normalizeGlosses(e.gloss, e.glosses),
       ipa: e.ipa ? normalizeLearnerIpa(e.ipa) : undefined,
       pos: e.pos,
       source: e.source,
