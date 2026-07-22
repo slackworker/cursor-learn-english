@@ -395,6 +395,7 @@ export default function SessionDetailPage() {
                       }
                       segments={turn.user_prompt_segments}
                       domContexts={turn.user_dom_contexts}
+                      ttsId={`turn-${turn.id}-user`}
                     />
                   </MessageBubble>
                   <div className="mt-3">

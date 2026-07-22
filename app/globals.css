@@ -586,7 +586,7 @@ html[data-theme="business"] {
   @apply mb-3 inline-flex items-center gap-1 text-sm font-medium text-base-content/50 transition-colors hover:text-primary sm:mb-5;
 }
 
-/* ── TTS settings drawer ── */
+/* ── TTS settings (also reused by vocab settings drawer) ── */
 .tts-drawer {
   border-color: var(--surface-border);
   background: var(--color-base-100, oklch(100% 0 0));

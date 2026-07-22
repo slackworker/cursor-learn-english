@@ -29,10 +29,12 @@ type TtsContextValue = {
   voices: SpeechSynthesisVoice[];
   voicesForLang: SpeechSynthesisVoice[];
   speakingId: string | null;
-  speak: (id: string, text: string) => void;
+  speak: (id: string, text: string, options?: { raw?: boolean }) => void;
   stop: () => void;
   preview: () => void;
   speechSupported: boolean;
+  lastError: string | null;
+  clearError: () => void;
 };
 
 const TtsContext = createContext<TtsContextValue | null>(null);
@@ -42,7 +44,10 @@ export function TtsProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const voices = useSpeechVoices();
-  const { speakingId, speak, stop } = useTTS(settings, voices);
+  const { speakingId, speak, stop, lastError, clearError } = useTTS(
+    settings,
+    voices
+  );
 
   useEffect(() => {
     setSpeechSupported(typeof window.speechSynthesis !== "undefined");
@@ -94,13 +99,22 @@ export function TtsProvider({ children }: { children: ReactNode }) {
     voices,
     voicesForLang,
     speakingId,
-    speak: (id, text) => speak(id, text),
+    speak,
     stop,
     preview,
     speechSupported,
+    lastError,
+    clearError,
   };
 
-  return <TtsContext.Provider value={value}>{children}</TtsContext.Provider>;
+  return (
+    <TtsContext.Provider value={value}>
+      {children}
+      <div className="sr-only" role="status" aria-live="polite">
+        {lastError ?? ""}
+      </div>
+    </TtsContext.Provider>
+  );
 }
 
 export function useTts(): TtsContextValue {

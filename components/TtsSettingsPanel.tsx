@@ -21,6 +21,8 @@ export function TtsSettingsPanel() {
     preview,
     stop,
     speechSupported,
+    lastError,
+    clearError,
   } = useTts();
 
   const voiceOptions = useMemo(() => {
@@ -38,6 +40,19 @@ export function TtsSettingsPanel() {
       {!speechSupported && (
         <div className="banner-warning">
           当前浏览器不支持语音朗读（Web Speech API）。
+        </div>
+      )}
+
+      {lastError && (
+        <div className="banner-warning flex items-start justify-between gap-2">
+          <span>{lastError}</span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs shrink-0"
+            onClick={clearError}
+          >
+            关闭
+          </button>
         </div>
       )}
 

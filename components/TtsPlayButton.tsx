@@ -4,9 +4,16 @@ type TtsPlayButtonProps = {
   playing: boolean;
   onClick: () => void;
   className?: string;
+  /** Accessible label when idle. Defaults to 「朗读」. */
+  label?: string;
 };
 
-export function TtsPlayButton({ playing, onClick, className = "" }: TtsPlayButtonProps) {
+export function TtsPlayButton({
+  playing,
+  onClick,
+  className = "",
+  label = "朗读",
+}: TtsPlayButtonProps) {
   return (
     <button
       type="button"
@@ -14,7 +21,7 @@ export function TtsPlayButton({ playing, onClick, className = "" }: TtsPlayButto
         e.stopPropagation();
         onClick();
       }}
-      aria-label={playing ? "停止朗读" : "朗读英语"}
+      aria-label={playing ? "停止朗读" : label}
       className={`btn btn-circle btn-ghost btn-sm ${className}`.trim()}
     >
       {playing ? (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { SlidersHorizontal, Undo2 } from "lucide-react";
+import { DialogueTtsPlayButton } from "@/components/DialogueTtsContext";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Surface } from "@/components/ui/Surface";
@@ -467,6 +468,8 @@ export function VocabStats() {
                 showChart={showChart}
                 onShowChartChange={setShowChart}
                 showPassed={showPassed}
+                onShowPassedChange={setShowPassed}
+                passedCount={passedList.length}
               />,
               document.body
             )
@@ -687,8 +690,16 @@ export function VocabStats() {
                     <div className="mb-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="break-words font-mono text-xs md:text-sm">
-                            {item.text}
+                          <div className="flex items-start gap-1">
+                            <div className="min-w-0 flex-1 break-words font-mono text-xs md:text-sm">
+                              {item.text}
+                            </div>
+                            <DialogueTtsPlayButton
+                              id={`vocab-${tab}-${item.text}`}
+                              text={item.text}
+                              raw
+                              className="btn-xs h-7 w-7 min-h-0 shrink-0"
+                            />
                           </div>
                           {item.ipa ? (
                             <p className="vocab-ipa text-primary/80">

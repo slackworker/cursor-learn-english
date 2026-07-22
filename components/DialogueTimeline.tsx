@@ -7,10 +7,7 @@ import {
   useContext,
   type ReactNode,
 } from "react";
-import {
-  DialogueTtsPlayButton,
-  DialogueTtsProvider,
-} from "@/components/DialogueTtsContext";
+import { DialogueTtsPlayButton } from "@/components/DialogueTtsContext";
 import { MarkdownContent } from "@/components/MarkdownContent";
 import {
   buildDialogueTimeline,
@@ -889,7 +886,7 @@ export function DialogueTimeline({
 
   return (
     <TaskSubagentsContext.Provider value={subagents ?? null}>
-      <DialogueTtsProvider>{body}</DialogueTtsProvider>
+      {body}
     </TaskSubagentsContext.Provider>
   );
 }
