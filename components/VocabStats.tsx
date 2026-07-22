@@ -424,6 +424,12 @@ export function VocabStats() {
     if (undone) setLastUndone(undone);
   };
 
+  useEffect(() => {
+    if (!lastUndone) return;
+    const timer = window.setTimeout(() => setLastUndone(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [lastUndone]);
+
   if (loading && !data) {
     return <LoadingState>正在分析词频…</LoadingState>;
   }
@@ -524,7 +530,7 @@ export function VocabStats() {
         </span>
         <span className="mx-1.5 text-base-content/25 sm:mx-2">·</span>
         <span className="inline-block">
-          已 Pass 单词 {passedWords.length} · 短语 {passedPhrases.length}
+          Passed 单词 {passedWords.length} · 短语 {passedPhrases.length}
         </span>
         {hiddenBasicCount > 0 ? (
           <>
@@ -536,12 +542,13 @@ export function VocabStats() {
         ) : null}
       </p>
 
-      <div className="vocab-toolbar">
-        <div className="vocab-toolbar-row">
-          <div className="toolbar-tabs" role="tablist">
+      <div className="space-y-2">
+        <div className="vocab-toolbar">
+          <div className="toolbar-tabs shrink-0" role="tablist" aria-label="词库类型">
             <button
               type="button"
               role="tab"
+              aria-selected={tab === "words"}
               className={`toolbar-tab ${tab === "words" ? "toolbar-tab-active" : ""}`}
               onClick={() => {
                 setTab("words");
@@ -554,6 +561,7 @@ export function VocabStats() {
             <button
               type="button"
               role="tab"
+              aria-selected={tab === "phrases"}
               className={`toolbar-tab ${tab === "phrases" ? "toolbar-tab-active" : ""}`}
               onClick={() => {
                 setTab("phrases");
@@ -564,51 +572,68 @@ export function VocabStats() {
               短语
             </button>
           </div>
-          <label className="label cursor-pointer gap-2 p-0">
-            <span className="label-text text-sm text-base-content/60">已 Pass</span>
-            <input
-              type="checkbox"
-              className="toggle toggle-sm toggle-primary"
-              checked={showPassed}
-              onChange={() => setShowPassed((v) => !v)}
-            />
-          </label>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+
+          <SearchInput value={search} onChange={setSearch} />
+
+          <div className="vocab-toolbar-actions">
+            <div className="relative">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm gap-1"
+                onClick={handleUndo}
+                disabled={passedList.length === 0}
+                title={
+                  passedList.length > 0
+                    ? `撤销最近一次 Pass：${passedList[passedList.length - 1]}`
+                    : "暂无可回退的 Pass"
+                }
+              >
+                <Undo2 className="h-3.5 w-3.5" aria-hidden />
+                回退
+              </button>
+              {lastUndone ? (
+                <span
+                  role="status"
+                  className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-base-100/95 px-2 py-0.5 text-xs text-success shadow-sm"
+                >
+                  已恢复「{lastUndone}」
+                </span>
+              ) : null}
+            </div>
             <button
               type="button"
-              className="btn btn-ghost btn-sm gap-1"
-              onClick={handleUndo}
-              disabled={passedList.length === 0}
-              title={
-                passedList.length > 0
-                  ? `撤销最近一次 Pass：${passedList[passedList.length - 1]}`
-                  : "暂无可回退的 Pass"
-              }
-            >
-              <Undo2 className="h-3.5 w-3.5" aria-hidden />
-              回退
-            </button>
-            {lastUndone ? (
-              <span className="hidden text-xs text-success/80 sm:inline">
-                已恢复「{lastUndone}」
-              </span>
-            ) : null}
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm gap-1.5"
+              className="btn btn-ghost btn-sm btn-square text-base-content/55"
               onClick={() => setSettingsOpen(true)}
               aria-expanded={settingsOpen}
+              aria-label="筛选设置"
+              title="筛选设置"
             >
-              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-              筛选
+              <SlidersHorizontal className="h-4 w-4" aria-hidden />
             </button>
           </div>
         </div>
-        <SearchInput value={search} onChange={setSearch} />
-        {lastUndone ? (
-          <span className="text-xs text-success/80 sm:hidden">
-            已恢复「{lastUndone}」
-          </span>
+
+        {showPassed ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-success/25 bg-success/5 px-3 py-2 text-sm">
+            <span className="text-base-content/65">
+              正在查看 Passed
+              {passedList.length > 0 ? (
+                <>
+                  {" "}
+                  <span className="tabular-nums text-base-content/80">
+                    {passedList.length}
+                  </span>
+                </>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs shrink-0"
+              onClick={() => setShowPassed(false)}
+            >
+              返回待学
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -629,6 +654,8 @@ export function VocabStats() {
               showChart={showChart}
               onShowChartChange={setShowChart}
               showPassed={showPassed}
+              onShowPassedChange={setShowPassed}
+              passedCount={passedList.length}
             />,
             document.body
           )
@@ -674,7 +701,7 @@ export function VocabStats() {
                             type="button"
                             className="btn btn-ghost btn-xs min-h-8 min-w-8 shrink-0 sm:min-h-0 sm:min-w-0"
                             onClick={() => handleUnpass(item.text)}
-                            aria-label="从 Pass 列表恢复"
+                            aria-label="从 Passed 列表恢复"
                           >
                             恢复
                           </button>
@@ -704,11 +731,11 @@ export function VocabStats() {
                               <summary className="cursor-pointer select-none text-[10px] text-base-content/40 hover:text-base-content/60">
                                 另有 {item.glosses.length - 1} 义
                               </summary>
-                              <ul className="mt-1 space-y-0.5 text-[11px] text-base-content/45">
+                              <ul className="mt-1 space-y-0.5 text-xs leading-snug text-base-content/55">
                                 {item.glosses.slice(1).map((g) => (
                                   <li key={`${g.pos ?? ""}:${g.gloss}`}>
                                     {g.pos ? (
-                                      <span className="mr-1 text-base-content/30">
+                                      <span className="mr-1 text-base-content/35">
                                         {g.pos}.
                                       </span>
                                     ) : null}

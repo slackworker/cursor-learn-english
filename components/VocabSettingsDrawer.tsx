@@ -41,6 +41,8 @@ type VocabSettingsDrawerProps = {
   showChart: boolean;
   onShowChartChange: (show: boolean) => void;
   showPassed: boolean;
+  onShowPassedChange: (show: boolean) => void;
+  passedCount: number;
 };
 
 export function VocabSettingsDrawer({
@@ -58,6 +60,8 @@ export function VocabSettingsDrawer({
   showChart,
   onShowChartChange,
   showPassed,
+  onShowPassedChange,
+  passedCount,
 }: VocabSettingsDrawerProps) {
   return (
     <>
@@ -292,6 +296,26 @@ export function VocabSettingsDrawer({
               </section>
             </>
           ) : null}
+
+          <section>
+            <label className="label cursor-pointer justify-between gap-3 p-0">
+              <span className="tts-label mb-0">
+                查看 Passed 词库
+                {passedCount > 0 ? (
+                  <span className="tts-label-hint tabular-nums">{passedCount}</span>
+                ) : null}
+              </span>
+              <input
+                type="checkbox"
+                className="toggle toggle-sm toggle-primary"
+                checked={showPassed}
+                onChange={() => onShowPassedChange(!showPassed)}
+              />
+            </label>
+            <p className="mt-1.5 text-xs leading-relaxed text-base-content/45">
+              已学会的词单独列出，可从中恢复到待学列表
+            </p>
+          </section>
 
           <p className="tts-drawer-note">
             这些选项会即时生效；难度排除设置会保存在本机。

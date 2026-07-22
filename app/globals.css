@@ -452,7 +452,7 @@ html[data-theme="business"] {
 }
 
 .toolbar-tab {
-  @apply rounded-md px-3 py-1.5 text-sm font-medium text-base-content/55 transition-colors hover:text-base-content;
+  @apply inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-base-content/55 transition-colors hover:text-base-content;
 }
 
 .toolbar-tab-active {
@@ -481,7 +481,7 @@ html[data-theme="business"] {
 }
 
 .toolbar-input {
-  @apply h-9 w-full rounded-lg border border-base-300 bg-base-100 px-3 text-sm outline-none transition-colors focus:border-primary/50 sm:h-8 sm:max-w-xs;
+  @apply h-9 rounded-lg border border-base-300 bg-base-100 px-3 text-sm outline-none transition-colors focus:border-primary/50 sm:h-8;
 }
 
 /* ── Empty / Loading ── */
@@ -522,7 +522,35 @@ html[data-theme="business"] {
 }
 
 .vocab-toolbar {
-  @apply flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3;
+  @apply flex flex-wrap items-center gap-2 sm:gap-3;
+  container: vocab-toolbar / inline-size;
+}
+
+.vocab-toolbar > .toolbar-tabs {
+  order: 1;
+}
+
+.vocab-toolbar .toolbar-input {
+  @apply min-w-[8rem] flex-1 basis-[10rem] max-w-md;
+  order: 2;
+}
+
+.vocab-toolbar-actions {
+  @apply ml-auto flex shrink-0 items-center gap-1.5;
+  order: 3;
+}
+
+/* Narrow: keep tabs + actions on one row; search takes the next full row */
+@container vocab-toolbar (max-width: 28rem) {
+  .vocab-toolbar-actions {
+    order: 2;
+  }
+
+  .vocab-toolbar .toolbar-input {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
 }
 
 .vocab-toolbar-row {
