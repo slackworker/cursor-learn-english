@@ -95,11 +95,28 @@ html[data-font-size="lg"] {
   background: var(--accent-soft);
 }
 
+/* ── Layout shell ── */
+.app-main {
+  /* Leave room for the mobile bottom tab bar + home indicator */
+  padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .app-main {
+    padding-bottom: 1.5rem;
+  }
+}
+
 /* ── Navbar ── */
 .app-navbar {
   @apply sticky top-0 z-50 border-b backdrop-blur-md;
   border-color: var(--surface-border);
   background: var(--nav-bg);
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.app-navbar-inner {
+  @apply mx-auto flex w-full max-w-6xl items-center gap-2 px-3 py-2.5 sm:gap-4 sm:px-6 sm:py-3;
 }
 
 .nav-brand {
@@ -108,6 +125,24 @@ html[data-font-size="lg"] {
   align-items: center;
   gap: 0.5rem;
   @apply text-base font-semibold tracking-tight text-base-content transition-colors hover:text-primary sm:text-lg;
+}
+
+.nav-brand-text {
+  @apply whitespace-nowrap;
+}
+
+.nav-desktop {
+  @apply ml-auto hidden items-center gap-0.5 md:flex md:gap-1;
+}
+
+.nav-actions {
+  @apply flex shrink-0 items-center gap-1 sm:gap-2 md:ml-0;
+}
+
+@media (max-width: 767px) {
+  .nav-actions {
+    margin-left: auto;
+  }
 }
 
 .nav-link {
@@ -129,6 +164,22 @@ html[data-font-size="lg"] {
 
 .nav-link.nav-link-active .nav-link-icon {
   color: color-mix(in oklab, var(--color-primary) 72%, var(--color-base-content));
+}
+
+/* Mobile bottom tabs */
+.nav-bottom {
+  @apply fixed inset-x-0 bottom-0 z-50 grid grid-cols-4 border-t backdrop-blur-md md:hidden;
+  border-color: var(--surface-border);
+  background: var(--nav-bg);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.nav-tab {
+  @apply flex min-h-12 flex-col items-center justify-center gap-0.5 px-1 pt-1.5 text-[0.6875rem] font-medium leading-none text-base-content/50 transition-colors;
+}
+
+.nav-tab-active {
+  color: color-mix(in oklab, var(--color-primary) 78%, var(--color-base-content));
 }
 
 /* ── Server status ── */
@@ -261,6 +312,39 @@ html[data-font-size="lg"] {
   background: var(--contrib-empty);
 }
 
+@media (max-width: 639px) {
+  .prompt-contrib-hero .prompt-contrib-day-labels {
+    height: calc(7 * 9px + 6 * 2px);
+    padding-top: 1rem;
+    font-size: 0.5625rem;
+  }
+
+  .prompt-contrib-hero .prompt-contrib-months,
+  .prompt-contrib-hero .prompt-contrib-grid {
+    gap: 2px;
+  }
+
+  .prompt-contrib-hero .prompt-contrib-week {
+    gap: 2px;
+  }
+
+  .prompt-contrib-hero .prompt-contrib-month-slot,
+  .prompt-contrib-hero .prompt-contrib-cell {
+    width: 9px;
+    height: 9px;
+  }
+
+  .prompt-contrib-hero .prompt-contrib-legend .prompt-contrib-cell {
+    width: 9px;
+    height: 9px;
+  }
+
+  .prompt-contrib-footer {
+    gap: 0.5rem 1rem;
+    margin-top: 0.75rem;
+  }
+}
+
 .prompt-contrib-compact .prompt-contrib-cell {
   width: 8px;
   height: 8px;
@@ -329,7 +413,7 @@ html[data-theme="business"] {
 }
 
 .theme-toggle {
-  @apply flex h-8 w-8 items-center justify-center rounded-lg text-base-content/60 transition-colors hover:bg-base-200 hover:text-base-content;
+  @apply flex h-9 w-9 items-center justify-center rounded-lg text-base-content/60 transition-colors hover:bg-base-200 hover:text-base-content sm:h-8 sm:w-8;
 }
 
 /* ── Tables ── */
@@ -371,7 +455,7 @@ html[data-theme="business"] {
 }
 
 .dialogue-item {
-  @apply p-5 sm:p-6;
+  @apply p-3.5 sm:p-5 md:p-6;
 }
 
 .dialogue-item-meta {
@@ -380,15 +464,15 @@ html[data-theme="business"] {
 
 /* ── Pagination ── */
 .pagination-bar {
-  @apply flex flex-wrap items-center justify-between gap-3 pt-1;
+  @apply flex flex-wrap items-center justify-between gap-2 pt-1 sm:gap-3;
 }
 
 .pagination-summary {
-  @apply text-sm text-base-content/50;
+  @apply w-full text-sm text-base-content/50 sm:w-auto;
 }
 
 .pagination-controls {
-  @apply flex items-center gap-2;
+  @apply flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start;
 }
 
 .pagination-indicator {
@@ -438,7 +522,7 @@ html[data-theme="business"] {
 }
 
 .toolbar-input {
-  @apply h-8 w-full max-w-xs rounded-lg border border-base-300 bg-base-100 px-3 text-sm outline-none transition-colors focus:border-primary/50;
+  @apply h-9 w-full rounded-lg border border-base-300 bg-base-100 px-3 text-sm outline-none transition-colors focus:border-primary/50 sm:h-8 sm:max-w-xs;
 }
 
 /* ── Empty / Loading ── */
@@ -456,13 +540,34 @@ html[data-theme="business"] {
   @apply mb-6 flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-content;
 }
 
+/* ── Session list (mobile) ── */
+.session-list {
+  @apply divide-y divide-base-300/40;
+}
+
+.session-list-item {
+  @apply block px-3.5 py-3 transition-colors hover:bg-base-200/40 active:bg-base-200/60 sm:px-4;
+}
+
+.session-list-meta {
+  @apply mt-1 text-[0.6875rem] tabular-nums text-base-content/45;
+}
+
 /* ── Vocab grid ── */
 .vocab-grid {
-  @apply grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3 lg:grid-cols-4;
+  @apply grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 md:gap-3 lg:grid-cols-4;
 }
 
 .vocab-card {
   @apply flex flex-col justify-between rounded-xl border border-base-300/60 bg-base-100 p-3 text-base;
+}
+
+.vocab-toolbar {
+  @apply flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3;
+}
+
+.vocab-toolbar-row {
+  @apply flex flex-wrap items-center gap-2;
 }
 
 .vocab-card-passed {
@@ -491,7 +596,7 @@ html[data-theme="business"] {
 
 /* ── Back link ── */
 .back-link {
-  @apply mb-5 inline-flex items-center gap-1 text-sm font-medium text-base-content/50 transition-colors hover:text-primary;
+  @apply mb-3 inline-flex items-center gap-1 text-sm font-medium text-base-content/50 transition-colors hover:text-primary sm:mb-5;
 }
 
 /* ── TTS settings drawer ── */

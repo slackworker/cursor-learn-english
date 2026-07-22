@@ -39,7 +39,7 @@ export function FontSizeControl({ className = "" }: FontSizeControlProps) {
           <button
             key={id}
             type="button"
-            className={`toolbar-tab px-2 sm:px-2.5 ${active ? "toolbar-tab-active" : ""}`}
+            className={`toolbar-tab px-1.5 text-xs sm:px-2.5 sm:text-sm ${active ? "toolbar-tab-active" : ""}`}
             aria-pressed={active}
             title={`字号：${FONT_SIZE_LABELS[id]}`}
             onClick={() => select(id)}

@@ -7,10 +7,10 @@ import { Surface } from "@/components/ui/Surface";
 
 export function DashboardHome() {
   return (
-    <div className="space-y-10">
+    <div className="space-y-6 sm:space-y-10">
       <section>
         <Surface padding="lg">
-          <div className="mb-5">
+          <div className="mb-4 sm:mb-5">
             <h2 className="section-title mb-1">过去一年提问</h2>
             <p className="text-sm text-base-content/55">
               基于用户提示词语料，颜色越深表示当日提问越多
@@ -20,7 +20,7 @@ export function DashboardHome() {
         </Surface>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-5 lg:gap-8">
+      <section className="grid gap-4 sm:gap-6 lg:grid-cols-5 lg:gap-8">
         <div className="lg:col-span-3">
           <ActiveHoursChart />
         </div>

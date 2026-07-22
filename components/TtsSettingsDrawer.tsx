@@ -60,9 +60,12 @@ export function TtsSettingsDrawer({
         onClick={onClose}
       />
       <aside
-        className={`tts-drawer fixed inset-y-0 right-0 z-[100] flex h-full w-full max-w-md flex-col border-l shadow-2xl transition-transform duration-300 ease-out ${
-          open ? "translate-x-0" : "pointer-events-none translate-x-full"
+        className={`tts-drawer fixed inset-x-0 bottom-0 top-auto z-[100] flex h-[min(92dvh,100%)] w-full max-w-none flex-col rounded-t-2xl border-t border-l-0 shadow-2xl transition-transform duration-300 ease-out sm:inset-y-0 sm:right-0 sm:left-auto sm:h-full sm:max-w-md sm:rounded-none sm:border-l sm:border-t-0 ${
+          open
+            ? "translate-y-0 sm:translate-x-0"
+            : "pointer-events-none translate-y-full sm:translate-y-0 sm:translate-x-full"
         }`}
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         aria-hidden={!open}
         aria-label="朗读设置"
         role="dialog"

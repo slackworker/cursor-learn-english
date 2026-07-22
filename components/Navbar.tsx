@@ -19,6 +19,7 @@ import { ServerStatusBadge } from "@/components/ServerStatus";
 import { FontSizeControl } from "@/components/FontSizeControl";
 
 const NAV_ICON_CLASS = "h-4 w-4 shrink-0";
+const TAB_ICON_CLASS = "h-[1.125rem] w-[1.125rem] shrink-0";
 
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "首页", icon: LayoutDashboard },
@@ -52,14 +53,18 @@ export default function Navbar() {
   };
 
   return (
-    <header className="app-navbar">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <Link href="/" className="nav-brand shrink-0">
-          <GraduationCap className={NAV_ICON_CLASS} aria-hidden />
-          <span className="whitespace-nowrap">Cursor 学英语</span>
-        </Link>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <nav className="flex items-center gap-0.5 sm:gap-1">
+    <>
+      <header className="app-navbar">
+        <div className="app-navbar-inner">
+          <Link href="/" className="nav-brand shrink-0">
+            <GraduationCap className={NAV_ICON_CLASS} aria-hidden />
+            <span className="nav-brand-text">
+              <span className="hidden min-[380px]:inline">Cursor </span>
+              学英语
+            </span>
+          </Link>
+
+          <nav className="nav-desktop" aria-label="主导航">
             {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
@@ -73,31 +78,51 @@ export default function Navbar() {
               </Link>
             ))}
           </nav>
-          <ServerStatusBadge />
-          <FontSizeControl />
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={openDrawer}
-            aria-label="朗读设置"
-            title="朗读设置"
-          >
-            <Volume2 className={NAV_ICON_CLASS} aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
-          >
-            {isDark ? (
-              <Sun className={NAV_ICON_CLASS} aria-hidden />
-            ) : (
-              <Moon className={NAV_ICON_CLASS} aria-hidden />
-            )}
-          </button>
+
+          <div className="nav-actions">
+            <ServerStatusBadge />
+            <FontSizeControl />
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={openDrawer}
+              aria-label="朗读设置"
+              title="朗读设置"
+            >
+              <Volume2 className={NAV_ICON_CLASS} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label={isDark ? "切换到浅色模式" : "切换到深色模式"}
+            >
+              {isDark ? (
+                <Sun className={NAV_ICON_CLASS} aria-hidden />
+              ) : (
+                <Moon className={NAV_ICON_CLASS} aria-hidden />
+              )}
+            </button>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <nav className="nav-bottom" aria-label="手机主导航">
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+          const active = isActive(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`nav-tab ${active ? "nav-tab-active" : ""}`}
+              aria-current={active ? "page" : undefined}
+            >
+              <Icon className={TAB_ICON_CLASS} aria-hidden />
+              <span>{label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+    </>
   );
 }

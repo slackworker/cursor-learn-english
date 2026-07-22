@@ -9,8 +9,8 @@ type PageShellProps = {
 
 export function PageShell({ title, description, actions, children }: PageShellProps) {
   return (
-    <main className="mx-auto max-w-6xl px-4 py-3 sm:px-6 sm:py-4">
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <main className="app-main mx-auto max-w-6xl px-3 py-3 sm:px-6 sm:py-4">
+      <header className="mb-3 flex flex-col gap-2 sm:mb-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold tracking-tight text-base-content">
             {title}

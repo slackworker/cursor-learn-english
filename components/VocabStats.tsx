@@ -99,19 +99,25 @@ function BarChart({ items }: { items: { name: string; value: number }[] }) {
       const chart = echarts.init(chartRef.current);
       instanceRef.current = chart;
 
+      const narrow = chartRef.current.clientWidth < 420;
       const top30 = items.slice(0, 30).reverse();
       chart.setOption({
         tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-        grid: { left: 130, right: 30, top: 8, bottom: 24 },
+        grid: {
+          left: narrow ? 72 : 130,
+          right: narrow ? 12 : 30,
+          top: 8,
+          bottom: 24,
+        },
         xAxis: { type: "value" },
         yAxis: {
           type: "category",
           data: top30.map((d) => d.name),
           axisLabel: {
-            fontSize: 11,
+            fontSize: narrow ? 10 : 11,
             interval: 0,
             hideOverlap: false,
-            width: 118,
+            width: narrow ? 64 : 118,
             overflow: "truncate",
           },
           axisTick: { alignWithLabel: true },
@@ -504,91 +510,106 @@ export function VocabStats() {
 
   return (
     <div className={`space-y-6 ${loading ? "opacity-60" : ""}`}>
-      <p className="text-sm text-base-content/60">
+      <p className="text-sm leading-relaxed text-base-content/60">
         待学单词{" "}
         <span className="tabular-nums text-base-content/80">
           {remainingWords.toLocaleString()} / {uniqueWords.toLocaleString()}
         </span>
-        <span className="mx-2 text-base-content/25">·</span>
-        待学短语{" "}
-        <span className="tabular-nums text-base-content/80">
-          {remainingPhrases.toLocaleString()} / {uniquePhrases.toLocaleString()}
+        <span className="mx-1.5 text-base-content/25 sm:mx-2">·</span>
+        <span className="inline-block">
+          待学短语{" "}
+          <span className="tabular-nums text-base-content/80">
+            {remainingPhrases.toLocaleString()} / {uniquePhrases.toLocaleString()}
+          </span>
         </span>
-        <span className="mx-2 text-base-content/25">·</span>
-        已 Pass 单词 {passedWords.length} · 短语 {passedPhrases.length}
+        <span className="mx-1.5 text-base-content/25 sm:mx-2">·</span>
+        <span className="inline-block">
+          已 Pass 单词 {passedWords.length} · 短语 {passedPhrases.length}
+        </span>
         {hiddenBasicCount > 0 ? (
           <>
-            <span className="mx-2 text-base-content/25">·</span>
-            已排除过易词 {hiddenBasicCount.toLocaleString()}
+            <span className="mx-1.5 text-base-content/25 sm:mx-2">·</span>
+            <span className="inline-block">
+              已排除过易词 {hiddenBasicCount.toLocaleString()}
+            </span>
           </>
         ) : null}
       </p>
 
-      <div className="toolbar">
-        <div className="toolbar-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            className={`toolbar-tab ${tab === "words" ? "toolbar-tab-active" : ""}`}
-            onClick={() => {
-              setTab("words");
-              setSearch("");
-              setLastUndone(null);
-            }}
-          >
-            单词
-          </button>
-          <button
-            type="button"
-            role="tab"
-            className={`toolbar-tab ${tab === "phrases" ? "toolbar-tab-active" : ""}`}
-            onClick={() => {
-              setTab("phrases");
-              setSearch("");
-              setLastUndone(null);
-            }}
-          >
-            短语
-          </button>
+      <div className="vocab-toolbar">
+        <div className="vocab-toolbar-row">
+          <div className="toolbar-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              className={`toolbar-tab ${tab === "words" ? "toolbar-tab-active" : ""}`}
+              onClick={() => {
+                setTab("words");
+                setSearch("");
+                setLastUndone(null);
+              }}
+            >
+              单词
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={`toolbar-tab ${tab === "phrases" ? "toolbar-tab-active" : ""}`}
+              onClick={() => {
+                setTab("phrases");
+                setSearch("");
+                setLastUndone(null);
+              }}
+            >
+              短语
+            </button>
+          </div>
+          <label className="label cursor-pointer gap-2 p-0">
+            <span className="label-text text-sm text-base-content/60">已 Pass</span>
+            <input
+              type="checkbox"
+              className="toggle toggle-sm toggle-primary"
+              checked={showPassed}
+              onChange={() => setShowPassed((v) => !v)}
+            />
+          </label>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm gap-1"
+              onClick={handleUndo}
+              disabled={passedList.length === 0}
+              title={
+                passedList.length > 0
+                  ? `撤销最近一次 Pass：${passedList[passedList.length - 1]}`
+                  : "暂无可回退的 Pass"
+              }
+            >
+              <Undo2 className="h-3.5 w-3.5" aria-hidden />
+              回退
+            </button>
+            {lastUndone ? (
+              <span className="hidden text-xs text-success/80 sm:inline">
+                已恢复「{lastUndone}」
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm gap-1.5"
+              onClick={() => setSettingsOpen(true)}
+              aria-expanded={settingsOpen}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+              筛选
+            </button>
+          </div>
         </div>
         <SearchInput value={search} onChange={setSearch} />
-        <label className="label cursor-pointer gap-2 p-0">
-          <span className="label-text text-sm text-base-content/60">已 Pass</span>
-          <input
-            type="checkbox"
-            className="toggle toggle-sm toggle-primary"
-            checked={showPassed}
-            onChange={() => setShowPassed((v) => !v)}
-          />
-        </label>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm gap-1"
-            onClick={handleUndo}
-            disabled={passedList.length === 0}
-            title={
-              passedList.length > 0
-                ? `撤销最近一次 Pass：${passedList[passedList.length - 1]}`
-                : "暂无可回退的 Pass"
-            }
-          >
-            <Undo2 className="h-3.5 w-3.5" aria-hidden />
-            回退
-          </button>
-          {lastUndone ? (
-            <span className="text-xs text-success/80">已恢复「{lastUndone}」</span>
-          ) : null}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm gap-1.5"
-            onClick={() => setSettingsOpen(true)}
-            aria-expanded={settingsOpen}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-            筛选
-          </button>
-        </div>
+        {lastUndone ? (
+          <span className="text-xs text-success/80 sm:hidden">
+            已恢复「{lastUndone}」
+          </span>
+        ) : null}
       </div>
 
       {portalReady
@@ -651,7 +672,7 @@ export function VocabStats() {
                         {showPassed ? (
                           <button
                             type="button"
-                            className="btn btn-ghost btn-xs shrink-0"
+                            className="btn btn-ghost btn-xs min-h-8 min-w-8 shrink-0 sm:min-h-0 sm:min-w-0"
                             onClick={() => handleUnpass(item.text)}
                             aria-label="从 Pass 列表恢复"
                           >
@@ -660,7 +681,7 @@ export function VocabStats() {
                         ) : (
                           <button
                             type="button"
-                            className="btn btn-ghost btn-xs shrink-0 text-base-content/50 hover:text-success"
+                            className="btn btn-ghost btn-xs min-h-8 min-w-10 shrink-0 px-2 text-base-content/50 hover:text-success sm:min-h-0 sm:min-w-0"
                             onClick={() => handlePass(item.text)}
                             aria-label="Pass：已学会，不再显示"
                           >

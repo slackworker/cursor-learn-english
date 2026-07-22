@@ -204,8 +204,80 @@ export function SessionTable() {
   return (
     <PageShell title="会话列表" actions={headerActions}>
       <div className="space-y-3">
+        {/* Mobile: stacked list */}
         <div
-          className={`data-table-wrap ${isValidating && sessions.length > 0 ? "opacity-80 transition-opacity" : ""}`}
+          className={`data-table-wrap md:hidden ${isValidating && sessions.length > 0 ? "opacity-80 transition-opacity" : ""}`}
+        >
+          <ul className="session-list">
+            {sessions.map((s) => {
+              const subtitle = showPromptSubtitle && hasPromptSubtitle(s);
+              const tooltip =
+                s.title?.trim() ||
+                s.prompt_title?.trim() ||
+                s.session_id;
+              const inferred = s.lifecycle_source === "inferred";
+              return (
+                <li key={s.session_id}>
+                  <Link
+                    href={`/sessions/${encodeURIComponent(s.session_id)}`}
+                    title={tooltip}
+                    className="session-list-item"
+                  >
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      {s.is_subagent ? (
+                        <span className="badge badge-ghost badge-sm shrink-0 font-normal">
+                          {s.subagent_type
+                            ? `Subagent·${s.subagent_type}`
+                            : "Subagent"}
+                        </span>
+                      ) : null}
+                      {inferred ? (
+                        <span
+                          className="badge badge-warning badge-sm shrink-0 font-normal"
+                          title={
+                            s.lifecycle_gaps?.length
+                              ? `缺少: ${s.lifecycle_gaps.join(", ")}`
+                              : "缺少 sessionStart，已从 prompt/事件推断"
+                          }
+                        >
+                          推断
+                        </span>
+                      ) : null}
+                      <SessionTitleView
+                        title={s.title}
+                        segments={s.title_segments}
+                        domContexts={s.title_dom_contexts}
+                        body={s.title_body}
+                        fallback={`会话 ${s.session_id?.slice(0, 8)}…`}
+                        variant="inline"
+                        className="min-w-0 flex-1 overflow-hidden text-sm font-medium text-base-content"
+                      />
+                    </div>
+                    {subtitle ? (
+                      <SessionTitleView
+                        title={s.prompt_title}
+                        segments={s.prompt_title_segments}
+                        domContexts={s.prompt_title_dom_contexts}
+                        body={s.prompt_title_body}
+                        variant="inline"
+                        className="mt-0.5 block min-w-0 overflow-hidden text-xs font-normal text-base-content/50"
+                      />
+                    ) : null}
+                    <p className="session-list-meta">
+                      {formatLocalDateTime(
+                        s.last_activity ?? s.last_reply ?? s.start ?? s.timestamp
+                      )}
+                    </p>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        {/* Desktop: table */}
+        <div
+          className={`data-table-wrap hidden md:block ${isValidating && sessions.length > 0 ? "opacity-80 transition-opacity" : ""}`}
         >
           <table className="data-table table-fixed">
             <colgroup>
