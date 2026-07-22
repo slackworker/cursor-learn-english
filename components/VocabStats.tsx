@@ -72,25 +72,15 @@ type DisplayItem = {
 
 const PAGE_SIZE = 100;
 
-/** Compact primary label + full tooltip for word difficulty meta. */
-function wordDifficultyBadge(
+/** Tooltip text for word difficulty (CEFR / NGSL / Zipf). */
+function wordDifficultyTitle(
   item: Pick<DisplayItem, "cefr" | "ngslRank" | "zipf">
-): { label: string; title: string } | null {
+): string | undefined {
   const parts: string[] = [];
   if (item.cefr) parts.push(`CEFR ${item.cefr.toUpperCase()}`);
   if (item.ngslRank != null) parts.push(`NGSL #${item.ngslRank}`);
   if (item.zipf != null) parts.push(`Zipf ${item.zipf.toFixed(1)}`);
-  if (parts.length === 0) return null;
-
-  // Display: CEFR (readable level) → Zipf (coverage) → NGSL rank.
-  // Filtering profile is separate and can stay on NGSL.
-  const label = item.cefr
-    ? item.cefr.toUpperCase()
-    : item.zipf != null
-      ? `z${item.zipf.toFixed(1)}`
-      : `NGSL#${item.ngslRank!}`;
-
-  return { label, title: parts.join(" · ") };
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 function glossMatchesQuery(
@@ -704,9 +694,9 @@ export function VocabStats() {
             <div className="vocab-grid">
               {pageItems.map((item, index) => {
                 const rank = pageStart + index;
-                const diffBadge = isWordTab
-                  ? wordDifficultyBadge(item)
-                  : null;
+                const diffTitle = isWordTab
+                  ? wordDifficultyTitle(item)
+                  : undefined;
                 return (
                   <div
                     key={item.text}
@@ -731,7 +721,7 @@ export function VocabStats() {
                         <div className="mt-1 text-xs leading-snug text-base-content/55">
                           <p>
                             {item.pos ? (
-                              <span className="mr-1 text-base-content/35">
+                              <span className="mr-1 select-none text-base-content/35">
                                 {item.pos}.
                               </span>
                             ) : null}
@@ -746,7 +736,7 @@ export function VocabStats() {
                                 {item.glosses.slice(1).map((g) => (
                                   <li key={`${g.pos ?? ""}:${g.gloss}`}>
                                     {g.pos ? (
-                                      <span className="mr-1 text-base-content/35">
+                                      <span className="mr-1 select-none text-base-content/35">
                                         {g.pos}.
                                       </span>
                                     ) : null}
@@ -769,18 +759,13 @@ export function VocabStats() {
                       ) : null}
                     </div>
                     <div className="flex items-center justify-between gap-2 text-xs text-base-content/45">
-                      <span className="select-none tabular-nums text-[10px] text-base-content/35">
+                      <span
+                        className={`select-none tabular-nums text-[10px] text-base-content/35${diffTitle ? " cursor-default" : ""}`}
+                        title={diffTitle}
+                      >
                         #{rank}
                         {item.count != null ? (
                           <span className="ml-1.5">{item.count} 次</span>
-                        ) : null}
-                        {diffBadge ? (
-                          <span
-                            className="ml-1.5 cursor-default"
-                            title={diffBadge.title}
-                          >
-                            {diffBadge.label}
-                          </span>
                         ) : null}
                       </span>
                       {showPassed ? (
