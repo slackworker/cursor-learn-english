@@ -10,6 +10,7 @@ import { Surface } from "@/components/ui/Surface";
 import { VocabSettingsDrawer } from "@/components/VocabSettingsDrawer";
 import { useVocabPass } from "@/hooks/useVocabPass";
 import { lockBodyScroll } from "@/lib/body-scroll-lock";
+import { buildVocabSpeakText } from "@/lib/tts";
 import type { VocabPassKind } from "@/lib/vocab-pass";
 import {
   DEFAULT_DIFFICULTY_FILTER,
@@ -696,7 +697,7 @@ export function VocabStats() {
                             </div>
                             <DialogueTtsPlayButton
                               id={`vocab-${tab}-${item.text}`}
-                              text={item.text}
+                              text={buildVocabSpeakText(item.text, item.gloss)}
                               raw
                               className="btn-xs h-7 w-7 min-h-0 shrink-0"
                             />

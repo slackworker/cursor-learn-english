@@ -77,3 +77,12 @@ export function chunkTextForTTS(text: string, maxLen = 220): string[] {
   flush();
   return chunks.filter(Boolean);
 }
+
+/** Word/phrase + primary English gloss, with a sentence pause between. */
+export function buildVocabSpeakText(term: string, gloss?: string): string {
+  const t = term.trim();
+  if (!t) return "";
+  const g = gloss?.trim();
+  if (!g) return t;
+  return `${t}. ${g}`;
+}
