@@ -295,22 +295,39 @@ export function getSetupDiagnostics(): SetupDiagnostics {
           "打开 C:\\ 下项目时的对话不会写入当前 WSL 数据目录。可用 --also-windows 一并安装。",
       });
     } else {
-      const expectedUnc = distro ? linuxPathToWslUnc(dataDir, distro) : null;
-      const same =
-        winPaths &&
-        (path.resolve(winPaths) === path.resolve(dataDir) ||
-          (expectedUnc &&
-            winPaths.replace(/\//g, "\\").toLowerCase() ===
-              expectedUnc.replace(/\//g, "\\").toLowerCase()));
+      const winMode = (() => {
+        try {
+          const raw = fs.readFileSync(
+            path.join(winCursor!, PATHS_CONFIG_BASENAME),
+            "utf8"
+          );
+          const parsed = JSON.parse(raw) as { windowsMode?: string };
+          return parsed.windowsMode || null;
+        } catch {
+          return null;
+        }
+      })();
+      const hooksCmd = (() => {
+        try {
+          const raw = fs.readFileSync(path.join(winCursor!, "hooks.json"), "utf8");
+          const parsed = JSON.parse(raw) as {
+            hooks?: { beforeSubmitPrompt?: { command?: string }[] };
+          };
+          return parsed.hooks?.beforeSubmitPrompt?.[0]?.command || "";
+        } catch {
+          return "";
+        }
+      })();
+      const delegated = hooksCmd.includes("wsl.exe") || winMode === "wsl-delegate";
       checks.push({
         id: "windows-hooks",
-        level: same ? "ok" : "warn",
-        title: same
-          ? "Windows Hooks 已指向同一数据目录"
-          : "Windows Hooks 已安装，但 dataDir 可能不一致",
-        detail: `Windows ${PATHS_CONFIG_BASENAME}: ${winPaths ?? "(未设置)"}${
-          expectedUnc ? `；期望 UNC: ${expectedUnc}` : ""
-        }`,
+        level: delegated ? "ok" : "warn",
+        title: delegated
+          ? "Windows Hooks 已委托给 WSL 写入"
+          : "Windows Hooks 已安装，但可能仍走 UNC（易写失败）",
+        detail: delegated
+          ? `windowsMode=${winMode ?? "wsl-delegate"}; 示例: ${hooksCmd}`
+          : `建议重新执行: node scripts/setup-cursor-hooks.mjs --also-windows。当前命令: ${hooksCmd || "(未知)"}；paths dataDir=${winPaths ?? "(未设置)"}`,
       });
     }
   }

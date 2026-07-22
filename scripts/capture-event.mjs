@@ -1,6 +1,6 @@
-import fs from 'fs';
 import { appendJsonlLine } from './jsonl-daily.mjs';
 import { defaultEventsPath } from './default-paths.mjs';
+import { logHookError, readHookStdinJson } from './hook-log.mjs';
 
 const MAX_TEXT_LEN = 20000;
 
@@ -179,13 +179,13 @@ function buildPayload(eventType, input) {
 }
 
 try {
-  const raw = fs.readFileSync(0, 'utf8');
-  const input = JSON.parse(raw || '{}');
+  const input = readHookStdinJson();
   const eventType = input.hook_event_name || input.event_type;
   if (!eventType) process.exit(0);
 
   const payload = buildPayload(eventType, input);
   appendJsonlLine(getEventsPath(), JSON.stringify(payload) + '\n');
-} catch {
+} catch (err) {
+  logHookError('capture-event', err);
   process.exit(0);
 }

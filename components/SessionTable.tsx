@@ -30,11 +30,16 @@ type Session = {
   is_subagent?: boolean;
   parent_session_id?: string;
   subagent_type?: string;
+  lifecycle_source?: "hooks" | "inferred";
+  lifecycle_gaps?: string[];
 };
 
 type SessionsResponse = {
   sessions: Session[];
   total: number;
+  quality?: {
+    inferred_lifecycle?: number;
+  };
 };
 
 const PAGE_SIZE = 20;
@@ -125,6 +130,7 @@ export function SessionTable() {
 
   const sessions = data?.sessions ?? [];
   const total = data?.total ?? 0;
+  const inferredLifecycle = data?.quality?.inferred_lifecycle ?? 0;
   const loadError = error ? "加载失败，请稍后重试。" : null;
   const showInitialLoading = (!prefsReady || isLoading) && sessions.length === 0;
 
@@ -199,6 +205,17 @@ export function SessionTable() {
   return (
     <PageShell title="会话列表" actions={headerActions}>
       <div className="space-y-3">
+        {inferredLifecycle > 0 ? (
+          <div className="banner-warning mb-0" role="status">
+            <span>
+              当前筛选范围内有{" "}
+              <strong>{inferredLifecycle}</strong>{" "}
+              条会话缺少 <code className="text-xs">sessionStart</code>
+              ，已用 prompt/事件推断列出（调试可见）。带「推断」标记的行需要核对
+              Hooks 是否漏采生命周期事件。
+            </span>
+          </div>
+        ) : null}
         <div
           className={`data-table-wrap ${isValidating && sessions.length > 0 ? "opacity-80 transition-opacity" : ""}`}
         >
@@ -220,6 +237,7 @@ export function SessionTable() {
                   s.title?.trim() ||
                   s.prompt_title?.trim() ||
                   s.session_id;
+                const inferred = s.lifecycle_source === "inferred";
                 return (
                   <tr key={s.session_id}>
                     <td className="min-w-0 overflow-hidden">
@@ -235,6 +253,18 @@ export function SessionTable() {
                                 {s.subagent_type
                                   ? `Subagent·${s.subagent_type}`
                                   : "Subagent"}
+                              </span>
+                            ) : null}
+                            {inferred ? (
+                              <span
+                                className="badge badge-warning badge-sm shrink-0 font-normal"
+                                title={
+                                  s.lifecycle_gaps?.length
+                                    ? `缺少: ${s.lifecycle_gaps.join(", ")}`
+                                    : "缺少 sessionStart，已从 prompt/事件推断"
+                                }
+                              >
+                                推断
                               </span>
                             ) : null}
                             <SessionTitleView

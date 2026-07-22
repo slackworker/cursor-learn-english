@@ -30,6 +30,10 @@ export async function GET(request: NextRequest) {
     : 20;
   const includeSubagents = parseBoolParam(searchParams.get("includeSubagents"));
   const { sessions, truncated } = getSessionSummaries(from, to, { includeSubagents });
+  const inferredLifecycle = sessions.reduce(
+    (n, s) => (s.lifecycle_source === "inferred" ? n + 1 : n),
+    0
+  );
   const pagedSessions = enrichSessionPageTitles(
     sessions.slice(offset, offset + limit)
   );
@@ -55,6 +59,9 @@ export async function GET(request: NextRequest) {
       offset,
       limit,
       includeSubagents,
+      quality: {
+        inferred_lifecycle: inferredLifecycle,
+      },
     },
     {
       headers: {

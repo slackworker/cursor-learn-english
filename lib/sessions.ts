@@ -21,6 +21,8 @@ import { resolveSessionDisplayTitles } from "./resolve-session-titles";
 
 export type SessionTitleSource = "cursor" | "prompt" | "task";
 
+export type SessionLifecycleSource = "hooks" | "inferred";
+
 export type SessionSummary = {
   session_id: string;
   /** Primary title: Cursor sidebar name, else clipped first prompt / task. */
@@ -54,6 +56,13 @@ export type SessionSummary = {
   parent_session_title_segments?: PromptSegment[];
   parent_session_title_body?: string;
   subagent_type?: string;
+  /**
+   * hooks = saw sessionStart (or subagentStart for subagents);
+   * inferred = listed from prompts/content because lifecycle start was missing.
+   */
+  lifecycle_source?: SessionLifecycleSource;
+  /** Debug-facing gaps when lifecycle_source is inferred. */
+  lifecycle_gaps?: string[];
 };
 
 export type GetSessionSummariesOptions = {
@@ -223,6 +232,54 @@ let latestSubagentAliases = new Map<string, string>();
  * rebuilding for multiple seconds on every poll.
  */
 const SUMMARIES_SOFT_STALE_MS = 20_000;
+
+/** conversation ids that ever emitted sessionStart / subagentStart (unfiltered corpus). */
+let globalLifecycleStarts: {
+  sessionStart: Set<string>;
+  subagentStart: Set<string>;
+} | null = null;
+let globalLifecycleStartSignature = "";
+
+function getGlobalLifecycleStarts(): {
+  sessionStart: Set<string>;
+  subagentStart: Set<string>;
+} {
+  const signature = getMergedReadSignature(getEventsPath());
+  if (globalLifecycleStarts && globalLifecycleStartSignature === signature) {
+    return globalLifecycleStarts;
+  }
+  const { events } = getEvents();
+  const sessionStart = new Set<string>();
+  const subagentStart = new Set<string>();
+  for (const e of events) {
+    if (e.event_type === "sessionStart") {
+      const id = getSessionIdFromEvent(e);
+      if (id) sessionStart.add(id);
+    } else if (e.event_type === "subagentStart") {
+      const id = getSubagentSessionId(e);
+      if (id) subagentStart.add(id);
+    }
+  }
+  globalLifecycleStarts = { sessionStart, subagentStart };
+  globalLifecycleStartSignature = signature;
+  return globalLifecycleStarts;
+}
+
+function getGlobalSessionStartIds(): Set<string> {
+  return getGlobalLifecycleStarts().sessionStart;
+}
+
+function getGlobalSubagentStartIds(): Set<string> {
+  return getGlobalLifecycleStarts().subagentStart;
+}
+
+function preferHooksLifecycle(
+  a?: SessionLifecycleSource,
+  b?: SessionLifecycleSource
+): SessionLifecycleSource | undefined {
+  if (a === "hooks" || b === "hooks") return "hooks";
+  return a ?? b;
+}
 
 function getSummariesCacheSignature(from?: string, to?: string): string {
   return [
@@ -412,6 +469,41 @@ function buildMainSessionSummaries(
     });
   }
 
+  const { sessionStart: globalStartedIds, subagentStart: globalSubagentStartIds } =
+    getGlobalLifecycleStarts();
+
+  // Backfill shells when sessionStart was never captured anywhere in the
+  // corpus (e.g. Windows hook stdin BOM), but prompts exist in this window.
+  // Do NOT backfill when start only falls outside the date filter — that is
+  // normal lookback behavior, not a capture gap.
+  const backfilledIds = new Set<string>();
+  const ensureShell = (id: string, ts: string | undefined) => {
+    if (!id || !isUuidSessionId(id) || !ts) return;
+    if (globalStartedIds.has(id)) return;
+    const prev = bySessionId.get(id);
+    if (!prev) {
+      bySessionId.set(id, {
+        session_id: id,
+        start: ts,
+        reason: "open",
+        is_open: true,
+      });
+      backfilledIds.add(id);
+      return;
+    }
+    // Existing row from sessionEnd (or prior prompt backfill) without a global
+    // sessionStart — fill/advance start from prompt timestamps.
+    if (prev.start && !backfilledIds.has(id)) return;
+    const start = minTimestamp(prev.start, ts);
+    if (start !== prev.start) {
+      bySessionId.set(id, { ...prev, start });
+    }
+    backfilledIds.add(id);
+  };
+  for (const p of prompts) {
+    ensureShell(sanitizeSessionId(p.conversation_id), p.timestamp);
+  }
+
   const sessions = Array.from(bySessionId.values())
     .map((session) => {
       const hasEnd = Boolean(session.timestamp);
@@ -428,6 +520,7 @@ function buildMainSessionSummaries(
         (session.duration_ms != null && session.duration_ms > 0
           ? session.duration_ms
           : undefined);
+      const inferred = !globalStartedIds.has(session.session_id);
       return {
         ...session,
         last_reply,
@@ -435,6 +528,10 @@ function buildMainSessionSummaries(
         duration_ms,
         reason: session.reason ?? (hasEnd ? session.reason : "open"),
         is_open: !hasEnd,
+        lifecycle_source: (inferred
+          ? "inferred"
+          : "hooks") as SessionLifecycleSource,
+        lifecycle_gaps: inferred ? ["sessionStart"] : undefined,
       };
     })
     .filter((s) => Boolean(s.start ?? s.timestamp));
@@ -446,10 +543,13 @@ function buildMainSessionSummaries(
     // No transcript → drop (same as prior hasSessionTranscript gate for main list).
     if (!resolved) continue;
     if (resolved.kind === "subagent") {
+      const sawSubagentStart = globalSubagentStartIds.has(session.session_id);
       subRaw.push({
         ...session,
         is_subagent: true,
         parent_session_id: resolved.parentSessionId,
+        lifecycle_source: sawSubagentStart ? "hooks" : "inferred",
+        lifecycle_gaps: sawSubagentStart ? undefined : ["subagentStart"],
       });
     } else {
       mainRaw.push(session);
@@ -502,6 +602,15 @@ function mergeSubagentSummaries(
       duration_ms: s.duration_ms ?? prev?.duration_ms,
       reason: s.reason ?? prev?.reason,
       is_open: s.is_open ?? prev?.is_open,
+      lifecycle_source: preferHooksLifecycle(
+        s.lifecycle_source,
+        prev?.lifecycle_source
+      ),
+      lifecycle_gaps:
+        preferHooksLifecycle(s.lifecycle_source, prev?.lifecycle_source) ===
+        "hooks"
+          ? undefined
+          : s.lifecycle_gaps ?? prev?.lifecycle_gaps,
     });
   }
   return Array.from(byId.values());
@@ -553,6 +662,17 @@ function mergeSubagentPair(
       hook.duration_ms,
     reason: closedReason ?? (hasEnd ? closedReason : "open"),
     is_open: !hasEnd,
+    lifecycle_source: preferHooksLifecycle(
+      canonical.lifecycle_source,
+      hook.lifecycle_source
+    ),
+    lifecycle_gaps:
+      preferHooksLifecycle(
+        canonical.lifecycle_source,
+        hook.lifecycle_source
+      ) === "hooks"
+        ? undefined
+        : canonical.lifecycle_gaps ?? hook.lifecycle_gaps,
   };
 }
 
@@ -781,6 +901,10 @@ function buildSubagentSessionSummaries(events: CursorEvent[]): SessionSummary[] 
           parentSessionId = resolved.parentSessionId;
         }
       }
+      // start is only set from subagentStart (Stop copies prev.start).
+      const sawStart =
+        Boolean(session.start) ||
+        getGlobalSubagentStartIds().has(session.session_id);
       return {
         session_id: session.session_id,
         start: session.start,
@@ -795,6 +919,8 @@ function buildSubagentSessionSummaries(events: CursorEvent[]): SessionSummary[] 
         title: taskTitle,
         title_source: taskTitle ? ("task" as const) : undefined,
         title_body: session.task?.trim() || undefined,
+        lifecycle_source: (sawStart ? "hooks" : "inferred") as SessionLifecycleSource,
+        lifecycle_gaps: sawStart ? undefined : ["subagentStart"],
       } satisfies SessionSummary;
     })
     .filter((s) => Boolean(s.start ?? s.timestamp));
@@ -888,6 +1014,8 @@ export function resolveSessionLookupId(sessionId: string): string {
 export function clearSessionSummariesCache(): void {
   summariesCache.clear();
   latestSubagentAliases = new Map();
+  globalLifecycleStarts = null;
+  globalLifecycleStartSignature = "";
 }
 
 /**
@@ -1099,11 +1227,14 @@ function buildSingleSessionSummary(
     resolved?.kind === "subagent" ? resolved.parentSessionId : undefined;
   let task: string | undefined;
   let is_subagent = resolved?.kind === "subagent";
+  let sawLifecycleStart = false;
 
   for (const e of scopedEvents) {
     if (e.event_type === "sessionStart") {
+      sawLifecycleStart = true;
       start = minTimestamp(start, e.timestamp);
     } else if (e.event_type === "subagentStart") {
+      sawLifecycleStart = true;
       is_subagent = true;
       start = minTimestamp(start, e.timestamp);
       if (typeof e.subagent_type === "string") {
@@ -1162,6 +1293,12 @@ function buildSingleSessionSummary(
     }
   }
 
+  if (!sawLifecycleStart) {
+    sawLifecycleStart = is_subagent
+      ? getGlobalSubagentStartIds().has(lookupId)
+      : getGlobalSessionStartIds().has(lookupId);
+  }
+
   const last_activity =
     last_reply ?? last_prompt ?? endTs ?? start;
   const hasEnd = Boolean(endTs);
@@ -1213,6 +1350,10 @@ function buildSingleSessionSummary(
     is_subagent: is_subagent || undefined,
     parent_session_id,
     subagent_type,
+    lifecycle_source: sawLifecycleStart ? "hooks" : "inferred",
+    lifecycle_gaps: sawLifecycleStart
+      ? undefined
+      : [is_subagent ? "subagentStart" : "sessionStart"],
     title,
     title_source,
     title_dom_contexts,

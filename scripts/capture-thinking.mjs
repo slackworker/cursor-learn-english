@@ -3,6 +3,7 @@ import path from 'path';
 import { pruneExpiredDailyFiles, resolveAppendPath } from './jsonl-daily.mjs';
 import { defaultThinkingCorpusPath } from './default-paths.mjs';
 import { appendThinkingUnlessDuplicate } from './thinking-dedupe.mjs';
+import { logHookError, readHookStdinJson } from './hook-log.mjs';
 
 function getCorpusPath() {
   if (process.env.CORPUS_JSONL_PATH) return process.env.CORPUS_JSONL_PATH;
@@ -11,8 +12,7 @@ function getCorpusPath() {
 }
 
 try {
-  const raw = fs.readFileSync(0, 'utf8');
-  const input = JSON.parse(raw || '{}');
+  const input = readHookStdinJson();
 
   const text = input.text ?? '';
   // Keep short thoughts (e.g. Cursor "Thought briefly") for 1:1 session display.
@@ -39,6 +39,7 @@ try {
   if (result === 'written') {
     pruneExpiredDailyFiles(basePath);
   }
-} catch {
+} catch (err) {
+  logHookError('capture-thinking', err);
   process.exit(0);
 }

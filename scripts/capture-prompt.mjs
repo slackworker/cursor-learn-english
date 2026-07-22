@@ -1,6 +1,6 @@
-import fs from 'fs';
 import { appendJsonlLine } from './jsonl-daily.mjs';
 import { defaultPromptCorpusPath } from './default-paths.mjs';
+import { logHookError, readHookStdinJson } from './hook-log.mjs';
 
 const MAX_PROMPT_LEN = 6000;
 
@@ -10,8 +10,7 @@ function getPromptCorpusPath() {
 }
 
 try {
-  const raw = fs.readFileSync(0, 'utf8');
-  const input = JSON.parse(raw || '{}');
+  const input = readHookStdinJson();
 
   const prompt = (input.prompt ?? '').slice(0, MAX_PROMPT_LEN);
   if (typeof prompt !== 'string' || prompt.length === 0) {
@@ -25,6 +24,7 @@ try {
   };
 
   appendJsonlLine(getPromptCorpusPath(), JSON.stringify(record) + '\n');
-} catch {
+} catch (err) {
+  logHookError('capture-prompt', err);
   process.exit(0);
 }

@@ -6,7 +6,7 @@
  *   node scripts/setup-cursor-hooks.mjs
  *   node scripts/setup-cursor-hooks.mjs --data-dir=/path/to/data
  *   node scripts/setup-cursor-hooks.mjs --also-windows
- *   node scripts/setup-cursor-hooks.mjs --cursor-dir=C:\Users\You\.cursor --data-dir=\\wsl$\Ubuntu\home\...\data
+ *     → Windows hooks.json delegates to WSL via wsl.exe (avoids UNC write failures)
  *
  * Writes:
  *   <cursor-dir>/hooks.json
@@ -30,6 +30,7 @@ const HOOK_RUNTIME_SCRIPTS = [
   'capture-thinking.mjs',
   'capture-response-to-txt.mjs',
   'default-paths.mjs',
+  'hook-log.mjs',
   'jsonl-daily.mjs',
   'thinking-dedupe.mjs',
   'prune-jsonl.mjs',
@@ -42,8 +43,9 @@ function printHelp() {
 Options:
   --data-dir=<path>     Shared data directory for Hooks (and preferred for Web)
   --cursor-dir=<path>   Install target (default: ~/.cursor or %USERPROFILE%\\.cursor)
-  --also-windows        On WSL: also install into the Windows user .cursor,
-                        pointing data-dir at \\\\wsl$\\<distro>\\<linux-data-dir>
+  --also-windows        On WSL: also install into the Windows user .cursor.
+                        Windows hooks run Linux scripts via wsl.exe (recommended;
+                        avoids Cursor sandbox / UNC write issues to \\\\wsl$\\...)
   --dry-run             Print actions without writing
   -h, --help            Show help
 `);
@@ -154,7 +156,65 @@ function copyFile(src, dest, dryRun) {
   fs.copyFileSync(src, dest);
 }
 
-function installInto(cursorDir, dataDir, { dryRun, label }) {
+function resolveLinuxNodePath() {
+  try {
+    const out = execFileSync('bash', ['-lc', 'command -v node'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (out && fs.existsSync(out)) return out;
+  } catch {
+    // fall through
+  }
+  const nvmGuess = path.join(
+    getHomeDir(),
+    '.nvm/versions/node',
+  );
+  try {
+    const versions = fs.readdirSync(nvmGuess).sort().reverse();
+    for (const v of versions) {
+      const candidate = path.join(nvmGuess, v, 'bin', 'node');
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  } catch {
+    // ignore
+  }
+  return '/usr/bin/node';
+}
+
+function loadHooksTemplate() {
+  const hooksSrc = path.join(PROJECT_ROOT, 'hooks', 'hooks.json');
+  return JSON.parse(fs.readFileSync(hooksSrc, 'utf8'));
+}
+
+/** Quote an argument for Windows CreateProcess / cmd-style command lines. */
+function quoteCmdArg(arg) {
+  const s = String(arg);
+  if (!/[ \t"]/.test(s)) return s;
+  return `"${s.replace(/"/g, '\\"')}"`;
+}
+
+/** Rewrite hooks.json commands to run inside WSL (stdin still piped by Cursor). */
+function buildWslDelegatedHooksJson({ distro, nodePath, linuxScriptsDir }) {
+  const template = loadHooksTemplate();
+  const wrap = (command) => {
+    // "node ./scripts/capture-prompt.mjs" → absolute WSL node + script
+    const m = String(command).match(/node\s+\.\/scripts\/([^\s]+)/i);
+    if (!m) return command;
+    const scriptAbs = `${linuxScriptsDir.replace(/\\/g, '/')}/${m[1]}`;
+    return `wsl.exe -d ${quoteCmdArg(distro)} -e ${quoteCmdArg(nodePath)} ${quoteCmdArg(scriptAbs)}`;
+  };
+  const hooks = {};
+  for (const [step, entries] of Object.entries(template.hooks || {})) {
+    hooks[step] = (entries || []).map((entry) => ({
+      ...entry,
+      command: wrap(entry.command),
+    }));
+  }
+  return { ...template, hooks };
+}
+
+function installInto(cursorDir, dataDir, { dryRun, label, hooksJson, windowsMode }) {
   const scriptsDir = path.join(cursorDir, 'scripts');
   ensureDir(scriptsDir, dryRun);
 
@@ -171,14 +231,19 @@ function installInto(cursorDir, dataDir, { dryRun, label }) {
   }
   console.log(`[${label}] copied ${HOOK_RUNTIME_SCRIPTS.length} runtime scripts`);
 
-  const hooksSrc = path.join(PROJECT_ROOT, 'hooks', 'hooks.json');
-  copyFile(hooksSrc, path.join(cursorDir, 'hooks.json'), dryRun);
-  console.log(`[${label}] copied hooks.json`);
+  const hooksPayload = hooksJson || loadHooksTemplate();
+  writeFile(
+    path.join(cursorDir, 'hooks.json'),
+    `${JSON.stringify(hooksPayload, null, 2)}\n`,
+    dryRun
+  );
+  console.log(`[${label}] wrote hooks.json`);
 
   const pathsPayload = {
     dataDir,
     projectRoot: PROJECT_ROOT,
     updatedAt: new Date().toISOString(),
+    ...(windowsMode ? { windowsMode } : {}),
   };
   writeFile(
     path.join(cursorDir, PATHS_CONFIG_BASENAME),
@@ -222,15 +287,29 @@ function main() {
         );
       } else {
         const winCursor = path.join(winHome, '.cursor');
-        const uncData = linuxPathToWslUnc(dataDir);
-        installInto(winCursor, uncData, {
+        const distro = wslDistroName();
+        const nodePath = resolveLinuxNodePath();
+        // Delegate to the Linux install we just wrote (honors --cursor-dir).
+        const linuxScriptsDir = path.join(cursorDir, 'scripts');
+        const delegated = buildWslDelegatedHooksJson({
+          distro,
+          nodePath,
+          linuxScriptsDir,
+        });
+        installInto(winCursor, dataDir, {
           dryRun: opts.dryRun,
           label: 'windows-via-wsl',
+          hooksJson: delegated,
+          windowsMode: 'wsl-delegate',
         });
-        console.log(
-          `\nWindows Hooks will write to UNC path:\n  ${uncData}\n` +
-            '(Same files as the Linux dataDir above.)'
-        );
+        console.log(`
+Windows Hooks 改为经 wsl.exe 调用 Linux 脚本写入（避免 UNC / 沙箱写失败）：
+  distro: ${distro}
+  node:   ${nodePath}
+  scripts:${linuxScriptsDir}
+示例命令:
+  ${delegated.hooks.beforeSubmitPrompt[0].command}
+`);
       }
     }
   } else if (isWsl()) {

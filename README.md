@@ -66,7 +66,7 @@ node scripts/setup-cursor-hooks.mjs --also-windows
 | 拓扑 | 仪表盘 | 数据目录 | Hooks |
 |------|--------|----------|-------|
 | 纯 Linux / 纯 Windows | 同机 | 同机 `data/` | 安装一次即可 |
-| **WSL + Windows 混用**（常见） | **只跑在 WSL** | **放在 WSL 原生盘**（本仓库 `data/`） | WSL 装一份；Windows 再装一份，`--data-dir` 指向 `\\wsl$\<distro>\…\data` |
+| **WSL + Windows 混用**（常见） | **只跑在 WSL** | **放在 WSL 原生盘**（本仓库 `data/`） | WSL 装一份；Windows 用 `--also-windows`：Hooks 经 `wsl.exe` 调 Linux 脚本写入（避免直接写 `\\wsl$\...` 被静默失败） |
 
 路径解析优先级（Hooks 与 Web 一致）：
 

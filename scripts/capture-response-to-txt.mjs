@@ -9,7 +9,8 @@ function getPath() {
 }
 
 try {
-  const raw = fs.readFileSync(0, 'utf8');
+  let raw = fs.readFileSync(0, 'utf8');
+  if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
   const input = JSON.parse(raw || '{}');
 
   

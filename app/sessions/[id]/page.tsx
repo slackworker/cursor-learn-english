@@ -41,6 +41,8 @@ type SessionDetail = {
   parent_session_title_segments?: PromptSegment[];
   parent_session_title_body?: string;
   subagent_type?: string;
+  lifecycle_source?: "hooks" | "inferred";
+  lifecycle_gaps?: string[];
   subagents?: Array<{
     session_id: string;
     title?: string;
@@ -270,6 +272,18 @@ export default function SessionDetailPage() {
                 : "Subagent"}
             </span>
           ) : null}
+          {session.lifecycle_source === "inferred" ? (
+            <span
+              className="badge badge-warning badge-sm font-normal"
+              title={
+                session.lifecycle_gaps?.length
+                  ? `缺少: ${session.lifecycle_gaps.join(", ")}`
+                  : "缺少生命周期 start 事件"
+              }
+            >
+              推断补全
+            </span>
+          ) : null}
           {session.is_subagent && session.parent_session_id ? (
             <Link
               href={`/sessions/${encodeURIComponent(session.parent_session_id)}`}
@@ -332,6 +346,19 @@ export default function SessionDetailPage() {
         </span>
       }
     >
+      {session.lifecycle_source === "inferred" ? (
+        <div className="banner-warning" role="status">
+          <span>
+            本会话缺少{" "}
+            <code className="text-xs">
+              {(session.lifecycle_gaps && session.lifecycle_gaps[0]) ||
+                "sessionStart"}
+            </code>
+            ，列表/详情是用 prompt 与其它事件推断出来的（非完整 Hooks
+            生命周期）。调试期请核对 Windows/WSL Hooks 是否漏采。
+          </span>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link href="/sessions" className="back-link">
           ← 返回会话列表

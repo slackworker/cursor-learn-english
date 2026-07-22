@@ -8,6 +8,29 @@ function getHomeDir(): string {
     : process.env.HOME || os.homedir();
 }
 
+/** WSL: Windows profile dirs under /mnt/c/Users (same idea as conversation titles). */
+function windowsUserDirs(): string[] {
+  const dirs: string[] = [];
+  try {
+    const usersRoot = "/mnt/c/Users";
+    for (const name of fs.readdirSync(usersRoot)) {
+      if (
+        name === "Public" ||
+        name === "Default" ||
+        name === "Default User" ||
+        name === "All Users" ||
+        name.startsWith(".")
+      ) {
+        continue;
+      }
+      dirs.push(path.join(usersRoot, name));
+    }
+  } catch {
+    // not on WSL / no mount
+  }
+  return dirs;
+}
+
 /** 显式指定单根目录时优先（兼容旧配置） */
 function getConfiguredTranscriptRoot(): string | null {
   return (
@@ -17,25 +40,44 @@ function getConfiguredTranscriptRoot(): string | null {
   );
 }
 
-function listTranscriptRoots(): string[] {
-  const configured = getConfiguredTranscriptRoot();
-  if (configured) return [configured];
-
-  const projectsRoot = path.join(getHomeDir(), ".cursor", "projects");
-  if (!fs.existsSync(projectsRoot)) return [];
-
-  const roots: string[] = [];
+function collectTranscriptRootsUnder(projectsRoot: string, into: string[]): void {
+  if (!fs.existsSync(projectsRoot)) return;
   try {
     for (const name of fs.readdirSync(projectsRoot)) {
       const candidate = path.join(projectsRoot, name, "agent-transcripts");
       try {
-        if (fs.statSync(candidate).isDirectory()) roots.push(candidate);
+        if (fs.statSync(candidate).isDirectory()) into.push(candidate);
       } catch {
         // skip
       }
     }
   } catch {
-    return [];
+    // skip unreadable projects root
+  }
+}
+
+function listTranscriptRoots(): string[] {
+  const configured = getConfiguredTranscriptRoot();
+  if (configured) return [configured];
+
+  const roots: string[] = [];
+  const seen = new Set<string>();
+  const addFrom = (projectsRoot: string) => {
+    const batch: string[] = [];
+    collectTranscriptRootsUnder(projectsRoot, batch);
+    for (const root of batch) {
+      const key = path.resolve(root);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      roots.push(root);
+    }
+  };
+
+  addFrom(path.join(getHomeDir(), ".cursor", "projects"));
+  // Windows Cursor sessions (opened via \\wsl$\... or drive letter) store
+  // transcripts under %USERPROFILE%\.cursor\projects, not Linux ~/.cursor.
+  for (const userDir of windowsUserDirs()) {
+    addFrom(path.join(userDir, ".cursor", "projects"));
   }
   return roots;
 }
