@@ -50,7 +50,7 @@ export type DifficultyFilter = {
   zipfMin?: number;
 };
 
-/** Default: hide NGSL top 500. */
+/** Default: hide NGSL top 500. Badge display still prefers CEFR. */
 export const DEFAULT_DIFFICULTY_FILTER: DifficultyFilter = {
   profile: "ngsl",
   ngslMaxRank: 500,

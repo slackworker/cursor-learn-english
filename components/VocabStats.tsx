@@ -72,6 +72,27 @@ type DisplayItem = {
 
 const PAGE_SIZE = 100;
 
+/** Compact primary label + full tooltip for word difficulty meta. */
+function wordDifficultyBadge(
+  item: Pick<DisplayItem, "cefr" | "ngslRank" | "zipf">
+): { label: string; title: string } | null {
+  const parts: string[] = [];
+  if (item.cefr) parts.push(`CEFR ${item.cefr.toUpperCase()}`);
+  if (item.ngslRank != null) parts.push(`NGSL #${item.ngslRank}`);
+  if (item.zipf != null) parts.push(`Zipf ${item.zipf.toFixed(1)}`);
+  if (parts.length === 0) return null;
+
+  // Display: CEFR (readable level) → Zipf (coverage) → NGSL rank.
+  // Filtering profile is separate and can stay on NGSL.
+  const label = item.cefr
+    ? item.cefr.toUpperCase()
+    : item.zipf != null
+      ? `z${item.zipf.toFixed(1)}`
+      : `NGSL#${item.ngslRank!}`;
+
+  return { label, title: parts.join(" · ") };
+}
+
 function glossMatchesQuery(
   gloss: string | undefined,
   glosses: Array<{ gloss: string; pos?: string }> | undefined,
@@ -683,6 +704,9 @@ export function VocabStats() {
             <div className="vocab-grid">
               {pageItems.map((item, index) => {
                 const rank = pageStart + index;
+                const diffBadge = isWordTab
+                  ? wordDifficultyBadge(item)
+                  : null;
                 return (
                   <div
                     key={item.text}
@@ -743,61 +767,41 @@ export function VocabStats() {
                           {item.category}
                         </p>
                       ) : null}
-                      {isWordTab &&
-                      (item.cefr ||
-                        item.ngslRank != null ||
-                        item.zipf != null) ? (
-                        <p className="mt-1 flex flex-wrap gap-1.5 text-[10px] tabular-nums text-base-content/40">
-                          {item.cefr ? (
-                            <span title="CEFR-J / Octanove">
-                              {item.cefr.toUpperCase()}
-                            </span>
-                          ) : null}
-                          {item.ngslRank != null ? (
-                            <span title="NGSL 1.2 rank">
-                              NGSL#{item.ngslRank}
-                            </span>
-                          ) : null}
-                          {item.zipf != null ? (
-                            <span title="Approx Zipf (OpenSubtitles)">
-                              z{item.zipf.toFixed(1)}
-                            </span>
-                          ) : null}
-                        </p>
-                      ) : null}
                     </div>
                     <div className="flex items-center justify-between gap-2 text-xs text-base-content/45">
                       <span className="select-none tabular-nums text-[10px] text-base-content/35">
                         #{rank}
-                      </span>
-                      <div className="flex items-center gap-1.5">
                         {item.count != null ? (
-                          <span className="font-semibold tabular-nums text-base-content/70">
-                            {item.count} 次
+                          <span className="ml-1.5">{item.count} 次</span>
+                        ) : null}
+                        {diffBadge ? (
+                          <span
+                            className="ml-1.5 cursor-default"
+                            title={diffBadge.title}
+                          >
+                            {diffBadge.label}
                           </span>
-                        ) : (
-                          <span className="text-base-content/35">—</span>
-                        )}
-                        {showPassed ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs h-7 min-h-0 px-2 text-base-content/50 hover:text-primary"
-                            onClick={() => handleUnpass(item.text)}
-                            aria-label="从 Passed 列表恢复"
-                          >
-                            恢复
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs h-7 min-h-0 px-2 text-base-content/45 hover:text-success"
-                            onClick={() => handlePass(item.text)}
-                            aria-label="Pass：已学会，不再显示"
-                          >
-                            Pass
-                          </button>
-                        )}
-                      </div>
+                        ) : null}
+                      </span>
+                      {showPassed ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs h-7 min-h-0 px-2 text-base-content/50 hover:text-primary"
+                          onClick={() => handleUnpass(item.text)}
+                          aria-label="从 Passed 列表恢复"
+                        >
+                          恢复
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs h-7 min-h-0 px-2 text-base-content/45 hover:text-success"
+                          onClick={() => handlePass(item.text)}
+                          aria-label="Pass：已学会，不再显示"
+                        >
+                          Pass
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
