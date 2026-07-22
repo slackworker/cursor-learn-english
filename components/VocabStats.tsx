@@ -689,45 +689,20 @@ export function VocabStats() {
                     className={`vocab-card ${showPassed ? "vocab-card-passed" : ""}`}
                   >
                     <div className="mb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start gap-1">
-                            <div className="min-w-0 flex-1 break-words font-mono text-xs md:text-sm">
-                              {item.text}
-                            </div>
-                            <DialogueTtsPlayButton
-                              id={`vocab-${tab}-${item.text}`}
-                              text={buildVocabSpeakText(item.text, item.gloss)}
-                              raw
-                              className="btn-xs h-7 w-7 min-h-0 shrink-0"
-                            />
-                          </div>
-                          {item.ipa ? (
-                            <p className="vocab-ipa text-primary/80">
-                              {item.ipa}
-                            </p>
-                          ) : null}
+                      <div className="flex items-center gap-1">
+                        <div className="min-w-0 flex-1 break-words font-mono text-xs leading-7 md:text-sm">
+                          {item.text}
                         </div>
-                        {showPassed ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs min-h-8 min-w-8 shrink-0 sm:min-h-0 sm:min-w-0"
-                            onClick={() => handleUnpass(item.text)}
-                            aria-label="从 Passed 列表恢复"
-                          >
-                            恢复
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs min-h-8 min-w-10 shrink-0 px-2 text-base-content/50 hover:text-success sm:min-h-0 sm:min-w-0"
-                            onClick={() => handlePass(item.text)}
-                            aria-label="Pass：已学会，不再显示"
-                          >
-                            Pass
-                          </button>
-                        )}
+                        <DialogueTtsPlayButton
+                          id={`vocab-${tab}-${item.text}`}
+                          text={buildVocabSpeakText(item.text, item.gloss)}
+                          raw
+                          className="btn-xs h-7 w-7 min-h-0 shrink-0"
+                        />
                       </div>
+                      {item.ipa ? (
+                        <p className="vocab-ipa text-primary/80">{item.ipa}</p>
+                      ) : null}
                       {item.gloss ? (
                         <div className="mt-1 text-xs leading-snug text-base-content/55">
                           <p>
@@ -791,17 +766,38 @@ export function VocabStats() {
                         </p>
                       ) : null}
                     </div>
-                    <div className="flex items-center justify-between text-xs text-base-content/45">
+                    <div className="flex items-center justify-between gap-2 text-xs text-base-content/45">
                       <span className="select-none tabular-nums text-[10px] text-base-content/35">
                         #{rank}
                       </span>
-                      {item.count != null ? (
-                        <span className="font-semibold tabular-nums text-base-content/70">
-                          {item.count} 次
-                        </span>
-                      ) : (
-                        <span className="text-base-content/35">—</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {item.count != null ? (
+                          <span className="font-semibold tabular-nums text-base-content/70">
+                            {item.count} 次
+                          </span>
+                        ) : (
+                          <span className="text-base-content/35">—</span>
+                        )}
+                        {showPassed ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs h-7 min-h-0 px-2 text-base-content/50 hover:text-primary"
+                            onClick={() => handleUnpass(item.text)}
+                            aria-label="从 Passed 列表恢复"
+                          >
+                            恢复
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs h-7 min-h-0 px-2 text-base-content/45 hover:text-success"
+                            onClick={() => handlePass(item.text)}
+                            aria-label="Pass：已学会，不再显示"
+                          >
+                            Pass
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
