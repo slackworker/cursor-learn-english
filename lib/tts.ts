@@ -78,11 +78,16 @@ export function chunkTextForTTS(text: string, maxLen = 220): string[] {
   return chunks.filter(Boolean);
 }
 
-/** Word/phrase + primary English gloss, with a sentence pause between. */
+/**
+ * Word/phrase + primary English gloss in one utterance.
+ * Prefer punctuation pause over separate speak() calls — Edge often inserts
+ * multi-second gaps between queued utterances.
+ */
 export function buildVocabSpeakText(term: string, gloss?: string): string {
   const t = term.trim();
   if (!t) return "";
   const g = gloss?.trim();
   if (!g) return t;
-  return `${t}. ${g}`;
+  // Period + em dash: slightly longer than "." alone, still one continuous speak.
+  return `${t}. — ${g}`;
 }
