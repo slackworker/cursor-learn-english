@@ -6,8 +6,20 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${PORT:-13180}"
 IDLE_MINUTES="${IDLE_MINUTES:-10}"
-NODE_BIN="${NODE_BIN:-${HOME}/.nvm/versions/node/current/bin}"
-export PATH="$NODE_BIN:$PATH"
+
+# Prefer NODE_BIN if set; else PATH; else newest nvm under $HOME
+if [[ -n "${NODE_BIN:-}" ]]; then
+  export PATH="$NODE_BIN:$PATH"
+elif ! command -v node >/dev/null 2>&1; then
+  latest_nvm_bin="$(ls -d "${HOME}/.nvm/versions/node"/v*/bin 2>/dev/null | sort -V | tail -n1 || true)"
+  if [[ -n "${latest_nvm_bin}" ]]; then
+    export PATH="${latest_nvm_bin}:$PATH"
+  fi
+fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "[dashboard] node not found; set NODE_BIN or install Node.js" >&2
+  exit 1
+fi
 
 cd "$ROOT"
 mkdir -p "$ROOT/.local"
