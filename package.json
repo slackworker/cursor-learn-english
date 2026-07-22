@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "open:dashboard": "bash scripts/open-dashboard.sh",
+    "hooks:install": "node scripts/setup-cursor-hooks.mjs",
+    "hooks:install:also-windows": "node scripts/setup-cursor-hooks.mjs --also-windows",
     "dict:build": "node scripts/build-phrase-dict.mjs",
     "dict:build:words": "node scripts/build-word-dict.mjs",
     "dict:build:difficulty": "node scripts/build-word-difficulty.mjs",

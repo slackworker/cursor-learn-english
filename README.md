@@ -19,17 +19,29 @@
 
 ### 1. 目录与脚本
 
-在用户目录下建立脚本与配置（可从本仓库复制）：
+用跨平台安装器一键写入（推荐）：
+
+```bash
+# 默认 dataDir = 本仓库 ./data
+node scripts/setup-cursor-hooks.mjs
+
+# WSL 且还有 Windows 侧 Cursor 项目时：本机 + Windows 一并安装，共用同一 data/
+node scripts/setup-cursor-hooks.mjs --also-windows
+```
+
+安装后目录大致为：
 
 ```text
 ~/.cursor/
-├── hooks.json                   # 见下方配置内容
+├── hooks.json                              # Hooks 入口
+├── cursor-learn-english.paths.json         # 共享 dataDir（安装器写入）
 └── scripts/
-    ├── capture-event.mjs        # 统一事件写入 cursor-events.jsonl
-    ├── capture-prompt.mjs       # 用户提问写入 prompt-corpus.jsonl
-    ├── capture-thinking.mjs     # Thinking 写入 thinking-corpus.jsonl
-    ├── capture-response-to-txt.mjs
-    └── test.sh
+    ├── capture-event.mjs                   # 统一事件 → cursor-events.jsonl
+    ├── capture-prompt.mjs                  # 用户提问 → prompt-corpus.jsonl
+    ├── capture-thinking.mjs                # Thinking → thinking-corpus.jsonl
+    ├── default-paths.mjs
+    ├── jsonl-daily.mjs
+    └── …
 ```
 
 用户级 Hooks 的**工作目录**为 `~/.cursor/`，因此 `hooks.json` 中的命令使用 `./scripts/xxx.mjs` 即可。
@@ -40,10 +52,29 @@
 > 修改 `scripts/capture-*.mjs`、`thinking-dedupe.mjs`、`jsonl-daily.mjs`、`default-paths.mjs` 或 `hooks/hooks.json` 后，请立刻再跑一次：
 >
 > ```bash
-> bash scripts/setup-cursor-hooks.sh
+> node scripts/setup-cursor-hooks.mjs --also-windows   # 或 npm run hooks:install:also-windows
 > ```
 >
-> 也可在 Cursor 里用任务 **「新用户一键配置」**（会再次复制脚本）。只改仓库、不重装时，去重/路径等修复**不会生效**，语料里还可能继续出现重复 Thinking。
+> 也可在 Cursor 里用任务 **「新用户一键配置」** / **「更新 Cursor Hooks」**。只改仓库、不重装时，去重/路径等修复**不会生效**。
+
+打开仪表盘 **[/setup](/setup)** 可体检：数据目录是否可写、本机/Windows Hooks 是否安装、路径是否一致，并复制安装命令。
+
+### 跨环境（Windows / WSL / Linux）
+
+设计原则：**多个采集端 → 一个 dataDir → 一个仪表盘**。
+
+| 拓扑 | 仪表盘 | 数据目录 | Hooks |
+|------|--------|----------|-------|
+| 纯 Linux / 纯 Windows | 同机 | 同机 `data/` | 安装一次即可 |
+| **WSL + Windows 混用**（常见） | **只跑在 WSL** | **放在 WSL 原生盘**（本仓库 `data/`） | WSL 装一份；Windows 再装一份，`--data-dir` 指向 `\\wsl$\<distro>\…\data` |
+
+路径解析优先级（Hooks 与 Web 一致）：
+
+1. 环境变量 `CURSOR_DASHBOARD_DATA_DIR`（及单文件变量）
+2. `~/.cursor/cursor-learn-english.paths.json` 的 `dataDir`
+3. 默认 `~/projects/cursor-learn-english/data`
+
+不要让 Windows / WSL 各写一份 jsonl 再合并；用 `--also-windows` 或 `/setup` 页给出的 UNC 命令，让 Windows Hooks 直接写入 WSL 数据目录。
 
 ### 2. hooks.json 配置示例
 
@@ -145,12 +176,13 @@ node scripts/prune-jsonl.mjs
 
 | 任务 | 说明 |
 |------|------|
-| **新用户一键配置** | 执行 `npm install`，并将 Hooks 脚本与 `hooks.json` 复制到 `~/.cursor/`（首次使用）。 |
-| **更新 Cursor Hooks（改脚本后必跑）** | 仅同步 `scripts/*.mjs` 与 `hooks.json` 到 `~/.cursor/`。**改采集脚本后务必再跑**，否则 Cursor 仍用旧副本。 |
-| **本地访问：启动 dev（仅本机）** | 启动开发服务，仅本机浏览器访问 http://localhost:3000 。 |
-| **WSL/宿主机访问：启动 dev** | 启动开发服务并监听 `0.0.0.0`，宿主机浏览器也可访问 http://localhost:3000 。 |
+| **新用户一键配置** | `npm install` + 安装 Hooks（WSL 下默认 `--also-windows`）。 |
+| **更新 Cursor Hooks（改脚本后必跑）** | 同步 hooks 运行时脚本与 `hooks.json`（WSL 下顺带更新 Windows）。 |
+| **仅更新本机 Hooks（不含 Windows）** | 只写当前环境的 `~/.cursor`。 |
+| **本地访问：启动 dev（仅本机）** | 开发服务，仅本机 http://localhost:3000 。 |
+| **WSL/宿主机访问：启动 dev** | 监听 `0.0.0.0`，宿主机浏览器也可访问。 |
 
-也可手动执行：`bash scripts/setup-cursor-hooks.sh`（改采集脚本后务必再执行，见上文「重要」说明）。
+也可手动执行：`node scripts/setup-cursor-hooks.mjs`（或 `bash scripts/setup-cursor-hooks.sh`，二者等价）。
 
 ---
 
@@ -163,20 +195,25 @@ thinking-get-hook/
 ├── app/
 │   ├── layout.tsx
 │   ├── page.tsx                 # 仪表盘首页
+│   ├── setup/page.tsx           # 环境配置 / 体检页
 │   ├── globals.css
 │   ├── api/
 │   │   ├── events/route.ts      # GET 事件聚合（按日/类型）
+│   │   ├── setup/route.ts       # GET 环境诊断
 │   │   ├── vocab/route.ts       # GET 词频统计（提问/Thinking/回复）
 │   │   └── sessions/route.ts    # GET 会话列表
 │   ├── vocab/page.tsx           # 词频统计页
 │   └── sessions/page.tsx       # 会话列表与轮次详情
 ├── components/
 │   ├── VocabStats.tsx           # 词频图表与表格
-│   └── SessionTable.tsx         # 会话表格
+│   ├── SessionTable.tsx         # 会话表格
+│   └── SetupPanel.tsx           # /setup 体检 UI
 ├── lib/
 │   ├── events.ts                # 读 cursor-events.jsonl、按日聚合
 │   ├── thinking.ts              # thinking / prompt 语料路径与类型
 │   ├── dialogue.ts              # 轮次语料拼接（会话详情用）
+│   ├── default-paths.ts         # 共享 dataDir 解析（env / paths.json / 默认）
+│   ├── setup-diagnostics.ts     # /api/setup 诊断逻辑
 │   └── vocab.ts                 # 多源词频聚合
 ├── .vscode/
 │   └── tasks.json               # Cursor/VS Code 一键任务
@@ -186,8 +223,8 @@ thinking-get-hook/
 │   ├── capture-event.mjs        # 统一事件采集 → cursor-events.jsonl
 │   ├── capture-prompt.mjs       # 用户提问采集 → prompt-corpus.jsonl
 │   ├── capture-thinking.mjs     # Thinking 采集 → thinking-corpus.jsonl
-│   ├── capture-response-to-txt.mjs
-│   ├── setup-cursor-hooks.sh    # 一键安装 Hooks 到 ~/.cursor
+│   ├── setup-cursor-hooks.mjs   # 跨平台 Hooks 安装（支持 --data-dir / --also-windows）
+│   ├── setup-cursor-hooks.sh    # 薄封装 → 调用 .mjs
 │   └── test.sh
 ├── hooks.md                     # Hooks 事件说明文档
 ├── package.json

@@ -3,18 +3,27 @@
   "tasks": [
     {
       "label": "新用户一键配置",
-      "detail": "npm install + 安装 Hooks。改 scripts/*.mjs 后请改用「更新 Cursor Hooks」。",
+      "detail": "npm install + 安装 Hooks（WSL 下默认顺带装 Windows）。改 scripts/*.mjs 后请改用「更新 Cursor Hooks」。",
       "type": "shell",
-      "command": "npm install && bash scripts/setup-cursor-hooks.sh",
+      "command": "npm install && node scripts/setup-cursor-hooks.mjs --also-windows",
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": [],
       "presentation": { "reveal": "always" }
     },
     {
       "label": "更新 Cursor Hooks（改脚本后必跑）",
-      "detail": "把仓库 scripts/*.mjs 与 hooks.json 同步到 ~/.cursor/。只改仓库不跑此任务则采集仍用旧副本。",
+      "detail": "同步 hooks 运行时脚本与 hooks.json 到 ~/.cursor/（WSL 下默认顺带更新 Windows）。",
       "type": "shell",
-      "command": "bash scripts/setup-cursor-hooks.sh",
+      "command": "node scripts/setup-cursor-hooks.mjs --also-windows",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always" }
+    },
+    {
+      "label": "仅更新本机 Hooks（不含 Windows）",
+      "detail": "只安装当前环境的 ~/.cursor，不写 Windows 侧。",
+      "type": "shell",
+      "command": "node scripts/setup-cursor-hooks.mjs",
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": [],
       "presentation": { "reveal": "always" }

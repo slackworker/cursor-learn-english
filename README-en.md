@@ -28,13 +28,15 @@ User-level hooks run with **working directory** `~/.cursor/`, so use `./scripts/
 > **Important: after changing capture scripts in this repo, reinstall into `~/.cursor/`**
 >
 > Cursor runs the **copies** under `~/.cursor/scripts/*.mjs`, not the files in this repo’s `scripts/` folder.
-> Whenever you edit `scripts/capture-*.mjs`, `thinking-dedupe.mjs`, `jsonl-daily.mjs`, `default-paths.mjs`, or `hooks/hooks.json`, run again:
+> Whenever you edit capture/runtime scripts or `hooks/hooks.json`, run again:
 >
 > ```bash
-> bash scripts/setup-cursor-hooks.sh
+> node scripts/setup-cursor-hooks.mjs
+> # WSL + Windows projects:
+> node scripts/setup-cursor-hooks.mjs --also-windows
 > ```
 >
-> If you only change the repo and skip reinstall, fixes (e.g. thinking dedupe) will not take effect.
+> Open the dashboard **/setup** page to verify Hooks and the shared `dataDir`. See the Chinese README for multi-environment topology (Windows / WSL / Linux).
 
 ### 2. hooks.json example
 
