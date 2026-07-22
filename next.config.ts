@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: projectRoot,
   },
+  // 允许用局域网 IP（平板等）访问 dev：否则 /_next/* 脚本会被拦成 403，页面壳能开但数据一直加载中
+  allowedDevOrigins: ["192.168.*.*"],
 };
 
 export default nextConfig;
