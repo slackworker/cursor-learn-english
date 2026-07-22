@@ -27,7 +27,7 @@ export function MessageBubble({ variant, label, children, action }: MessageBubbl
         <span className={styles.label}>{label}</span>
         {action}
       </div>
-      <div className="text-sm leading-relaxed">{children}</div>
+      <div className="text-base leading-relaxed">{children}</div>
     </div>
   );
 }

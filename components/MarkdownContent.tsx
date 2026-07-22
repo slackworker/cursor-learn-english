@@ -19,7 +19,7 @@ const markdownComponents: Components = {
     <h2 className="mb-2 mt-3 text-base font-semibold">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mb-1 mt-2 text-sm font-semibold">{children}</h3>
+    <h3 className="mb-1 mt-2 text-base font-semibold">{children}</h3>
   ),
   strong: ({ children }) => (
     <strong className="font-semibold text-primary">{children}</strong>

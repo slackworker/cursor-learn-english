@@ -112,7 +112,7 @@ function TextWithTts({
   className?: string;
 }) {
   return (
-    <div className="flex items-start gap-0 text-sm leading-relaxed">
+    <div className="flex items-start gap-0 text-base leading-relaxed">
       <MarkdownContent
         className={`min-w-0 flex-1 break-words ${className}`.trim()}
       >
@@ -471,7 +471,7 @@ function TaskProcessRow({
   tool: TranscriptToolUseItem;
 }) {
   return (
-    <div className="flex items-start gap-2 py-0.5 text-xs">
+    <div className="flex items-start gap-2 py-0.5 text-sm">
       <span className="mt-0.5 opacity-50" aria-hidden>
         •
       </span>

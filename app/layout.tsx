@@ -28,7 +28,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh" data-theme="corporate" suppressHydrationWarning>
+    <html lang="zh" data-theme="corporate" data-font-size="md" suppressHydrationWarning>
+      <head>
+        {/* Apply stored theme / font-size before paint to avoid a flash. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);var f=localStorage.getItem("font-size");if(f==="sm"||f==="md"||f==="lg"){document.documentElement.setAttribute("data-font-size",f);}else if(window.matchMedia("(hover: none) and (pointer: coarse)").matches){document.documentElement.setAttribute("data-font-size","lg");}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased min-h-screen bg-[var(--page-bg)] text-base-content`}
       >

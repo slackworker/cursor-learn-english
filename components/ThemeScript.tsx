@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { applyFontSize, isFontSizeScale, readStoredFontSize } from "@/lib/font-size";
 
 export default function ThemeScript() {
   useEffect(() => {
@@ -12,6 +13,23 @@ export default function ThemeScript() {
       const initial = prefersDark ? "business" : "corporate";
       document.documentElement.setAttribute("data-theme", initial);
       localStorage.setItem("theme", initial);
+    }
+
+    // Prefer an explicit localStorage choice. Otherwise keep the inline layout
+    // script's pick (e.g. first visit on touch → lg) instead of forcing md.
+    try {
+      const stored = localStorage.getItem("font-size");
+      if (stored) {
+        applyFontSize(readStoredFontSize());
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const current = document.documentElement.getAttribute("data-font-size");
+    if (!isFontSizeScale(current)) {
+      applyFontSize(readStoredFontSize());
     }
   }, []);
 

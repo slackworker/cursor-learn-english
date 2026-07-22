@@ -16,6 +16,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTts } from "@/components/TtsProvider";
 import { ServerStatusBadge } from "@/components/ServerStatus";
+import { FontSizeControl } from "@/components/FontSizeControl";
 
 const NAV_ICON_CLASS = "h-4 w-4 shrink-0";
 
@@ -73,6 +74,7 @@ export default function Navbar() {
             ))}
           </nav>
           <ServerStatusBadge />
+          <FontSizeControl />
           <button
             type="button"
             className="theme-toggle"

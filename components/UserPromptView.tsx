@@ -58,7 +58,7 @@ export function UserPromptView({
 
   if (!hasDom) {
     return (
-      <MarkdownContent className={`whitespace-pre-wrap break-words text-sm ${className}`}>
+      <MarkdownContent className={`whitespace-pre-wrap break-words text-base ${className}`}>
         {body}
       </MarkdownContent>
     );
@@ -68,7 +68,7 @@ export function UserPromptView({
 
   if (bodyInline) {
     return (
-      <div className={`text-sm leading-relaxed ${className}`}>
+      <div className={`text-base leading-relaxed ${className}`}>
         <span className="inline">
           {segments.map((seg, i) =>
             seg.type === "dom" ? (
@@ -89,7 +89,7 @@ export function UserPromptView({
   }
 
   return (
-    <div className={`text-sm leading-relaxed ${className}`}>
+    <div className={`text-base leading-relaxed ${className}`}>
       {segments.map((seg, i) =>
         seg.type === "dom" ? (
           <DomContextChip

@@ -10,6 +10,20 @@
 
 html {
   scrollbar-gutter: stable;
+  /* Default "中"：略大于浏览器 16px，改善 1080P / 平板阅读 */
+  font-size: 106.25%;
+}
+
+html[data-font-size="sm"] {
+  font-size: 100%;
+}
+
+html[data-font-size="md"] {
+  font-size: 106.25%;
+}
+
+html[data-font-size="lg"] {
+  font-size: 118.75%;
 }
 
 /* ── Theme refinements ── */
@@ -328,7 +342,7 @@ html[data-theme="business"] {
 }
 
 .data-table {
-  @apply w-full text-left text-sm;
+  @apply w-full text-left text-base;
 }
 
 .data-table thead tr {
@@ -361,7 +375,7 @@ html[data-theme="business"] {
 }
 
 .dialogue-item-meta {
-  @apply mb-3 font-mono text-[11px] text-base-content/40;
+  @apply mb-3 font-mono text-xs text-base-content/40;
 }
 
 /* ── Pagination ── */
@@ -448,7 +462,7 @@ html[data-theme="business"] {
 }
 
 .vocab-card {
-  @apply flex flex-col justify-between rounded-xl border border-base-300/60 bg-base-100 p-3 text-sm;
+  @apply flex flex-col justify-between rounded-xl border border-base-300/60 bg-base-100 p-3 text-base;
 }
 
 .vocab-card-passed {
@@ -456,7 +470,7 @@ html[data-theme="business"] {
 }
 
 .vocab-ipa {
-  @apply mt-0.5 text-[11px] leading-snug;
+  @apply mt-0.5 text-xs leading-snug;
   /* Prefer faces with full IPA coverage; avoid mono (often missing ɪ/ə/ː). */
   font-family:
     "Noto Sans",
