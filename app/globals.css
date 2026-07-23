@@ -448,11 +448,12 @@ html[data-theme="business"] {
 }
 
 .toolbar-tabs {
-  @apply inline-flex rounded-lg border border-base-300/60 bg-base-200/50 p-0.5;
+  /* Match .toolbar-input height exactly (h-9 / sm:h-8); clamp so tab content cannot grow the shell */
+  @apply inline-flex h-9 max-h-9 min-h-9 items-stretch overflow-hidden rounded-lg border border-base-300/60 bg-base-200/50 p-0.5 sm:h-8 sm:max-h-8 sm:min-h-8;
 }
 
 .toolbar-tab {
-  @apply inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium text-base-content/55 transition-colors hover:text-base-content;
+  @apply inline-flex h-full min-h-0 items-center gap-1 rounded-md px-2.5 py-0 text-sm font-medium leading-none text-base-content/55 transition-colors hover:text-base-content sm:px-3;
 }
 
 .toolbar-tab-active {
