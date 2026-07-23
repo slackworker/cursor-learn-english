@@ -14,7 +14,8 @@
     "dict:build:words": "NODE_OPTIONS='--max-old-space-size=8192' node scripts/build-word-dict.mjs",
     "dict:build:difficulty": "node scripts/build-word-difficulty.mjs",
     "dict:build:all": "npm run dict:build && npm run dict:build:words && npm run dict:build:difficulty",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:process": "npx --yes tsx scripts/verify-process-activity.ts"
   },
   "dependencies": {
     "daisyui": "^5.5.19",

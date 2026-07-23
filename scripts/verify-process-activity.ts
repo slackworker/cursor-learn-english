@@ -1,6 +1,9 @@
 /**
  * Quick sanity checks for Cursor-like process activity nesting.
- * Run: npx --yes tsx scripts/verify-process-activity.ts
+ * Run: npm run verify:process
+ *
+ * Nesting rules live in lib/process-activity/tree.ts — edit fixtures here
+ * when changing explore/Thought/edit/shell behavior.
  */
 import assert from "node:assert/strict";
 import {
