@@ -1,14 +1,24 @@
 #!/usr/bin/env node
 /**
  * Build offline word dictionary (IPA + English gloss) from open datasets:
- * - Wordset Dictionary (definitions / POS; keep up to 3 senses, auto-pick primary)
+ * - Kaikki / Wiktionary English extract (definitions / POS; up to 3 senses)
  * - open-dict-data/ipa-dict en_US (IPA phonetics)
+ *
+ * Sense ranking prefers unmarked modern senses: drop obsolete/archaic/rare
+ * and form-of for primary when real definitions exist; among survivors, pick
+ * the (etymology, POS) block with the most unmarked senses (Wiktionary's
+ * productive modern entry), then its first gloss.
+ *
+ * Coverage is capped to learner-useful lemmas: FrequencyWords en_50k ∪ IPA ∪
+ * NGSL/CEFR ∪ Wiktionary senses tagged Computing/Programming/Internet/etc.
  *
  * Output: data/word-dictionary.generated.json
  * Usage:  npm run dict:build:words
  */
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
+import readline from "readline";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -18,237 +28,85 @@ const cacheDir = path.join(root, "data", ".dict-cache");
 
 const IPA_URL =
   "https://raw.githubusercontent.com/open-dict-data/ipa-dict/master/data/en_US.txt";
-const WORDSET_BASE =
-  "https://raw.githubusercontent.com/wordset/wordset-dictionary/master/data";
+const KAIKKI_URL =
+  "https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz";
+const FREQ_URL =
+  "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_50k.txt";
+const NGSL_STATS_URL =
+  "https://raw.githubusercontent.com/FabriceBoyer/word_lists/main/ngsl/1.2/csv/NGSL_1.2_stats.csv";
+const NGSL_LEMMA_URL =
+  "https://raw.githubusercontent.com/FabriceBoyer/word_lists/main/ngsl/1.2/csv/NGSL_1.2_lemmatized_for_teaching.csv";
+const NGSL_SUP_URL =
+  "https://raw.githubusercontent.com/FabriceBoyer/word_lists/main/ngsl/1.2/csv/SUP_lemmatized.csv";
+const CEFRJ_URL =
+  "https://raw.githubusercontent.com/openlanguageprofiles/olp-en-cefrj/master/cefrj-vocabulary-profile-1.5.csv";
+const OCTANOVE_URL =
+  "https://raw.githubusercontent.com/openlanguageprofiles/olp-en-cefrj/master/octanove-vocabulary-profile-c1c2-1.0.csv";
 
-const LETTERS = "abcdefghijklmnopqrstuvwxyz".split("");
+const MAX_GLOSSES = 3;
+const MAX_SENSES_PER_WORD = 48;
 
-/**
- * Always-win overrides (tech / learner senses preferred over Wordset's first sense).
- * IPA may be empty — filled from ipa-dict when available.
- */
-const CORE_OVERRIDE = [
-  ["api", "", "application programming interface", "noun"],
-  ["repo", "", "short for repository; project source tree", "noun"],
-  ["refactor", "/ɹiˈfæktɚ/", "restructure code without changing behavior", "verb"],
-  ["lint", "", "static analysis that flags style or code issues", "verb"],
-  ["linter", "", "tool that runs lint checks", "noun"],
-  ["commit", "", "record a snapshot of changes in version control", "verb"],
-  ["branch", "", "diverging line of development in version control", "noun"],
-  ["merge", "", "combine changes from different branches", "verb"],
-  ["deploy", "", "release software to a target environment", "verb"],
-  ["endpoint", "", "URL or route exposing an API operation", "noun"],
-  ["middleware", "", "software layer between request and handler", "noun"],
-  ["schema", "", "structure or shape of data", "noun"],
-  ["payload", "", "data carried by a request or message", "noun"],
-  ["token", "", "unit of text or an auth credential", "noun"],
-  ["prompt", "", "input text given to a language model", "noun"],
-  ["corpus", "", "collection of texts used for analysis", "noun"],
-  ["vocab", "", "short for vocabulary", "noun"],
-  ["glossary", "", "list of terms with brief definitions", "noun"],
-  ["phonetic", "", "related to speech sounds", "adjective"],
-  ["ipa", "", "International Phonetic Alphabet", "noun"],
-  ["file", "", "a set of related records or a named data object on disk", "noun"],
-  ["code", "", "instructions written in a programming language", "noun"],
-  ["bug", "", "defect or error in software", "noun"],
-  ["cache", "", "temporary storage for faster reuse", "noun"],
-  ["stack", "", "layered set of technologies, or LIFO data structure", "noun"],
-  ["query", "", "request for data, especially from a database", "noun"],
-  ["server", "", "computer or process that provides services to clients", "noun"],
-  ["client", "", "program or device that requests services from a server", "noun"],
-  ["build", "", "compile or assemble a software package", "verb"],
-  ["debug", "", "find and fix defects in software", "verb"],
-  ["render", "", "generate UI or output from data/templates", "verb"],
-  ["parse", "", "analyze text or data according to a grammar/format", "verb"],
-];
+/** Keep learner-useful POS; drop names, affixes, symbols, etc. */
+const POS_MAP = {
+  noun: "noun",
+  verb: "verb",
+  adj: "adjective",
+  adjective: "adjective",
+  adv: "adverb",
+  adverb: "adverb",
+  prep: "preposition",
+  preposition: "preposition",
+  conj: "conjunction",
+  conjunction: "conjunction",
+  det: "determiner",
+  determiner: "determiner",
+  article: "article",
+  pron: "pronoun",
+  pronoun: "pronoun",
+  intj: "interjection",
+  interjection: "interjection",
+  num: "numeral",
+  numeral: "numeral",
+  number: "numeral",
+  particle: "particle",
+  contraction: "contraction",
+};
 
-/**
- * Wordset omits many closed-class / ultra-high-frequency words.
- * Gap-fill only when missing; IPA filled from ipa-dict when blank.
- */
-const CORE_FUNCTION = [
-  ["the", "", "definite article; used before a specific noun", "article"],
-  ["to", "", "marks an infinitive, direction, or recipient", "preposition"],
-  ["of", "", "belonging to; relating to; made from", "preposition"],
-  ["and", "", "connects words or clauses of equal weight", "conjunction"],
-  ["that", "", "introduces a clause; points to something", "conjunction"],
-  ["it", "", "refers to a thing, situation, or impersonal subject", "pronoun"],
-  ["for", "", "intended to benefit; because of; during", "preposition"],
-  ["with", "", "accompanied by; using; having", "preposition"],
-  ["you", "", "the person or people being addressed", "pronoun"],
-  ["this", "", "the one nearby or just mentioned", "determiner"],
-  ["from", "", "starting at; originating in; because of", "preposition"],
-  ["an", "", "indefinite article before a vowel sound", "article"],
-  ["my", "", "belonging to the speaker", "determiner"],
-  ["would", "", "past of will; used for polite or hypothetical meaning", "verb"],
-  ["their", "", "belonging to them", "determiner"],
-  ["what", "", "asks for information; the thing that", "pronoun"],
-  ["if", "", "on the condition that; whether", "conjunction"],
-  ["who", "", "asks about or refers to a person", "pronoun"],
-  ["which", "", "asks about or refers to a choice among things", "pronoun"],
-  ["me", "", "object form of I", "pronoun"],
-  ["when", "", "at what time; at the time that", "adverb"],
-  ["into", "", "to the inside of; becoming", "preposition"],
-  ["your", "", "belonging to the person addressed", "determiner"],
-  ["could", "", "past of can; used for possibility or polite requests", "verb"],
-  ["them", "", "object form of they", "pronoun"],
-  ["than", "", "used in comparisons", "conjunction"],
-  ["its", "", "belonging to it", "determiner"],
-  ["how", "", "in what way; to what extent", "adverb"],
-  ["our", "", "belonging to us", "determiner"],
-  ["because", "", "for the reason that", "conjunction"],
-  ["these", "", "plural of this", "determiner"],
-  ["us", "", "object form of we", "pronoun"],
-  ["or", "", "presents an alternative", "conjunction"],
-  ["but", "", "introduces a contrast", "conjunction"],
-  ["not", "", "makes a verb or adjective negative", "adverb"],
-  ["as", "", "in the role of; while; because; equally", "conjunction"],
-  ["at", "", "in a place or time; toward", "preposition"],
-  ["by", "", "near; through the agency of; not later than", "preposition"],
-  ["on", "", "in contact with a surface; about a topic", "preposition"],
-  ["in", "", "inside; during; using a language/medium", "preposition"],
-  ["is", "", "third-person singular present of be", "verb"],
-  ["are", "", "present plural of be", "verb"],
-  ["was", "", "past singular of be", "verb"],
-  ["were", "", "past plural of be", "verb"],
-  ["be", "", "exist; occur; used as a linking or auxiliary verb", "verb"],
-  ["been", "", "past participle of be", "verb"],
-  ["being", "", "present participle of be; existence", "verb"],
-  ["have", "", "possess; experience; used as an auxiliary", "verb"],
-  ["has", "", "third-person singular of have", "verb"],
-  ["had", "", "past of have", "verb"],
-  ["do", "", "perform; used as an auxiliary for questions/negation", "verb"],
-  ["does", "", "third-person singular of do", "verb"],
-  ["did", "", "past of do", "verb"],
-  ["will", "", "marks future; be willing to", "verb"],
-  ["can", "", "be able to; be allowed to", "verb"],
-  ["may", "", "possibility or permission", "verb"],
-  ["might", "", "possibility (often weaker than may)", "verb"],
-  ["should", "", "advice, expectation, or obligation", "verb"],
-  ["shall", "", "formal future or obligation", "verb"],
-  ["must", "", "necessity or strong obligation", "verb"],
-  ["about", "", "concerning; approximately; around", "preposition"],
-  ["above", "", "at a higher level than", "preposition"],
-  ["across", "", "from one side to the other of", "preposition"],
-  ["after", "", "later than; following", "preposition"],
-  ["against", "", "in opposition to; next to", "preposition"],
-  ["along", "", "from one end toward the other of", "preposition"],
-  ["among", "", "in the middle of; one of", "preposition"],
-  ["around", "", "on all sides of; approximately", "preposition"],
-  ["before", "", "earlier than; in front of", "preposition"],
-  ["behind", "", "at the back of", "preposition"],
-  ["below", "", "at a lower level than", "preposition"],
-  ["beneath", "", "under; lower than", "preposition"],
-  ["beside", "", "next to", "preposition"],
-  ["between", "", "in the space separating two things", "preposition"],
-  ["beyond", "", "on the farther side of; exceeding", "preposition"],
-  ["during", "", "throughout the time of", "preposition"],
-  ["except", "", "not including", "preposition"],
-  ["inside", "", "within", "preposition"],
-  ["near", "", "close to", "preposition"],
-  ["off", "", "away from; not on", "preposition"],
-  ["onto", "", "to a position on", "preposition"],
-  ["out", "", "away from the inside", "adverb"],
-  ["outside", "", "beyond the limits of", "preposition"],
-  ["over", "", "above; more than; during", "preposition"],
-  ["since", "", "from a past time until now; because", "preposition"],
-  ["through", "", "from one end/side to the other; by means of", "preposition"],
-  ["throughout", "", "in every part of; during the whole of", "preposition"],
-  ["toward", "", "in the direction of", "preposition"],
-  ["towards", "", "in the direction of", "preposition"],
-  ["under", "", "below; less than", "preposition"],
-  ["until", "", "up to the time of", "preposition"],
-  ["upon", "", "on (often formal)", "preposition"],
-  ["via", "", "by way of; through", "preposition"],
-  ["without", "", "not having; in the absence of", "preposition"],
-  ["although", "", "in spite of the fact that", "conjunction"],
-  ["though", "", "even if; however", "conjunction"],
-  ["unless", "", "except if", "conjunction"],
-  ["while", "", "during the time that; whereas", "conjunction"],
-  ["whereas", "", "in contrast with the fact that", "conjunction"],
-  ["whether", "", "if … or not; expressing a choice", "conjunction"],
-  ["nor", "", "and not; used after neither", "conjunction"],
-  ["yet", "", "up to now; nevertheless", "adverb"],
-  ["also", "", "in addition; too", "adverb"],
-  ["just", "", "exactly; recently; only", "adverb"],
-  ["only", "", "solely; no more than", "adverb"],
-  ["even", "", "used to emphasize surprise or extremity", "adverb"],
-  ["still", "", "continuing; nevertheless", "adverb"],
-  ["already", "", "before now; sooner than expected", "adverb"],
-  ["always", "", "at all times; every time", "adverb"],
-  ["never", "", "at no time; not ever", "adverb"],
-  ["often", "", "many times; frequently", "adverb"],
-  ["sometimes", "", "on some occasions", "adverb"],
-  ["usually", "", "most of the time", "adverb"],
-  ["really", "", "in fact; very", "adverb"],
-  ["very", "", "to a high degree", "adverb"],
-  ["too", "", "also; more than enough", "adverb"],
-  ["so", "", "to such a degree; therefore", "adverb"],
-  ["then", "", "at that time; next; in that case", "adverb"],
-  ["there", "", "in that place; used to introduce existence", "adverb"],
-  ["here", "", "in this place", "adverb"],
-  ["where", "", "in or to what place", "adverb"],
-  ["why", "", "for what reason", "adverb"],
-  ["quite", "", "to a fairly high degree; completely", "adverb"],
-  ["rather", "", "preferably; to some degree", "adverb"],
-  ["almost", "", "nearly; not quite", "adverb"],
-  ["enough", "", "as much as needed", "determiner"],
-  ["each", "", "every one considered separately", "determiner"],
-  ["every", "", "all members of a group, taken one by one", "determiner"],
-  ["any", "", "one or some, without specifying which", "determiner"],
-  ["some", "", "an unspecified amount or number", "determiner"],
-  ["many", "", "a large number of", "determiner"],
-  ["much", "", "a large amount of", "determiner"],
-  ["more", "", "a greater amount or number", "determiner"],
-  ["most", "", "the greatest amount or number", "determiner"],
-  ["few", "", "a small number of", "determiner"],
-  ["little", "", "a small amount of; not much", "determiner"],
-  ["other", "", "different; additional", "determiner"],
-  ["another", "", "one more; a different one", "determiner"],
-  ["such", "", "of the type previously mentioned", "determiner"],
-  ["same", "", "identical; not different", "adjective"],
-  ["own", "", "belonging to oneself", "adjective"],
-  ["both", "", "the two; the one and the other", "determiner"],
-  ["either", "", "one or the other of two", "determiner"],
-  ["neither", "", "not one and not the other of two", "determiner"],
-  ["all", "", "the whole number or amount of", "determiner"],
-  ["no", "", "not any; used to give a negative answer", "determiner"],
-  ["yes", "", "used to agree or affirm", "interjection"],
-  ["he", "", "male person previously mentioned", "pronoun"],
-  ["she", "", "female person previously mentioned", "pronoun"],
-  ["they", "", "people or things previously mentioned", "pronoun"],
-  ["we", "", "the speaker and at least one other person", "pronoun"],
-  ["him", "", "object form of he", "pronoun"],
-  ["her", "", "object form of she; belonging to her", "pronoun"],
-  ["his", "", "belonging to him", "determiner"],
-  ["himself", "", "reflexive form of he", "pronoun"],
-  ["herself", "", "reflexive form of she", "pronoun"],
-  ["itself", "", "reflexive form of it", "pronoun"],
-  ["themselves", "", "reflexive form of they", "pronoun"],
-  ["yourself", "", "reflexive form of you", "pronoun"],
-  ["myself", "", "reflexive form of I", "pronoun"],
-  ["someone", "", "some person", "pronoun"],
-  ["somebody", "", "some person", "pronoun"],
-  ["something", "", "some thing; an unspecified object", "pronoun"],
-  ["anyone", "", "any person", "pronoun"],
-  ["anybody", "", "any person", "pronoun"],
-  ["anything", "", "any thing; whatever", "pronoun"],
-  ["everyone", "", "every person", "pronoun"],
-  ["everybody", "", "every person", "pronoun"],
-  ["everything", "", "all things", "pronoun"],
-  ["nobody", "", "no person", "pronoun"],
-  ["nothing", "", "not anything", "pronoun"],
-  ["however", "", "in whatever way; nevertheless", "adverb"],
-  ["therefore", "", "for that reason", "adverb"],
-  ["thus", "", "in this way; as a result", "adverb"],
-  ["instead", "", "as an alternative", "adverb"],
-  ["otherwise", "", "in a different way; if not", "adverb"],
-  ["meanwhile", "", "at the same time", "adverb"],
-  ["furthermore", "", "in addition; moreover", "adverb"],
-  ["moreover", "", "in addition to what has been said", "adverb"],
-  ["nevertheless", "", "in spite of that", "adverb"],
-  ["nonetheless", "", "in spite of that", "adverb"],
-];
+/** Tags that should not win as the card primary. */
+const BAD_PRIMARY_TAGS = new Set([
+  "obsolete",
+  "archaic",
+  "rare",
+  "historical",
+  "dated",
+  "slang",
+  "vulgar",
+  "offensive",
+  "derogatory",
+  "ethnic slur",
+  "slur",
+  "misspelling",
+  "eye dialect",
+  "pronunciation-spelling",
+  "uncommon",
+  "dialectal",
+  "dialect",
+]);
+
+const FORM_OF_TAGS = new Set([
+  "form-of",
+  "alt-of",
+  "alternative",
+  "misspelling",
+  "abbreviation",
+  "initialism",
+  "acronym",
+  "clipping",
+]);
+
+/** Prefer modern topical entries slightly when block sizes are close. */
+const TOPICAL_CAT_RE =
+  /\b(computing|programming|software|internet|databases?|machine learning|software engineering)\b/i;
 
 async function download(url, dest) {
   if (fs.existsSync(dest)) {
@@ -261,9 +119,29 @@ async function download(url, dest) {
   console.log(`downloading ${url}`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  fs.writeFileSync(dest, buf);
-  console.log(`saved ${path.basename(dest)} (${buf.length} bytes)`);
+  const tmp = `${dest}.partial`;
+  const file = fs.createWriteStream(tmp);
+  const reader = res.body.getReader();
+  let written = 0;
+  let lastLog = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    written += value.length;
+    if (!file.write(value)) {
+      await new Promise((resolve) => file.once("drain", resolve));
+    }
+    if (written - lastLog > 50 * 1024 * 1024) {
+      lastLog = written;
+      console.log(`  … ${(written / 1024 / 1024).toFixed(0)} MB`);
+    }
+  }
+  await new Promise((resolve, reject) => {
+    file.end(() => resolve());
+    file.on("error", reject);
+  });
+  fs.renameSync(tmp, dest);
+  console.log(`saved ${path.basename(dest)} (${written} bytes)`);
 }
 
 function normalizeWord(raw) {
@@ -301,8 +179,7 @@ function normalizeLearnerIpa(ipa) {
   s = s.replace(/ɚ/g, "ər");
   s = s.replace(/ɹ/g, "r");
   s = s.replace(/ɫ/g, "l");
-  s = s.replace(/ɡ/g, "g"); // IPA g (U+0261) → ASCII g
-  // Common rhotic vowel lengthening used in AmE learner dictionaries
+  s = s.replace(/ɡ/g, "g");
   s = s.replace(/ɔr/g, "ɔːr");
   s = s.replace(/ɑr/g, "ɑːr");
   s = s.replace(/ːː/g, "ː");
@@ -312,7 +189,6 @@ function normalizeLearnerIpa(ipa) {
 function cleanIpa(raw) {
   let s = String(raw || "").trim();
   if (!s) return "";
-  // ipa-dict: "/ˈfoo/, /ˈbar/" → first form
   const first = s.split(",")[0].trim();
   if (!first) return "";
   const wrapped =
@@ -338,121 +214,262 @@ function loadIpa(filePath) {
   return map;
 }
 
-/**
- * Niche / marked senses that should not win as the card primary.
- * Keep this list narrow — broad domain labels (biology, anatomy…) often
- * mark the *main* sense and must not trigger recovery.
- */
-const NICHE_SENSE_RE =
-  /\b(drug|drugs|narcotic|heroin|cocaine|opium|slang|vulgar|archaic|obsolete|heraldry|nautical|theology|dialect|offensive|derogatory|taboo|hebrew alphabet|greek alphabet|letter of the|taxonomic|indehiscent|spermatozoa|semen)\b/i;
-const MARKED_SENSE_RE =
-  /\b(selfishly|unethically|immorally|illegally|vulgarly)\b/i;
-
-const MAX_GLOSSES = 3;
-
-function isBadPrimarySense(meaning) {
-  const def = String(meaning?.def || "");
-  return NICHE_SENSE_RE.test(def) || MARKED_SENSE_RE.test(def);
+function addCsvWords(filePath, allow, wordCol = 0) {
+  if (!fs.existsSync(filePath)) return 0;
+  let n = 0;
+  const text = fs.readFileSync(filePath, "utf8");
+  for (const line of text.split("\n")) {
+    if (!line || line.startsWith("#")) continue;
+    // naive CSV: take first field / requested column before comma (quoted-safe enough for these lists)
+    const cols = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQ) {
+        if (ch === '"') {
+          if (line[i + 1] === '"') {
+            cur += '"';
+            i += 1;
+          } else inQ = false;
+        } else cur += ch;
+      } else if (ch === '"') inQ = true;
+      else if (ch === ",") {
+        cols.push(cur);
+        cur = "";
+      } else cur += ch;
+    }
+    cols.push(cur);
+    const raw = cols[wordCol] || cols[0] || "";
+    if (/^[A-Za-z_]+$/.test(raw) && raw === raw.toUpperCase() && raw !== "word") {
+      // header-ish
+    }
+    for (const part of String(raw).split(/[\s;/|]+/)) {
+      const w = normalizeWord(part);
+      if (!isSingleWord(w) || allow.has(w)) continue;
+      allow.add(w);
+      n += 1;
+    }
+  }
+  return n;
 }
 
-function sensePos(meaning) {
-  const pos = String(meaning?.speech_part || "").toLowerCase();
-  return pos || undefined;
-}
-
-/**
- * Primary = first Wordset sense, unless it is clearly niche/marked.
- * Wordset examples often sit on rare senses, so we do not prefer them.
- * When recovering, prefer a surviving noun (common for content words).
- */
-function pickPrimaryMeaning(meanings) {
-  if (meanings.length === 0) return null;
-  const first = meanings[0];
-  if (!isBadPrimarySense(first)) return first;
-  const good = meanings.filter((m) => !isBadPrimarySense(m));
-  if (good.length === 0) return first;
-  return (
-    good.find((m) => sensePos(m) === "noun") || good[0]
+function loadAllowlist(ipaMap) {
+  const allow = new Set(ipaMap.keys());
+  const freqPath = path.join(cacheDir, "en_50k.txt");
+  if (fs.existsSync(freqPath)) {
+    for (const line of fs.readFileSync(freqPath, "utf8").split("\n")) {
+      const w = normalizeWord(line.split(/\s+/)[0]);
+      if (isSingleWord(w)) allow.add(w);
+    }
+  }
+  addCsvWords(path.join(cacheDir, "NGSL_1.2_stats.csv"), allow, 0);
+  addCsvWords(
+    path.join(cacheDir, "NGSL_1.2_lemmatized_for_teaching.csv"),
+    allow,
+    0
   );
+  addCsvWords(path.join(cacheDir, "SUP_lemmatized.csv"), allow, 0);
+  addCsvWords(path.join(cacheDir, "cefrj-vocabulary-profile-1.5.csv"), allow, 0);
+  addCsvWords(
+    path.join(cacheDir, "octanove-vocabulary-profile-c1c2-1.0.csv"),
+    allow,
+    0
+  );
+  return allow;
 }
 
-/** Primary first, then other senses (same POS → other non-niche → rest), capped. */
-function pickGlossList(meanings, primary) {
+function normalizePos(raw) {
+  const key = String(raw || "")
+    .toLowerCase()
+    .trim();
+  return POS_MAP[key] || null;
+}
+
+function senseTags(sense) {
   const out = [];
-  const primaryPos = sensePos(primary);
+  for (const t of sense?.tags || []) out.push(String(t).toLowerCase());
+  for (const t of sense?.raw_tags || []) out.push(String(t).toLowerCase());
+  return out;
+}
+
+function senseCategories(sense) {
+  const out = [];
+  for (const c of sense?.categories || []) {
+    if (typeof c === "string") out.push(c);
+    else if (c && typeof c === "object") {
+      if (c.name) out.push(String(c.name));
+      if (c.orig) out.push(String(c.orig));
+    }
+  }
+  return out;
+}
+
+function isFormOfSense(sense, tags) {
+  if (sense?.form_of || sense?.alt_of) return true;
+  return tags.some((t) => FORM_OF_TAGS.has(t));
+}
+
+function isBadPrimarySense(tags, gloss) {
+  if (tags.some((t) => BAD_PRIMARY_TAGS.has(t))) return true;
+  if (
+    /\b(obsolete|archaic|rare|historical|dated|slang|vulgar|offensive)\b/i.test(
+      gloss
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Prefer the productive modern Wiktionary entry: among unmarked senses,
+ * choose the (etymology, POS) block with the most survivors, then its first.
+ * Fall back to form-of / remaining senses when needed (e.g. are → be).
+ */
+function pickGlosses(meanings) {
+  if (meanings.length === 0) return [];
+
+  const good = [];
+  const formOf = [];
+  for (const m of meanings) {
+    if (m.bad) continue;
+    else if (m.formOf) formOf.push(m);
+    else good.push(m);
+  }
+  const pool = good.length > 0 ? good : formOf.length > 0 ? formOf : meanings;
+
+  const blocks = new Map();
+  for (const m of pool) {
+    const key = `${m.etym}::${m.pos || ""}`;
+    let list = blocks.get(key);
+    if (!list) {
+      list = [];
+      blocks.set(key, list);
+    }
+    list.push(m);
+  }
+
+  let bestKey = null;
+  let bestScore = -Infinity;
+  let bestFirstOrder = Infinity;
+  for (const [key, list] of blocks) {
+    list.sort((a, b) => a.order - b.order);
+    const topicalBonus = list.some((m) => m.topical) ? 2 : 0;
+    const score = list.length + topicalBonus;
+    const firstOrder = list[0].order;
+    if (
+      score > bestScore ||
+      (score === bestScore && firstOrder < bestFirstOrder)
+    ) {
+      bestScore = score;
+      bestFirstOrder = firstOrder;
+      bestKey = key;
+    }
+  }
+
+  const primaryBlock = blocks.get(bestKey) || pool;
+  // Within a block, prefer topical (computing/internet) senses — helps
+  // abbreviations like "api" where every gloss is form-of/initialism.
+  primaryBlock.sort((a, b) => {
+    if (a.topical !== b.topical) return a.topical ? -1 : 1;
+    return a.order - b.order;
+  });
+  const primary = primaryBlock[0];
+
+  const out = [];
   const push = (m) => {
-    const gloss = cleanGloss(m?.def);
-    if (!gloss) return;
-    if (out.some((x) => x.gloss === gloss)) return;
-    out.push({ gloss, ...(sensePos(m) ? { pos: sensePos(m) } : {}) });
+    if (!m?.gloss) return;
+    if (out.some((x) => x.gloss === m.gloss)) return;
+    out.push({ gloss: m.gloss, ...(m.pos ? { pos: m.pos } : {}) });
   };
 
   push(primary);
 
-  for (const m of meanings) {
+  const samePos = pool
+    .filter((m) => m !== primary && m.pos === primary.pos)
+    .sort((a, b) => a.order - b.order);
+  for (const m of samePos) {
     if (out.length >= MAX_GLOSSES) break;
-    if (m === primary || isBadPrimarySense(m)) continue;
-    if (primaryPos && sensePos(m) !== primaryPos) continue;
     push(m);
   }
-  for (const m of meanings) {
+  const others = pool
+    .filter((m) => m !== primary)
+    .sort((a, b) => a.order - b.order);
+  for (const m of others) {
     if (out.length >= MAX_GLOSSES) break;
-    if (m === primary || isBadPrimarySense(m)) continue;
-    push(m);
-  }
-  for (const m of meanings) {
-    if (out.length >= MAX_GLOSSES) break;
-    if (out.some((x) => x.gloss === cleanGloss(m?.def))) continue;
     push(m);
   }
   return out;
 }
 
-function loadWordsetLetter(filePath, map) {
-  const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
-  let added = 0;
-  for (const entry of Object.values(data)) {
-    const word = normalizeWord(entry?.word);
-    if (!isSingleWord(word) || map.has(word)) continue;
-    const meanings = (Array.isArray(entry?.meanings) ? entry.meanings : []).filter(
-      (m) => m?.def
-    );
-    const picked = pickPrimaryMeaning(meanings);
-    if (!picked) continue;
-    const glosses = pickGlossList(meanings, picked);
-    if (glosses.length === 0) continue;
-    map.set(word, {
-      word,
-      gloss: glosses[0].gloss,
-      glosses: glosses.length > 1 ? glosses : undefined,
-      pos: glosses[0].pos || sensePos(picked),
-      source: "wordset",
-    });
-    added += 1;
-  }
-  return added;
-}
+async function loadKaikki(filePath) {
+  /** @type {Map<string, Array<{gloss:string,pos:string,etym:number,order:number,formOf:boolean,bad:boolean,topical:boolean}>>} */
+  const byWord = new Map();
+  /** @type {Set<string>} */
+  const topicalWords = new Set();
+  let lines = 0;
+  let kept = 0;
 
-function applyCoreRows(rows, map, ipaMap, { override }) {
-  let n = 0;
-  for (const [word, ipa, gloss, pos] of rows) {
-    const key = normalizeWord(word);
-    if (!key || !isSingleWord(key)) continue;
-    if (!override && map.has(key)) continue;
-    const resolvedIpa = cleanIpa(ipa) || ipaMap.get(key) || undefined;
-    const cleaned = cleanGloss(gloss);
-    map.set(key, {
-      word: key,
-      gloss: cleaned,
-      // Local rows are intentional single-sense overrides.
-      glosses: undefined,
-      ipa: resolvedIpa,
-      pos,
-      source: "local",
-    });
-    n += 1;
+  const input = fs.createReadStream(filePath).pipe(zlib.createGunzip());
+  const rl = readline.createInterface({ input, crlfDelay: Infinity });
+
+  for await (const line of rl) {
+    lines += 1;
+    if (!line) continue;
+    let obj;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (obj.lang_code && obj.lang_code !== "en") continue;
+    const word = normalizeWord(obj.word);
+    if (!isSingleWord(word)) continue;
+    const pos = normalizePos(obj.pos);
+    if (!pos) continue;
+
+    // kaikii stores etymology_number as a string ("1", "2", …)
+    const etym = Number(obj.etymology_number) || 0;
+    const senses = Array.isArray(obj.senses) ? obj.senses : [];
+    let bucket = byWord.get(word);
+    if (!bucket) {
+      bucket = [];
+      byWord.set(word, bucket);
+    }
+
+    for (const sense of senses) {
+      if (bucket.length >= MAX_SENSES_PER_WORD) break;
+      const glosses = Array.isArray(sense?.glosses) ? sense.glosses : [];
+      const gloss = cleanGloss(glosses[0]);
+      if (!gloss) continue;
+      const tags = senseTags(sense);
+      const cats = senseCategories(sense);
+      const topical = cats.some((c) => TOPICAL_CAT_RE.test(c));
+      if (topical) topicalWords.add(word);
+      bucket.push({
+        gloss,
+        pos,
+        etym,
+        order: bucket.length,
+        formOf: isFormOfSense(sense, tags),
+        bad: isBadPrimarySense(tags, gloss),
+        topical,
+      });
+      kept += 1;
+    }
+
+    if (lines % 500000 === 0) {
+      console.log(
+        `  kaikki … ${lines} lines, ${byWord.size} words, ${kept} senses`
+      );
+    }
   }
-  return n;
+
+  console.log(
+    `kaikki done: ${lines} lines → ${byWord.size} words, ${kept} senses, ${topicalWords.size} topical`
+  );
+  return { byWord, topicalWords };
 }
 
 async function run() {
@@ -461,30 +478,49 @@ async function run() {
   const ipaPath = path.join(cacheDir, "en_US.ipa.txt");
   await download(IPA_URL, ipaPath);
 
-  for (const letter of LETTERS) {
-    const dest = path.join(cacheDir, `wordset-${letter}.json`);
-    await download(`${WORDSET_BASE}/${letter}.json`, dest);
-  }
+  const kaikkiPath = path.join(cacheDir, "kaikki-en.jsonl.gz");
+  await download(KAIKKI_URL, kaikkiPath);
+
+  await download(FREQ_URL, path.join(cacheDir, "en_50k.txt"));
+  await download(NGSL_STATS_URL, path.join(cacheDir, "NGSL_1.2_stats.csv"));
+  await download(
+    NGSL_LEMMA_URL,
+    path.join(cacheDir, "NGSL_1.2_lemmatized_for_teaching.csv")
+  );
+  await download(NGSL_SUP_URL, path.join(cacheDir, "SUP_lemmatized.csv"));
+  await download(CEFRJ_URL, path.join(cacheDir, "cefrj-vocabulary-profile-1.5.csv"));
+  await download(
+    OCTANOVE_URL,
+    path.join(cacheDir, "octanove-vocabulary-profile-c1c2-1.0.csv")
+  );
 
   const ipaMap = loadIpa(ipaPath);
   console.log(`IPA entries: ${ipaMap.size}`);
 
+  const allow = loadAllowlist(ipaMap);
+  console.log(`allowlist seeds: ${allow.size}`);
+
+  const { byWord, topicalWords } = await loadKaikki(kaikkiPath);
   const map = new Map();
-  for (const letter of LETTERS) {
-    const file = path.join(cacheDir, `wordset-${letter}.json`);
-    const n = loadWordsetLetter(file, map);
-    console.log(`wordset ${letter}.json → ${n} new`);
-  }
+  let skipped = 0;
 
-  // Attach IPA where available
-  for (const [word, entry] of map) {
-    const ipa = ipaMap.get(word);
-    if (ipa) entry.ipa = ipa;
+  for (const [word, meanings] of byWord) {
+    if (!allow.has(word) && !topicalWords.has(word)) {
+      skipped += 1;
+      continue;
+    }
+    const glosses = pickGlosses(meanings);
+    if (glosses.length === 0) continue;
+    map.set(word, {
+      word,
+      gloss: glosses[0].gloss,
+      glosses: glosses.length > 1 ? glosses : undefined,
+      pos: glosses[0].pos,
+      source: "wiktionary",
+      ipa: ipaMap.get(word),
+    });
   }
-
-  const nFunc = applyCoreRows(CORE_FUNCTION, map, ipaMap, { override: true });
-  const nOver = applyCoreRows(CORE_OVERRIDE, map, ipaMap, { override: true });
-  console.log(`core function ${nFunc}; core override ${nOver}`);
+  console.log(`coverage filter skipped ${skipped} obscure lemmas`);
 
   const entries = Array.from(map.values())
     .map((e) => ({
@@ -506,10 +542,11 @@ async function run() {
   const payload = {
     generatedAt: new Date().toISOString(),
     sources: {
-      wordset: "https://github.com/wordset/wordset-dictionary",
+      wiktionary:
+        "https://kaikki.org/dictionary/English/ (Wiktextract / enwiktionary)",
       ipa: "https://github.com/open-dict-data/ipa-dict",
-      coreFunction: "built-in high-frequency function words (Wordset gaps)",
-      coreOverride: "built-in tech / learner sense overrides",
+      coverage:
+        "FrequencyWords en_50k ∪ IPA ∪ NGSL/CEFR ∪ Wiktionary computing/internet topical",
     },
     count: entries.length,
     withIpa,
@@ -523,6 +560,7 @@ async function run() {
   );
 
   for (const k of [
+    "content",
     "because",
     "the",
     "however",
@@ -534,6 +572,10 @@ async function run() {
     "are",
     "user",
     "key",
+    "build",
+    "middleware",
+    "api",
+    "monorepo",
   ]) {
     const hit = map.get(k);
     if (!hit) {
@@ -544,7 +586,9 @@ async function run() {
       Array.isArray(hit.glosses) && hit.glosses.length > 1
         ? ` (+${hit.glosses.length - 1} alts)`
         : "";
-    console.log(`OK  ${k} ${hit.ipa || "—"} | ${hit.gloss}${alt}`);
+    console.log(
+      `OK  ${k} [${hit.pos || "—"}] ${hit.ipa || "—"} | ${hit.gloss}${alt}`
+    );
   }
 }
 

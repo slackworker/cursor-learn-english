@@ -2,7 +2,6 @@
  * Word dictionary loader (IPA + English gloss).
  *
  * Offline bulk: data/word-dictionary.generated.json (`npm run dict:build:words`)
- * Local extras only fill words missing from generated data.
  */
 import fs from "fs";
 import path from "path";
@@ -16,7 +15,7 @@ export type WordDictEntry = {
   word: string;
   /** Primary learner-facing gloss. */
   gloss: string;
-  /** Up to a few senses when Wordset has multiples (primary first). */
+  /** Up to a few senses when the source has multiples (primary first). */
   glosses?: WordGlossSense[];
   ipa?: string;
   pos?: string;
@@ -40,66 +39,6 @@ export function normalizeLearnerIpa(ipa: string): string {
   s = s.replace(/ːː/g, "ː");
   return s;
 }
-
-/** Local gap-fillers (English only). Prefer extending the build script instead. */
-export const WORD_DICTIONARY: WordDictEntry[] = [
-  {
-    word: "jsonl",
-    gloss: "JSON Lines; newline-delimited JSON records",
-    ipa: "/ˈdʒeɪsənˌɛl/",
-    pos: "noun",
-  },
-  {
-    word: "tsx",
-    gloss: "TypeScript JSX source file extension",
-    pos: "noun",
-  },
-  {
-    word: "css",
-    gloss: "Cascading Style Sheets",
-    ipa: "/ˌsiˌɛsˈɛs/",
-    pos: "noun",
-  },
-  {
-    word: "html",
-    gloss: "HyperText Markup Language",
-    ipa: "/ˌeɪtʃˌtiˌɛmˈɛl/",
-    pos: "noun",
-  },
-  {
-    word: "http",
-    gloss: "Hypertext Transfer Protocol",
-    ipa: "/ˌeɪtʃˌtiˌtiˈpi/",
-    pos: "noun",
-  },
-  {
-    word: "url",
-    gloss: "address of a web resource",
-    ipa: "/ˌjuˌɑɹˈɛl/",
-    pos: "noun",
-  },
-  {
-    word: "uuid",
-    gloss: "universally unique identifier",
-    ipa: "/ˈjuːjuːˌaɪˈdiː/",
-    pos: "noun",
-  },
-  {
-    word: "oauth",
-    gloss: "open standard for delegated authorization",
-    pos: "noun",
-  },
-  {
-    word: "webhook",
-    gloss: "HTTP callback triggered by an event",
-    pos: "noun",
-  },
-  {
-    word: "monorepo",
-    gloss: "single repository holding multiple projects",
-    pos: "noun",
-  },
-];
 
 type GeneratedFile = {
   count: number;
@@ -178,21 +117,10 @@ function buildMap(): Map<string, WordDictEntry> {
     map.set(key, { ...e, word: key });
   }
 
-  for (const e of WORD_DICTIONARY) {
-    const key = e.word.trim().toLowerCase();
-    if (!key || map.has(key)) continue;
-    map.set(key, {
-      ...e,
-      word: key,
-      ipa: e.ipa ? normalizeLearnerIpa(e.ipa) : undefined,
-      source: e.source ?? "local",
-    });
-  }
-
   return map;
 }
 
-/** Merged dictionary entries (generated first; local fills gaps). */
+/** Dictionary entries from the generated offline file. */
 export function getWordDictionary(): WordDictEntry[] {
   if (cachedList) return cachedList;
   cachedMap = buildMap();
