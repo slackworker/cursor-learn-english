@@ -1,4 +1,4 @@
-import type { SessionSubagentLink } from "./sessions";
+import type { SessionSubagentLink } from "./sessions/types";
 
 function asNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
