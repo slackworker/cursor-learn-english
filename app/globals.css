@@ -481,7 +481,19 @@ html[data-theme="business"] {
 }
 
 .toolbar-input {
-  @apply h-9 rounded-lg border border-base-300 bg-base-100 px-3 text-sm outline-none transition-colors focus:border-primary/50 sm:h-8;
+  @apply h-9 w-full rounded-lg border border-base-300 bg-base-100 px-3 text-sm outline-none transition-colors focus:border-primary/50 sm:h-8;
+}
+
+.toolbar-input--clearable {
+  @apply pr-8;
+}
+
+.toolbar-search {
+  @apply relative;
+}
+
+.toolbar-search-clear {
+  @apply absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-base-content/40 transition-colors hover:bg-base-200 hover:text-base-content/70;
 }
 
 /* ── Empty / Loading ── */
@@ -530,7 +542,7 @@ html[data-theme="business"] {
   order: 1;
 }
 
-.vocab-toolbar .toolbar-input {
+.vocab-toolbar .toolbar-search {
   @apply min-w-[8rem] flex-1 basis-[10rem] max-w-md;
   order: 2;
 }
@@ -546,7 +558,7 @@ html[data-theme="business"] {
     order: 2;
   }
 
-  .vocab-toolbar .toolbar-input {
+  .vocab-toolbar .toolbar-search {
     order: 3;
     flex-basis: 100%;
     max-width: none;

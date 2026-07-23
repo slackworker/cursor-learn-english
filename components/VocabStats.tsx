@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { SlidersHorizontal, Undo2 } from "lucide-react";
+import { SlidersHorizontal, Undo2, X } from "lucide-react";
 import { DialogueTtsPlayButton } from "@/components/DialogueTtsContext";
 import { EmptyState, LoadingState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
@@ -163,13 +163,25 @@ function BarChart({ items }: { items: { name: string; value: number }[] }) {
 
 function SearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <input
-      type="text"
-      placeholder="搜索…"
-      className="toolbar-input"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <div className="toolbar-search">
+      <input
+        type="text"
+        placeholder="搜索…"
+        className={`toolbar-input${value ? " toolbar-input--clearable" : ""}`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {value ? (
+        <button
+          type="button"
+          className="toolbar-search-clear"
+          aria-label="清除搜索"
+          onClick={() => onChange("")}
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      ) : null}
+    </div>
   );
 }
 
