@@ -13,6 +13,7 @@ export function useSpeechVoices(): SpeechSynthesisVoice[] {
   useEffect(() => {
     refresh();
     const synth = window.speechSynthesis;
+    if (!synth) return;
     synth.addEventListener("voiceschanged", refresh);
     return () => synth.removeEventListener("voiceschanged", refresh);
   }, [refresh]);
