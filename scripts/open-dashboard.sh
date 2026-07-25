@@ -112,6 +112,24 @@ stop_server() {
   fi
 }
 
+# Port open ≠ Next ready; wait for a real HTTP response before the .cmd opens the browser.
+wait_http_ready() {
+  if ! command -v curl >/dev/null 2>&1; then
+    sleep 1
+    return 0
+  fi
+  local i
+  for i in $(seq 1 60); do
+    if curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:${PORT}/"; then
+      touch_access
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "[dashboard] HTTP not ready on :$PORT; see $LOG_FILE" >&2
+  return 1
+}
+
 touch_access
 
 if port_listening; then
@@ -127,9 +145,6 @@ else
 fi
 
 start_idle_watchdog
-
-if command -v curl >/dev/null 2>&1; then
-  curl -fsS -o /dev/null --max-time 5 "http://127.0.0.1:${PORT}/" && touch_access || true
-fi
+wait_http_ready
 
 echo "READY http://127.0.0.1:${PORT}/"
